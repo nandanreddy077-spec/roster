@@ -72,3 +72,43 @@ def test_voice_endpoint_known_client_streams_reply(monkeypatch, test_engine):
 
     assert response.status_code == 200
     assert "Sure, what's the issue?" in response.text
+
+
+class RaisingAgent:
+    def respond(self, *args, **kwargs):
+        raise RuntimeError("boom")
+
+
+def test_voice_endpoint_engine_error_falls_back_to_transfer(monkeypatch, test_engine):
+    with Session(test_engine) as session:
+        session.add(
+            Client(
+                business_name="Test Co",
+                trade="HVAC",
+                services_json=json.dumps(["AC repair"]),
+                hours="9-5",
+                pricing_faq="n/a",
+                escalation_phone="+15559990000",
+                inbound_number="+10000000000",
+            )
+        )
+        session.commit()
+
+    monkeypatch.setattr(app_module, "engine", test_engine)
+    monkeypatch.setattr(app_module, "shared_agent", RaisingAgent())
+
+    test_client = TestClient(app_module.app)
+    payload = {
+        "model": "claude-sonnet-4-6",
+        "messages": [{"role": "user", "content": "My AC broke"}],
+        "call": {
+            "id": "call_3",
+            "phoneNumber": {"number": "+10000000000"},
+            "customer": {"number": "+15551234567"},
+        },
+    }
+    response = test_client.post("/voice/chat/completions", json=payload)
+
+    assert response.status_code == 200
+    assert "transfer_call" in response.text
+    assert "+15559990000" in response.text

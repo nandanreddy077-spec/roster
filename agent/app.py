@@ -217,7 +217,15 @@ async def voice_chat_completions(payload: VapiChatRequest):
                 media_type="text/event-stream",
             )
 
-        result = handle_voice_turn(session, shared_agent, client, payload)
+        try:
+            result = handle_voice_turn(session, shared_agent, client, payload)
+        except Exception:
+            fallback = "Sorry, I'm having trouble right now — let me get you a person."
+            pending = {"name": "transfer_call", "input": {"destination": client.escalation_phone}}
+            return StreamingResponse(
+                _voice_stream(request_id, payload.model, fallback, pending),
+                media_type="text/event-stream",
+            )
 
     return StreamingResponse(
         _voice_stream(request_id, payload.model, result["reply"], result["pending_tool_call"]),
