@@ -21,6 +21,17 @@ conversation with the AI, get their questions answered, have the job captured
 (same `log_job` path as SMS), and — if the AI can't handle something — get
 transferred live to the business owner's cell.
 
+## Relationship to the existing SMS text-back agent
+
+Both agents trigger on the same event — a missed/unanswered call (forward-on-no-answer).
+A live voice pickup is strictly better for the customer than a text, so **the voice
+receptionist replaces the text-back agent for missed calls** on any client that has
+this agent enabled. The text-back agent isn't removed from the codebase — it still
+handles customers who text the business number directly — but the call-status
+webhook path (`/webhook/voice-status`) that currently triggers an SMS on a miss
+should no longer fire for clients who have the voice receptionist active, since
+Vapi now answers those calls before they ever go missed.
+
 ## Non-goals
 
 - No self-serve onboarding UI (owner details/number are entered by Roster, not the
