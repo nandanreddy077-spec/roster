@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block title %}New client — Roster{% endblock %}
+{% block content %}
+<h1>New client</h1>
+<form method="post" action="/clients/new" class="form">
+  <label>Business name<input name="business_name" required></label>
+  <label>Trade<input name="trade" placeholder="HVAC, Plumbing..." required></label>
+  <label>Services (comma-separated)<input name="services" placeholder="AC repair, Furnace repair" required></label>
+  <label>Hours<input name="hours" placeholder="Mon-Sat 7am-7pm" required></label>
+  <label>Pricing &amp; FAQ<textarea name="pricing_faq" rows="4" required></textarea></label>
+  <label>Escalation phone<input name="escalation_phone" placeholder="+1..." required></label>
+  <label>Business line / inbound number<input name="inbound_number" placeholder="+1... (the number customers text)"></label>
+  <button class="btn btn-primary" type="submit">Create client</button>
+</form>
+{% endblock %}

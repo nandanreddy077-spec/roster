@@ -1,0 +1,16 @@
+{
+  "client_id": "acme-hvac-01",
+  "business_name": "Acme HVAC & Air",
+  "trade": "HVAC",
+  "services": [
+    "AC repair",
+    "AC installation",
+    "Furnace repair",
+    "Furnace installation",
+    "Duct cleaning",
+    "Maintenance plans"
+  ],
+  "hours": "Mon-Sat 7am-7pm, 24/7 emergency line",
+  "pricing_faq": "Diagnostic visit: $89 (waived if repair completed same day). Same-day emergency call-out: +$50. We do not give exact repair quotes over text -- a technician confirms on-site after diagnosis. Maintenance plan: $19/month, includes 2 tune-ups/year.",
+  "escalation_phone": "+19014038929"
+}

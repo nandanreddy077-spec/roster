@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block title %}Clients — Roster{% endblock %}
+{% block content %}
+<h1>Clients</h1>
+{% if clients %}
+<div class="client-list">
+  {% for c in clients %}
+  <a class="client-card" href="/clients/{{ c.id }}">
+    <h3>{{ c.business_name }}</h3>
+    <span class="trade-tag">{{ c.trade }}</span>
+  </a>
+  {% endfor %}
+</div>
+{% else %}
+<p class="empty">No clients yet. <a href="/clients/new">Add your first client</a>.</p>
+{% endif %}
+{% endblock %}
