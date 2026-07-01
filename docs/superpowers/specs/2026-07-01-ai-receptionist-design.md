@@ -72,10 +72,11 @@ already uses.
   resolves the `Client` via `phoneNumber.number` matching the existing
   `inbound_number` field, calls `AgentEngine.respond()`, and streams the response
   back as OpenAI-format SSE chunks.
-- **Vapi assistant config** (external, not code): one Vapi assistant per client
-  business (or one shared assistant if Vapi allows per-call dynamic config), Custom
-  LLM URL pointing at the deployed adapter endpoint, `transferCall` tool destination
-  set to the business owner's cell number.
+- **Vapi assistant config** (external, not code): a single shared Vapi assistant
+  reused across every client, with Custom LLM URL pointing at the deployed adapter
+  endpoint. The `transferCall` tool is configured with an empty static destination
+  list; Claude supplies the destination number dynamically per call (see below), so
+  no per-client Vapi config is needed.
 
 ### Vapi Custom LLM request shape (confirmed from Vapi's reference implementation)
 
@@ -95,8 +96,10 @@ business number that was called) and `customer.number` (the caller's number, use
    `TRANSFER_CALL_TOOL`.
 4. If Claude calls `log_job`, it's persisted exactly like the SMS flow — visible on
    the dashboard immediately.
-5. If Claude calls `transfer_call`, Vapi executes the actual transfer to the owner's
-   cell; the adapter itself never dials anything, it just returns the tool call.
+5. If Claude calls `transfer_call`, it supplies the owner's cell number directly as
+   the `destination` argument (known from the resolved `Client`'s config); Vapi
+   executes the actual transfer, the adapter itself never dials anything, it just
+   returns the tool call.
 6. The adapter streams the reply back in OpenAI SSE format; Vapi converts it to
    speech for the caller.
 
@@ -122,11 +125,18 @@ business number that was called) and `customer.number` (the caller's number, use
 
 ## Open questions / follow-ups (not blocking this spec)
 
-- Whether Vapi supports one assistant config reused across all clients (with the
-  `Client` config swapped in per-call via the phone number lookup) or requires a
-  separate assistant per client — needs to be confirmed hands-on during
-  implementation; affects onboarding effort per new client but not this
-  architecture.
 - Deployment target for `app.py` so Vapi can reach it publicly (currently runs
   local-only via `run.sh`) — needed before any live test, tracked as a prerequisite
   in the implementation plan, not part of this design.
+
+## Confirmed decisions (resolved during design)
+
+- **One shared Vapi assistant serves every client** — no per-client Vapi
+  configuration needed. Vapi's `transferCall` tool supports a dynamic destination:
+  the LLM supplies the actual number as a tool argument at call time instead of it
+  being fixed in the assistant config. Since the adapter already resolves the
+  `Client` (and therefore the owner's cell number) before calling
+  `AgentEngine.respond()`, that number is already a known fact in the system prompt,
+  and Claude passes it directly when it calls `transfer_call`. Onboarding a new
+  client for this agent is therefore: (1) add their `Client` record, (2) import
+  their Twilio number into Vapi pointed at the one existing shared assistant.
