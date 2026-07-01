@@ -23,6 +23,40 @@ Open **http://127.0.0.1:8000/clients** — you'll see the seeded demo (Lou's Hea
   missed-call text-back (needs `TWILIO_*` creds, or prints to console in dev).
 - Set each client's `inbound_number` to the business line so inbound routes correctly.
 
+## AI receptionist (Vapi, live voice)
+
+The voice receptionist reuses the same engine as the text agent — see
+`docs/superpowers/specs/2026-07-01-ai-receptionist-design.md` for the full design.
+
+### One-time setup
+1. Create a Vapi account and import each client's Twilio number
+   (docs.vapi.ai/phone-numbers/import-twilio).
+2. Create a single Vapi assistant (shared across all clients) with:
+   - Model provider: Custom LLM
+   - Custom LLM URL: `<your-public-url>/voice/chat/completions`
+   - A `transferCall` tool with an empty `destinations` list — the destination is
+     supplied dynamically by the agent per call, not configured here.
+3. Point every imported client number at this one assistant.
+
+### Local testing (no deployment yet)
+Vapi needs a public URL to reach your local server:
+```bash
+./run.sh                 # starts the app on :8000
+ngrok http 8000           # in a second terminal; gives you a public https URL
+```
+Use the `ngrok` URL (plus `/voice/chat/completions`) as the assistant's Custom LLM
+URL while testing. Call the imported Twilio number from your phone to test live;
+confirm the job shows up in `/clients/<id>` and that a deliberately hard question
+("I want to speak to a manager right now") triggers a live transfer to the
+`escalation_phone` on file.
+
+### Per-client onboarding
+When adding a client for this agent: ask whether the AI should answer every call
+or only unanswered ones, set `answer_mode` accordingly (`primary`/`backup`) on the
+new-client form, and have them set matching call forwarding on their existing
+number (forward-all vs. forward-on-no-answer) to the Twilio number you imported
+into Vapi.
+
 ## Pieces
 | File | Role |
 |---|---|
