@@ -36,6 +36,30 @@ LOG_JOB_TOOL = {
     },
 }
 
+TRANSFER_CALL_TOOL = {
+    "name": "transfer_call",
+    "description": (
+        "Transfer the live phone call to the business owner. Call this when the "
+        "caller is upset, has a complaint, or needs something you can't confidently "
+        "handle yourself. Always pass the exact destination number given to you in "
+        "the system prompt."
+    ),
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "destination": {
+                "type": "string",
+                "description": "The phone number to transfer to, exactly as given in the system prompt.",
+            },
+            "reason": {
+                "type": "string",
+                "description": "One short phrase for why the call is being transferred.",
+            },
+        },
+        "required": ["destination"],
+    },
+}
+
 
 def build_system_prompt(client: ClientConfig) -> str:
     return f"""You are the AI front desk for {client.business_name}, a {client.trade} business.
@@ -57,34 +81,47 @@ contact info, call log_job to capture the lead, then keep texting naturally."""
 
 
 class AgentEngine:
-    def __init__(self, api_key: Optional[str] = None):
-        self.client = anthropic.Anthropic(api_key=api_key or os.environ.get("ANTHROPIC_API_KEY"))
+    def __init__(self, api_key: Optional[str] = None, client: Optional[Any] = None):
+        self.client = client or anthropic.Anthropic(api_key=api_key or os.environ.get("ANTHROPIC_API_KEY"))
 
-    def respond(self, client_config: ClientConfig, history: List[Dict[str, Any]]) -> Dict[str, Any]:
+    def respond(
+        self,
+        client_config: ClientConfig,
+        history: List[Dict[str, Any]],
+        tools: Optional[List[Dict[str, Any]]] = None,
+        system_prompt: Optional[str] = None,
+        max_iters: Optional[int] = None,
+    ) -> Dict[str, Any]:
         """Run one customer turn as a bounded Think -> Act -> Observe loop.
 
-        The model may call log_job mid-turn; we execute it, feed the result back,
-        and let the model produce a natural closing reply to the customer. Loops
-        until the model answers with no further tool call, or hits MAX_ITERS.
+        `log_job` is resolved internally (the loop feeds an acknowledgment back and
+        keeps going). Any other tool call (e.g. `transfer_call`) is a passthrough:
+        only the caller (e.g. Vapi) can actually execute it, so the loop stops
+        immediately and returns it as `pending_tool_call` instead of resolving it.
 
         Returns:
-          reply         final text to send the customer
-          jobs          captured log_job inputs (caller persists them)
-          new_messages  serialized assistant/tool_result turns generated this
-                        turn, ready for the caller to store as history
+          reply             final text to send/speak to the customer
+          jobs              captured log_job inputs (caller persists them)
+          new_messages      serialized assistant/tool_result turns generated this
+                            turn, ready for the caller to store as history
+          pending_tool_call {"name": str, "input": dict} if a non-log_job tool was
+                            called, else None
         """
-        system = build_system_prompt(client_config)
+        system = system_prompt or build_system_prompt(client_config)
+        active_tools = tools or [LOG_JOB_TOOL]
+        iters = max_iters or MAX_ITERS
         messages = list(history)  # working copy; never mutate the caller's list
         new_messages: List[Dict[str, Any]] = []
         captured_jobs: List[Dict[str, Any]] = []
         reply_text = ""
+        pending_tool_call: Optional[Dict[str, Any]] = None
 
-        for _ in range(MAX_ITERS):
+        for _ in range(iters):
             resp = self.client.messages.create(
                 model=MODEL,
                 max_tokens=512,
                 system=system,
-                tools=[LOG_JOB_TOOL],
+                tools=active_tools,
                 messages=messages,
             )
 
@@ -93,15 +130,24 @@ class AgentEngine:
             new_messages.append({"role": "assistant", "content": assistant_content})
 
             text_parts = [b.text for b in resp.content if b.type == "text"]
-            tool_uses = [b for b in resp.content if b.type == "tool_use" and b.name == "log_job"]
+            all_tool_uses = [b for b in resp.content if b.type == "tool_use"]
+            log_job_uses = [tu for tu in all_tool_uses if tu.name == "log_job"]
+            passthrough_uses = [tu for tu in all_tool_uses if tu.name != "log_job"]
 
-            if not tool_uses:
+            if passthrough_uses:
+                tu = passthrough_uses[0]
+                pending_tool_call = {"name": tu.name, "input": tu.input}
+                if text_parts:
+                    reply_text = " ".join(text_parts).strip()
+                break
+
+            if not log_job_uses:
                 reply_text = " ".join(text_parts).strip()  # Done: clean final answer
                 break
 
             # Act + Observe: capture each job and feed an acknowledgment back in.
             tool_results = []
-            for tu in tool_uses:
+            for tu in log_job_uses:
                 captured_jobs.append({"id": tu.id, "input": tu.input})
                 tool_results.append(
                     {
@@ -119,7 +165,12 @@ class AgentEngine:
             if not reply_text:  # hit the cap without a clean finish
                 reply_text = "Thanks! I've got your details and someone will text you shortly."
 
-        return {"reply": reply_text, "jobs": captured_jobs, "new_messages": new_messages}
+        return {
+            "reply": reply_text,
+            "jobs": captured_jobs,
+            "new_messages": new_messages,
+            "pending_tool_call": pending_tool_call,
+        }
 
 
 def serialize_content(content) -> List[Dict[str, Any]]:
