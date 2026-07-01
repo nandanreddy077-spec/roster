@@ -15,3 +15,13 @@ def test_engine():
 def session(test_engine):
     with Session(test_engine) as s:
         yield s
+
+
+class StubAgent:
+    """Test double for AgentEngine — returns a canned respond() result."""
+
+    def __init__(self, result):
+        self._result = result
+
+    def respond(self, client_config, history, tools=None, system_prompt=None, max_iters=None):
+        return self._result
