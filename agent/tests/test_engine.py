@@ -1,4 +1,4 @@
-from engine import LOG_JOB_TOOL, TRANSFER_CALL_TOOL, AgentEngine
+from engine import LOG_JOB_TOOL, TRANSFER_CALL_TOOL, AgentEngine, build_voice_system_prompt
 from models import ClientConfig
 
 
@@ -109,3 +109,17 @@ def test_respond_respects_max_iters_override():
 
     assert result["reply"] == "Thanks! I've got your details and someone will text you shortly."
     assert len(result["jobs"]) == 1
+
+
+def test_voice_prompt_backup_acknowledges_missed_call():
+    config = make_client_config(answer_mode="backup")
+    prompt = build_voice_system_prompt(config)
+    assert "unanswered" in prompt
+    assert config.escalation_phone in prompt
+
+
+def test_voice_prompt_primary_skips_missed_call_language():
+    config = make_client_config(answer_mode="primary")
+    prompt = build_voice_system_prompt(config)
+    assert "unanswered" not in prompt
+    assert "first point of contact" in prompt
