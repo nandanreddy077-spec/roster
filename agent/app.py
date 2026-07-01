@@ -1,8 +1,10 @@
 import json
+import time
+import uuid
 from pathlib import Path
 
 from fastapi import FastAPI, Form, Request
-from fastapi.responses import RedirectResponse, Response
+from fastapi.responses import RedirectResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from sqlmodel import Session, select
@@ -10,7 +12,9 @@ from sqlmodel import Session, select
 from channels import get_channel
 from db import engine, init_db
 from db_models import Client, Job, Message
+from service import agent as shared_agent
 from service import handle_customer_message
+from voice_adapter import VapiChatRequest, handle_voice_turn
 
 BASE_DIR = Path(__file__).parent
 DASHBOARD_THREAD = "dashboard"
@@ -158,3 +162,64 @@ async def missed_call(From: str = Form(...), To: str = Form(...), CallStatus: st
         )
         session.commit()
     return Response(status_code=204)
+
+
+def _sse_chunk(request_id: str, model: str, delta: dict, finish_reason: str | None = None) -> str:
+    chunk = {
+        "id": request_id,
+        "object": "chat.completion.chunk",
+        "created": int(time.time()),
+        "model": model,
+        "choices": [{"index": 0, "delta": delta, "finish_reason": finish_reason}],
+    }
+    return f"data: {json.dumps(chunk)}\n\n"
+
+
+def _voice_stream(request_id: str, model: str, reply: str, pending_tool_call: dict | None):
+    if pending_tool_call:
+        tool_call_id = f"call_{uuid.uuid4().hex[:24]}"
+        yield _sse_chunk(
+            request_id,
+            model,
+            {
+                "role": "assistant",
+                "tool_calls": [
+                    {
+                        "index": 0,
+                        "id": tool_call_id,
+                        "type": "function",
+                        "function": {
+                            "name": pending_tool_call["name"],
+                            "arguments": json.dumps(pending_tool_call["input"]),
+                        },
+                    }
+                ],
+            },
+        )
+        yield _sse_chunk(request_id, model, {}, finish_reason="tool_calls")
+    else:
+        yield _sse_chunk(request_id, model, {"role": "assistant", "content": reply})
+        yield _sse_chunk(request_id, model, {}, finish_reason="stop")
+    yield "data: [DONE]\n\n"
+
+
+@app.post("/voice/chat/completions")
+async def voice_chat_completions(payload: VapiChatRequest):
+    request_id = f"chatcmpl-{payload.call.id}"
+    called_number = payload.call.phoneNumber.number if payload.call.phoneNumber else None
+
+    with Session(engine) as session:
+        client = _find_client_by_inbound(session, called_number) if called_number else None
+        if client is None:
+            reply = "Sorry, this number isn't set up yet. Let me get someone on the line."
+            return StreamingResponse(
+                _voice_stream(request_id, payload.model, reply, None),
+                media_type="text/event-stream",
+            )
+
+        result = handle_voice_turn(session, shared_agent, client, payload)
+
+    return StreamingResponse(
+        _voice_stream(request_id, payload.model, result["reply"], result["pending_tool_call"]),
+        media_type="text/event-stream",
+    )
