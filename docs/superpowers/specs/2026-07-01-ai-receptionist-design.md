@@ -72,12 +72,19 @@ already uses.
 
 ## Components
 
+- **`Client` config**: add one new field, `answer_mode` (`"primary"` or
+  `"backup"`), set during onboarding based on how the client configured their call
+  forwarding (forward-all vs forward-on-no-answer). Asked as a setup question, not
+  inferred.
 - **`engine.py`**: add `TRANSFER_CALL_TOOL` schema alongside the existing
   `LOG_JOB_TOOL`, and a voice-specific variant of `build_system_prompt` (same
   business facts as the SMS prompt, phrased for speech — short sentences, no
   "text-message length" framing, explicit instructions on when to call
   `transfer_call` — e.g. an angry customer, a complaint, or a request the AI can't
-  confidently answer).
+  confidently answer). The prompt's greeting/framing branches on `answer_mode`:
+  a normal greeting when `"primary"` ("Thanks for calling..."), a
+  missed-call-acknowledging greeting when `"backup"` ("Sorry we missed your
+  call...").
 - **New adapter module** (e.g. `voice_adapter.py`), wired into `app.py` as
   `POST /voice/chat/completions`: receives Vapi's request (see schema below),
   resolves the `Client` via `phoneNumber.number` matching the existing
@@ -149,5 +156,8 @@ business number that was called) and `customer.number` (the caller's number, use
   `Client` (and therefore the owner's cell number) before calling
   `AgentEngine.respond()`, that number is already a known fact in the system prompt,
   and Claude passes it directly when it calls `transfer_call`. Onboarding a new
-  client for this agent is therefore: (1) add their `Client` record, (2) import
-  their Twilio number into Vapi pointed at the one existing shared assistant.
+  client for this agent is therefore: (1) add their `Client` record, asking them
+  whether they want the AI to pick up every call or only unanswered ones and
+  setting `answer_mode` accordingly, (2) have them set up matching call forwarding
+  on their existing number (forward-all or forward-on-no-answer), (3) import their
+  Twilio number into Vapi pointed at the one existing shared assistant.
