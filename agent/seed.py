@@ -50,6 +50,7 @@ def run():
             pricing_faq="Diagnostic visit $89 (waived if repaired same day). Same-day "
                         "emergency call-out +$50. No exact quotes over text — tech confirms on site.",
             escalation_phone="+19014038929",
+            answer_mode="backup",
             inbound_number="+19014038929",
         )
         s.add(client)

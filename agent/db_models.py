@@ -15,6 +15,7 @@ class Client(SQLModel, table=True):
     hours: str
     pricing_faq: str
     escalation_phone: str
+    answer_mode: str = Field(default="backup")  # "primary" or "backup" - set during onboarding
     inbound_number: Optional[str] = None  # the business line customers text/call; routes inbound SMS
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
@@ -31,6 +32,7 @@ class Client(SQLModel, table=True):
             hours=self.hours,
             pricing_faq=self.pricing_faq,
             escalation_phone=self.escalation_phone,
+            answer_mode=self.answer_mode,
         )
 
 

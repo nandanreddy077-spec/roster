@@ -61,6 +61,7 @@ def create_client(
     hours: str = Form(...),
     pricing_faq: str = Form(...),
     escalation_phone: str = Form(...),
+    answer_mode: str = Form("backup"),
     inbound_number: str = Form(""),
 ):
     service_list = [s.strip() for s in services.split(",") if s.strip()]
@@ -71,6 +72,7 @@ def create_client(
         hours=hours,
         pricing_faq=pricing_faq,
         escalation_phone=escalation_phone,
+        answer_mode=answer_mode,
         inbound_number=inbound_number.strip() or None,
     )
     with Session(engine) as session:

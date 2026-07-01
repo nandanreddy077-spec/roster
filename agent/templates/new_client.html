@@ -10,6 +10,12 @@
   <label>Pricing &amp; FAQ<textarea name="pricing_faq" rows="4" required></textarea></label>
   <label>Escalation phone<input name="escalation_phone" placeholder="+1..." required></label>
   <label>Business line / inbound number<input name="inbound_number" placeholder="+1... (the number customers text)"></label>
+  <label>Answer mode
+    <select name="answer_mode">
+      <option value="backup" selected>Backup — AI answers only if no one picks up</option>
+      <option value="primary">Primary — AI answers every call</option>
+    </select>
+  </label>
   <button class="btn btn-primary" type="submit">Create client</button>
 </form>
 {% endblock %}
