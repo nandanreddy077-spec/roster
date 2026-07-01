@@ -39,6 +39,9 @@ The voice receptionist reuses the same engine as the text agent — see
 3. Point every imported client number at this one assistant.
 
 ### Local testing (no deployment yet)
+Needs `ANTHROPIC_API_KEY` set in `.env` — same as the SMS agent, `/voice/chat/completions`
+calls the live Claude API, so nothing will respond without it.
+
 Vapi needs a public URL to reach your local server:
 ```bash
 ./run.sh                 # starts the app on :8000
@@ -49,6 +52,14 @@ URL while testing. Call the imported Twilio number from your phone to test live;
 confirm the job shows up in `/clients/<id>` and that a deliberately hard question
 ("I want to speak to a manager right now") triggers a live transfer to the
 `escalation_phone` on file.
+
+### Security note (deferred — do before going public)
+`/voice/chat/completions` currently has **no authentication**. Anyone who discovers
+the ngrok/deployed URL can drive it directly, and every request triggers a paid
+Claude call (and can trigger real `transfer_call` telephony actions). Before
+exposing this endpoint publicly, add a shared-secret bearer token check (e.g.
+validate an `Authorization: Bearer <secret>` header that Vapi is configured to
+send as a Custom LLM header) so only Vapi can call it.
 
 ### Per-client onboarding
 When adding a client for this agent: ask whether the AI should answer every call

@@ -177,6 +177,8 @@ def _sse_chunk(request_id: str, model: str, delta: dict, finish_reason: str | No
 
 def _voice_stream(request_id: str, model: str, reply: str, pending_tool_call: dict | None):
     if pending_tool_call:
+        if reply:
+            yield _sse_chunk(request_id, model, {"role": "assistant", "content": reply})
         tool_call_id = f"call_{uuid.uuid4().hex[:24]}"
         yield _sse_chunk(
             request_id,

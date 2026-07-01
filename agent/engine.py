@@ -143,7 +143,7 @@ class AgentEngine:
         """
         system = system_prompt or build_system_prompt(client_config)
         active_tools = tools or [LOG_JOB_TOOL]
-        iters = max_iters or MAX_ITERS
+        iters = max_iters if max_iters is not None else MAX_ITERS
         messages = list(history)  # working copy; never mutate the caller's list
         new_messages: List[Dict[str, Any]] = []
         captured_jobs: List[Dict[str, Any]] = []
@@ -171,6 +171,13 @@ class AgentEngine:
             if passthrough_uses:
                 tu = passthrough_uses[0]
                 pending_tool_call = {"name": tu.name, "input": tu.input}
+                # Capture any log_job calls made in this same turn (e.g. an
+                # emergency: the model calls both log_job and transfer_call
+                # together) so the lead isn't silently dropped. There's no
+                # further model turn to consume tool_results here, so we just
+                # record the jobs and skip the acknowledgment round-trip.
+                for log_tu in log_job_uses:
+                    captured_jobs.append({"id": log_tu.id, "input": log_tu.input})
                 if text_parts:
                     reply_text = " ".join(text_parts).strip()
                 break

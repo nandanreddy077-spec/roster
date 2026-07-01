@@ -74,6 +74,57 @@ def test_voice_endpoint_known_client_streams_reply(monkeypatch, test_engine):
     assert "Sure, what's the issue?" in response.text
 
 
+def test_voice_endpoint_speaks_reply_before_transfer(monkeypatch, test_engine):
+    with Session(test_engine) as session:
+        session.add(
+            Client(
+                business_name="Test Co",
+                trade="HVAC",
+                services_json=json.dumps(["AC repair"]),
+                hours="9-5",
+                pricing_faq="n/a",
+                escalation_phone="+15550000000",
+                inbound_number="+10000000000",
+            )
+        )
+        session.commit()
+
+    monkeypatch.setattr(app_module, "engine", test_engine)
+    monkeypatch.setattr(
+        app_module,
+        "shared_agent",
+        StubAgent(
+            {
+                "reply": "Let me get someone on the line for you.",
+                "jobs": [],
+                "new_messages": [
+                    {
+                        "role": "assistant",
+                        "content": [{"type": "text", "text": "Let me get someone on the line for you."}],
+                    }
+                ],
+                "pending_tool_call": {"name": "transfer_call", "input": {"destination": "+15550000000"}},
+            }
+        ),
+    )
+
+    test_client = TestClient(app_module.app)
+    payload = {
+        "model": "claude-sonnet-4-6",
+        "messages": [{"role": "user", "content": "I want to file a complaint"}],
+        "call": {
+            "id": "call_4",
+            "phoneNumber": {"number": "+10000000000"},
+            "customer": {"number": "+15551234567"},
+        },
+    }
+    response = test_client.post("/voice/chat/completions", json=payload)
+
+    assert response.status_code == 200
+    assert "Let me get someone on the line for you." in response.text
+    assert "transfer_call" in response.text
+
+
 class RaisingAgent:
     def respond(self, *args, **kwargs):
         raise RuntimeError("boom")

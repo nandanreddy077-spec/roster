@@ -72,6 +72,37 @@ def test_respond_returns_pending_tool_call_for_transfer():
     assert result["reply"] == "Let me get someone on the line for you."
 
 
+def test_respond_captures_log_job_from_same_turn_as_transfer():
+    responses = [
+        FakeResponse([
+            FakeBlock("text", text="I'm getting someone right now."),
+            FakeBlock(
+                "tool_use",
+                name="log_job",
+                input={"service_type": "gas leak", "urgency": "emergency"},
+                id="tu_1",
+            ),
+            FakeBlock(
+                "tool_use",
+                name="transfer_call",
+                input={"destination": "+15550000000"},
+                id="tu_2",
+            ),
+        ]),
+    ]
+    agent = AgentEngine(client=FakeAnthropicClient(responses))
+
+    result = agent.respond(
+        make_client_config(),
+        [{"role": "user", "content": [{"type": "text", "text": "I smell gas in my house"}]}],
+        tools=[LOG_JOB_TOOL, TRANSFER_CALL_TOOL],
+    )
+
+    assert result["pending_tool_call"]["name"] == "transfer_call"
+    assert len(result["jobs"]) == 1
+    assert result["jobs"][0]["input"]["service_type"] == "gas leak"
+
+
 def test_respond_log_job_still_resolved_internally():
     responses = [
         FakeResponse([
