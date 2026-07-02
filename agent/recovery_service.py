@@ -59,6 +59,7 @@ def create_campaign(
                 service_type=c["service_type"],
                 estimate_amount=c.get("estimate_amount"),
                 days_since=c.get("days_since"),
+                anchor_date=c.get("anchor_date"),
             )
         )
     session.commit()

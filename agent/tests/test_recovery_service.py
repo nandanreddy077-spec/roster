@@ -386,3 +386,25 @@ def test_handle_recovery_reply_awaiting_slot_no_tool_call_does_not_crash(session
     assert job.current_status == "awaiting_slot"
     assert job.booked_job_id is None
     assert reply == "Sorry, which day did you mean?"
+
+
+def test_create_campaign_membership_sets_anchor_date(session):
+    client = make_client(session)
+    customers = [
+        {"phone": "+1", "name": "Sarah", "service_type": "AC tune-up", "anchor_date": "2026-07-15"},
+    ]
+
+    campaign = recovery_service.create_campaign(session, client, "membership", "July renewals", customers)
+
+    job = session.exec(select(RecoveryJob).where(RecoveryJob.campaign_id == campaign.id)).first()
+    assert job.anchor_date == "2026-07-15"
+
+
+def test_create_campaign_quote_leaves_anchor_date_none(session):
+    client = make_client(session)
+    customers = [{"phone": "+1", "name": "Mike", "service_type": "AC install", "estimate_amount": "8000"}]
+
+    campaign = recovery_service.create_campaign(session, client, "quote", "June quotes", customers)
+
+    job = session.exec(select(RecoveryJob).where(RecoveryJob.campaign_id == campaign.id)).first()
+    assert job.anchor_date is None
