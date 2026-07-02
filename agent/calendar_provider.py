@@ -6,7 +6,7 @@ a real client asks for a specific one violates Roster's own build rule (ROSTER.m
 "Guess integrations — never do this"). Only the manual fallback is wired up today.
 Adding a live provider later is a new class here, same shape as channels.py.
 """
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 from typing import List, Protocol
 
 
@@ -21,7 +21,7 @@ class ManualCalendarProvider:
 
     def get_available_slots(self, business_hours: str, days_ahead: int = 7, count: int = 3) -> List[str]:
         slots: List[str] = []
-        day = datetime.now(timezone.utc).date() + timedelta(days=2)
+        day = datetime.utcnow().date() + timedelta(days=2)
         while len(slots) < count:
             if day.weekday() != 6:  # skip Sunday
                 window = "morning (9am-12pm)" if len(slots) % 2 == 0 else "afternoon (1pm-4pm)"
