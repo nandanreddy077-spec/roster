@@ -106,6 +106,101 @@ def test_tick_marks_no_response_after_final_day(session, monkeypatch):
     assert job.current_status == "no_response"
 
 
+class RaisingSMSChannel:
+    """Raises for one phone number, sends normally for everyone else — simulates
+    a single bad number (e.g. malformed, opted-out) failing mid-batch."""
+
+    def __init__(self, bad_phone):
+        self.bad_phone = bad_phone
+        self.sent = []
+
+    def send(self, from_number, to_number, body):
+        if to_number == self.bad_phone:
+            raise RuntimeError("simulated Twilio failure")
+        self.sent.append({"from": from_number, "to": to_number, "body": body})
+
+
+def test_tick_isolates_per_job_failure(session, monkeypatch):
+    fake_channel = RaisingSMSChannel(bad_phone="+1")
+    monkeypatch.setattr(recovery_service, "sms_channel", fake_channel)
+
+    client = make_client(session)
+    campaign = recovery_service.create_campaign(
+        session, client, "quote", "June quotes",
+        [
+            {"phone": "+1", "name": "Bad", "service_type": "AC install"},
+            {"phone": "+2", "name": "Good", "service_type": "Furnace repair"},
+        ],
+    )
+    campaign.started_at = datetime.utcnow() - timedelta(days=1)
+    session.add(campaign)
+    session.commit()
+
+    sent = recovery_service.tick(session)
+
+    assert len(sent) == 1
+    assert sent[0].customer_phone == "+2"
+    assert fake_channel.sent[0]["to"] == "+2"
+    good_job = session.exec(select(RecoveryJob).where(RecoveryJob.customer_phone == "+2")).first()
+    assert good_job.last_sent_day == 1
+    bad_job = session.exec(select(RecoveryJob).where(RecoveryJob.customer_phone == "+1")).first()
+    assert bad_job.last_sent_day is None  # failed send left this job untouched, ready to retry
+
+
+def test_handle_recovery_reply_stop_keyword_bypasses_llm(session, monkeypatch):
+    client = make_client(session)
+    recovery_service.create_campaign(
+        session, client, "quote", "June quotes",
+        [{"phone": "+1", "name": "Mike", "service_type": "AC install"}],
+    )
+    job = session.exec(select(RecoveryJob)).first()
+    job.last_sent_day = 1
+    session.add(job)
+    session.commit()
+
+    class ExplodingAgent:
+        def respond(self, *args, **kwargs):
+            raise AssertionError("LLM should never be called for a STOP reply")
+
+    monkeypatch.setattr(recovery_service, "agent", ExplodingAgent())
+
+    reply = recovery_service.handle_recovery_reply(session, client, job, "STOP")
+
+    session.refresh(job)
+    assert job.current_status == "declined"
+    assert "unsubscribed" in reply.lower()
+
+
+def test_handle_recovery_reply_awaiting_slot_can_decline(session, monkeypatch):
+    client = make_client(session)
+    recovery_service.create_campaign(
+        session, client, "quote", "June quotes",
+        [{"phone": "+1", "name": "Mike", "service_type": "AC install"}],
+    )
+    job = session.exec(select(RecoveryJob)).first()
+    job.current_status = "awaiting_slot"
+    job.offered_slots_json = json.dumps(["Monday morning", "Tuesday afternoon", "Wednesday morning"])
+    session.add(job)
+    session.commit()
+
+    monkeypatch.setattr(
+        recovery_service,
+        "agent",
+        StubAgent({
+            "reply": "",
+            "jobs": [],
+            "new_messages": [],
+            "pending_tool_call": {"name": "record_response", "input": {"intent": "not_interested"}},
+        }),
+    )
+
+    recovery_service.handle_recovery_reply(session, client, job, "actually never mind, don't text me again")
+
+    session.refresh(job)
+    assert job.current_status == "declined"
+    assert job.booked_job_id is None
+
+
 def test_handle_recovery_reply_interested_offers_slots(session, monkeypatch):
     client = make_client(session)
     recovery_service.create_campaign(
@@ -201,6 +296,9 @@ def test_find_active_recovery_job_only_matches_active_statuses(session):
         session, client, "quote", "June", [{"phone": "+1", "name": "Mike", "service_type": "AC install"}],
     )
     job = session.exec(select(RecoveryJob)).first()
+    job.last_sent_day = 1  # simulate the first sequence message having gone out
+    session.add(job)
+    session.commit()
 
     found = recovery_service.find_active_recovery_job(session, client.id, "+1")
     assert found is not None
@@ -209,6 +307,18 @@ def test_find_active_recovery_job_only_matches_active_statuses(session):
     session.add(job)
     session.commit()
 
+    assert recovery_service.find_active_recovery_job(session, client.id, "+1") is None
+
+
+def test_find_active_recovery_job_excludes_jobs_never_sent_to(session):
+    client = make_client(session)
+    recovery_service.create_campaign(
+        session, client, "quote", "June", [{"phone": "+1", "name": "Mike", "service_type": "AC install"}],
+    )
+    job = session.exec(select(RecoveryJob)).first()
+
+    assert job.last_sent_day is None
+    assert job.current_status == "pending"
     assert recovery_service.find_active_recovery_job(session, client.id, "+1") is None
 
 

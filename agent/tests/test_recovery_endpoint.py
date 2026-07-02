@@ -71,6 +71,14 @@ def test_inbound_sms_routes_active_recovery_reply_to_recovery(monkeypatch, test_
         data={"face": "quote", "name": "June quotes", "customers_raw": "+15551112222,Mike,AC install,8000"},
     )
 
+    # Recovery only claims a reply once it has actually texted the customer —
+    # simulate the day-1 sequence message having already gone out.
+    with Session(test_engine) as session:
+        job = session.exec(select(RecoveryJob)).first()
+        job.last_sent_day = 1
+        session.add(job)
+        session.commit()
+
     monkeypatch.setattr(
         recovery_service,
         "agent",

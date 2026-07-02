@@ -83,7 +83,9 @@ def build_recovery_reply_prompt(recovery_job, offered_slots: Optional[List[str]]
             f"You already offered these time slots:\n{slot_list}\n\n"
             "Figure out which slot the customer's reply matches and call confirm_slot "
             "with its index. If their reply doesn't clearly match any slot, ask a short "
-            "clarifying question instead of guessing."
+            "clarifying question instead of guessing. If instead the customer says they're "
+            "no longer interested or asks to stop being contacted, call record_response with "
+            "intent 'not_interested' or 'unsubscribe' instead of confirm_slot."
         )
     return base + (
         "Read the customer's reply and call record_response with their intent: "

@@ -71,6 +71,7 @@ def find_active_recovery_job(session: Session, client_id: int, customer_phone: s
             RecoveryJob.client_id == client_id,
             RecoveryJob.customer_phone == customer_phone,
             RecoveryJob.current_status.in_(ACTIVE_STATUSES),
+            RecoveryJob.last_sent_day.is_not(None),
         )
     ).first()
 
@@ -114,30 +115,45 @@ def tick(session: Session) -> List[RecoveryJob]:
                 session.commit()
             continue
 
-        client = session.get(Client, job.client_id)
-        template = campaign.template_overrides.get(str(due_day)) or TEMPLATES[campaign.face][due_day]
-        text = render_template(
-            template,
-            customer_name=job.customer_name or "there",
-            service_type=job.service_type,
-            estimate_amount=job.estimate_amount or "",
-            days_since=job.days_since or "",
-        )
+        try:
+            client = session.get(Client, job.client_id)
+            template = campaign.template_overrides.get(str(due_day)) or TEMPLATES[campaign.face][due_day]
+            text = render_template(
+                template,
+                customer_name=job.customer_name or "there",
+                service_type=job.service_type,
+                estimate_amount=job.estimate_amount or "",
+                days_since=job.days_since or "",
+            )
 
-        sms_channel.send(from_number=client.inbound_number or "", to_number=job.customer_phone, body=text)
-        session.add(RecoveryMessageLog(recovery_job_id=job.id, message_day=due_day, message_text=text))
-        job.last_sent_day = due_day
-        job.updated_at = datetime.utcnow()
-        session.add(job)
-        session.commit()
-        sent.append(job)
+            sms_channel.send(from_number=client.inbound_number or "", to_number=job.customer_phone, body=text)
+            session.add(RecoveryMessageLog(recovery_job_id=job.id, message_day=due_day, message_text=text))
+            job.last_sent_day = due_day
+            job.updated_at = datetime.utcnow()
+            session.add(job)
+            session.commit()
+            sent.append(job)
+        except Exception as e:
+            print(f"Recovery tick: failed to send to job {job.id}: {e}")
+            session.rollback()
+            continue
 
     return sent
+
+
+STOP_KEYWORDS = {"stop", "unsubscribe", "cancel", "quit", "stopall"}
 
 
 def handle_recovery_reply(session: Session, client: Client, job: RecoveryJob, text: str) -> str:
     """Process an inbound reply to an active Recovery sequence. Returns the text
     to send back to the customer (caller sends it — TwiML for SMS)."""
+    if text.strip().lower() in STOP_KEYWORDS:
+        job.current_status = "declined"
+        job.updated_at = datetime.utcnow()
+        session.add(job)
+        session.commit()
+        return "You've been unsubscribed and won't receive further messages. Reply START to resume."
+
     log = session.exec(
         select(RecoveryMessageLog)
         .where(RecoveryMessageLog.recovery_job_id == job.id)
@@ -154,7 +170,7 @@ def handle_recovery_reply(session: Session, client: Client, job: RecoveryJob, te
         result = agent.respond(
             client.to_config(),
             history,
-            tools=[CONFIRM_SLOT_TOOL],
+            tools=[CONFIRM_SLOT_TOOL, RECORD_RESPONSE_TOOL],
             system_prompt=build_recovery_reply_prompt(job, offered_slots=job.offered_slots),
             max_iters=2,
         )
@@ -180,6 +196,13 @@ def handle_recovery_reply(session: Session, client: Client, job: RecoveryJob, te
                 job.booked_job_id = new_job.id
                 job.current_status = "booked"
                 reply = f"Perfect, you're booked for {chosen}! We'll text you a reminder. Any questions, just reply here."
+        elif (
+            pending
+            and pending["name"] == "record_response"
+            and pending["input"].get("intent") in ("not_interested", "unsubscribe")
+        ):
+            job.current_status = "declined"
+            reply = "No problem, thanks for letting us know! We won't follow up further."
         job.updated_at = datetime.utcnow()
         session.add(job)
         session.commit()
