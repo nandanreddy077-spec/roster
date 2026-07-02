@@ -35,3 +35,23 @@ def test_prompt_with_slots_asks_for_confirm_slot_tool():
     prompt = build_recovery_reply_prompt(FakeRecoveryJob(), offered_slots=["Monday morning", "Tuesday afternoon"])
     assert "confirm_slot" in prompt
     assert "Monday morning" in prompt
+
+
+from recovery_engine import FACE_DISPLAY_NAMES, MEMBERSHIP_OFFSETS
+
+
+def test_face_display_names_covers_every_known_face():
+    assert FACE_DISPLAY_NAMES["quote"] == "Chaser"
+    assert FACE_DISPLAY_NAMES["reactivation"] == "Rebooker"
+    assert FACE_DISPLAY_NAMES["membership"] == "Renewals"
+
+
+def test_membership_templates_cover_every_offset():
+    for offset in MEMBERSHIP_OFFSETS:
+        assert offset in TEMPLATES["membership"]
+        text = TEMPLATES["membership"][offset]
+        assert "{service_type}" in text or "{customer_name}" in text
+
+
+def test_membership_offsets_are_ascending():
+    assert MEMBERSHIP_OFFSETS == sorted(MEMBERSHIP_OFFSETS)

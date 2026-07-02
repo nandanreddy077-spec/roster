@@ -6,6 +6,17 @@ from typing import List, Optional
 
 SEQUENCE_DAYS = [1, 3, 7, 14, 21, 28]
 
+# Days relative to a customer's own anchor_date, not to campaign.started_at.
+# A separate constant from SEQUENCE_DAYS on purpose: it can be negative
+# (before the renewal date) and is anchored per-customer, not per-campaign.
+MEMBERSHIP_OFFSETS = [-30, -14, -7, 0, 7]
+
+FACE_DISPLAY_NAMES = {
+    "quote": "Chaser",
+    "reactivation": "Rebooker",
+    "membership": "Renewals",
+}
+
 TEMPLATES = {
     "quote": {
         1: "Hi {customer_name}, just following up on that {service_type} estimate. Still interested? Let me know!",
@@ -22,6 +33,13 @@ TEMPLATES = {
         14: "{customer_name}, been a while! Ready for your {service_type} maintenance?",
         21: "Last call for {service_type} before the rush. Lock in your appointment today?",
         28: "{customer_name}, your system could use some attention. Book your {service_type} today?",
+    },
+    "membership": {
+        -30: "Hi {customer_name}, your {service_type} plan renews on {renewal_date} — want to get your visit on the books before then?",
+        -14: "{customer_name}, your {service_type} renewal is coming up on {renewal_date}. Ready to schedule?",
+        -7: "One week left before your {service_type} plan renews on {renewal_date} — lock in your visit now?",
+        0: "Today's the day — your {service_type} plan renews. Book your visit now to keep your member pricing and priority scheduling.",
+        7: "{customer_name}, your {service_type} plan lapsed last week. Still want to keep your member pricing? Reply YES to renew.",
     },
 }
 
