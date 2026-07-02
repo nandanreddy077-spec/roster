@@ -163,7 +163,7 @@ def handle_recovery_reply(session: Session, client: Client, job: RecoveryJob, te
         if pending and pending["name"] == "confirm_slot":
             idx = pending["input"]["slot_index"]
             slots = job.offered_slots
-            if 0 <= idx < len(slots):
+            if isinstance(idx, int) and 0 <= idx < len(slots):
                 chosen = slots[idx]
                 new_job = Job(
                     client_id=client.id,

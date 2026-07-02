@@ -210,3 +210,64 @@ def test_find_active_recovery_job_only_matches_active_statuses(session):
     session.commit()
 
     assert recovery_service.find_active_recovery_job(session, client.id, "+1") is None
+
+
+def test_handle_recovery_reply_out_of_range_slot_index_does_not_book(session, monkeypatch):
+    client = make_client(session)
+    recovery_service.create_campaign(
+        session, client, "quote", "June quotes",
+        [{"phone": "+1", "name": "Mike", "service_type": "AC install"}],
+    )
+    job = session.exec(select(RecoveryJob)).first()
+    job.current_status = "awaiting_slot"
+    job.offered_slots_json = json.dumps(["Monday morning", "Tuesday afternoon", "Wednesday morning"])
+    session.add(job)
+    session.commit()
+
+    monkeypatch.setattr(
+        recovery_service,
+        "agent",
+        StubAgent({
+            "reply": "",
+            "jobs": [],
+            "new_messages": [],
+            "pending_tool_call": {"name": "confirm_slot", "input": {"slot_index": 99}},
+        }),
+    )
+
+    recovery_service.handle_recovery_reply(session, client, job, "uh, the fourth one?")
+
+    session.refresh(job)
+    assert job.current_status == "awaiting_slot"
+    assert job.booked_job_id is None
+
+
+def test_handle_recovery_reply_awaiting_slot_no_tool_call_does_not_crash(session, monkeypatch):
+    client = make_client(session)
+    recovery_service.create_campaign(
+        session, client, "quote", "June quotes",
+        [{"phone": "+1", "name": "Mike", "service_type": "AC install"}],
+    )
+    job = session.exec(select(RecoveryJob)).first()
+    job.current_status = "awaiting_slot"
+    job.offered_slots_json = json.dumps(["Monday morning", "Tuesday afternoon", "Wednesday morning"])
+    session.add(job)
+    session.commit()
+
+    monkeypatch.setattr(
+        recovery_service,
+        "agent",
+        StubAgent({
+            "reply": "Sorry, which day did you mean?",
+            "jobs": [],
+            "new_messages": [],
+            "pending_tool_call": None,
+        }),
+    )
+
+    reply = recovery_service.handle_recovery_reply(session, client, job, "hmm not sure")
+
+    session.refresh(job)
+    assert job.current_status == "awaiting_slot"
+    assert job.booked_job_id is None
+    assert reply == "Sorry, which day did you mean?"
