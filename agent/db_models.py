@@ -56,3 +56,54 @@ class Job(SQLModel, table=True):
     callback_number: Optional[str] = None
     notes: Optional[str] = None
     created_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class RecoveryCampaign(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    client_id: int = Field(foreign_key="client.id")
+    face: str  # "quote" or "reactivation"
+    name: str
+    customer_list_json: str  # JSON list of {phone, name, service_type, estimate_amount, days_since}
+    template_overrides_json: str = "{}"  # JSON map of message_day (str) -> custom text
+    started_at: datetime = Field(default_factory=datetime.utcnow)
+    is_active: bool = True
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+
+    @property
+    def customer_list(self) -> List[dict]:
+        return json.loads(self.customer_list_json)
+
+    @property
+    def template_overrides(self) -> dict:
+        return json.loads(self.template_overrides_json)
+
+
+class RecoveryJob(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    campaign_id: int = Field(foreign_key="recoverycampaign.id")
+    client_id: int = Field(foreign_key="client.id")
+    customer_phone: str
+    customer_name: Optional[str] = None
+    service_type: str
+    estimate_amount: Optional[str] = None
+    days_since: Optional[str] = None
+    current_status: str = "pending"  # pending, awaiting_slot, booked, declined, no_response
+    last_sent_day: Optional[int] = None
+    offered_slots_json: str = "[]"
+    booked_job_id: Optional[int] = Field(default=None, foreign_key="job.id")
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
+
+    @property
+    def offered_slots(self) -> List[str]:
+        return json.loads(self.offered_slots_json)
+
+
+class RecoveryMessageLog(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    recovery_job_id: int = Field(foreign_key="recoveryjob.id")
+    message_day: int
+    message_text: str
+    sent_at: datetime = Field(default_factory=datetime.utcnow)
+    customer_reply: Optional[str] = None
+    replied_at: Optional[datetime] = None
