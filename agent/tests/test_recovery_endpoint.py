@@ -4,7 +4,7 @@ from fastapi.testclient import TestClient
 from sqlmodel import Session, select
 
 import app as app_module
-from db_models import Client, RecoveryJob
+from db_models import Client, RecoveryCampaign, RecoveryJob
 
 
 def make_client(test_engine) -> int:
@@ -41,3 +41,20 @@ def test_create_campaign_via_form(monkeypatch, test_engine):
         jobs = session.exec(select(RecoveryJob)).all()
     assert len(jobs) == 1
     assert jobs[0].customer_name == "Mike"
+
+
+def test_recovery_campaign_detail_renders(monkeypatch, test_engine):
+    monkeypatch.setattr(app_module, "engine", test_engine)
+    client_id = make_client(test_engine)
+    test_client = TestClient(app_module.app)
+    test_client.post(
+        f"/clients/{client_id}/recovery/new",
+        data={"face": "reactivation", "name": "Dormant list", "customers_raw": "+1,Sue,Tune-up,400"},
+    )
+
+    with Session(test_engine) as session:
+        campaign_id = session.exec(select(app_module.RecoveryCampaign)).first().id
+
+    response = test_client.get(f"/clients/{client_id}/recovery/{campaign_id}")
+    assert response.status_code == 200
+    assert "Sue" in response.text

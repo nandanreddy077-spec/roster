@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block title %}{{ campaign.name }} — Roster{% endblock %}
+{% block content %}
+<a class="back-link" href="/clients/{{ client.id }}">&larr; {{ client.business_name }}</a>
+<h1>{{ campaign.name }}</h1>
+<span class="trade-tag">{{ campaign.face }}</span>
+
+<div class="jobs-panel">
+  <h2>Customers</h2>
+  {% for j in jobs %}
+  <div class="job-card">
+    <div class="job-urgency status-{{ j.current_status }}">{{ j.current_status }}</div>
+    <strong>{{ j.service_type }}</strong>
+    {% if j.customer_name %}<div>{{ j.customer_name }}</div>{% endif %}
+    <div>{{ j.customer_phone }}</div>
+    {% if j.estimate_amount %}<div>Estimate: {{ j.estimate_amount }}</div>{% endif %}
+  </div>
+  {% endfor %}
+  {% if not jobs %}<p class="empty">No customers in this campaign.</p>{% endif %}
+</div>
+{% endblock %}

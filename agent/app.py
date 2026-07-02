@@ -122,6 +122,19 @@ def create_recovery_campaign(
     return RedirectResponse(f"/clients/{client_id}/recovery/{campaign_id}", status_code=303)
 
 
+@app.get("/clients/{client_id}/recovery/{campaign_id}")
+def recovery_campaign_detail(request: Request, client_id: int, campaign_id: int):
+    with Session(engine) as session:
+        client = session.get(Client, client_id)
+        campaign = session.get(RecoveryCampaign, campaign_id)
+        jobs = session.exec(
+            select(RecoveryJob).where(RecoveryJob.campaign_id == campaign_id).order_by(RecoveryJob.id)
+        ).all()
+    return templates.TemplateResponse(
+        request, "recovery_detail.html", {"client": client, "campaign": campaign, "jobs": jobs}
+    )
+
+
 @app.get("/clients/{client_id}")
 def client_detail(request: Request, client_id: int):
     with Session(engine) as session:
