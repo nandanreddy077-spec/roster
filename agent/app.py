@@ -147,6 +147,9 @@ def client_detail(request: Request, client_id: int):
         jobs = session.exec(
             select(Job).where(Job.client_id == client_id).order_by(Job.created_at.desc())
         ).all()
+        campaigns = session.exec(
+            select(RecoveryCampaign).where(RecoveryCampaign.client_id == client_id).order_by(RecoveryCampaign.created_at.desc())
+        ).all()
 
     chat = [
         {"role": m.role, "text": extract_display_text(json.loads(m.content_json))}
@@ -157,7 +160,7 @@ def client_detail(request: Request, client_id: int):
     return templates.TemplateResponse(
         request,
         "client_detail.html",
-        {"client": client, "chat": chat, "jobs": jobs},
+        {"client": client, "chat": chat, "jobs": jobs, "campaigns": campaigns},
     )
 
 

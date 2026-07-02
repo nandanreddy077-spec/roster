@@ -181,6 +181,22 @@ a { color: var(--accent); text-decoration: none; }
 .job-urgency.same_day { background: rgba(194, 105, 61, 0.12); color: var(--accent); }
 .job-urgency.routine { background: rgba(75, 122, 91, 0.12); color: var(--good); }
 
+.recovery-panel {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 20px;
+  margin-top: 24px;
+}
+.recovery-panel h2 { font-size: 16px; margin-bottom: 14px; }
+.recovery-panel .btn { margin-bottom: 14px; }
+
+.job-urgency.status-pending { background: var(--bg-alt); color: var(--text-dim); }
+.job-urgency.status-awaiting_slot { background: rgba(194, 105, 61, 0.12); color: var(--accent); }
+.job-urgency.status-booked { background: rgba(75, 122, 91, 0.12); color: var(--good); }
+.job-urgency.status-declined { background: rgba(176, 71, 62, 0.12); color: var(--bad); }
+.job-urgency.status-no_response { background: var(--bg-alt); color: var(--soon); }
+
 @media (max-width: 720px) {
   .client-list { grid-template-columns: 1fr; }
   .detail-grid { grid-template-columns: 1fr; }

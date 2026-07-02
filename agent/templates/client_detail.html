@@ -5,6 +5,18 @@
 <h1>{{ client.business_name }}</h1>
 <span class="trade-tag">{{ client.trade }}</span>
 
+<section class="recovery-panel">
+  <h2>Revenue Recovery campaigns</h2>
+  <a class="btn btn-primary" href="/clients/{{ client.id }}/recovery/new">+ New campaign</a>
+  {% for c in campaigns %}
+  <div class="job-card">
+    <a href="/clients/{{ client.id }}/recovery/{{ c.id }}"><strong>{{ c.name }}</strong></a>
+    <span class="trade-tag">{{ c.face }}</span>
+  </div>
+  {% endfor %}
+  {% if not campaigns %}<p class="empty">No Recovery campaigns yet.</p>{% endif %}
+</section>
+
 <div class="detail-grid">
   <section class="chat-panel">
     <h2>Conversation</h2>

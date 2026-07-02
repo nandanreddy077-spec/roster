@@ -89,3 +89,18 @@ def test_inbound_sms_routes_active_recovery_reply_to_recovery(monkeypatch, test_
 
     assert response.status_code == 200
     assert "1)" in response.text  # slot options offered, not a Frontdesk reply
+
+
+def test_client_detail_lists_recovery_campaigns(monkeypatch, test_engine):
+    monkeypatch.setattr(app_module, "engine", test_engine)
+    client_id = make_client(test_engine)
+    test_client = TestClient(app_module.app)
+    test_client.post(
+        f"/clients/{client_id}/recovery/new",
+        data={"face": "quote", "name": "June quotes", "customers_raw": "+1,Mike,AC install,8000"},
+    )
+
+    response = test_client.get(f"/clients/{client_id}")
+
+    assert response.status_code == 200
+    assert "June quotes" in response.text
