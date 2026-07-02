@@ -9,10 +9,18 @@ from typing import Any, Dict, List, Optional
 
 from sqlmodel import Session, select
 
+from calendar_provider import get_calendar_provider
 from channels import get_channel
-from db_models import Client, RecoveryCampaign, RecoveryJob, RecoveryMessageLog
+from db_models import Client, Job, RecoveryCampaign, RecoveryJob, RecoveryMessageLog
 from engine import AgentEngine
-from recovery_engine import SEQUENCE_DAYS, TEMPLATES, render_template
+from recovery_engine import (
+    CONFIRM_SLOT_TOOL,
+    RECORD_RESPONSE_TOOL,
+    SEQUENCE_DAYS,
+    TEMPLATES,
+    build_recovery_reply_prompt,
+    render_template,
+)
 
 agent = AgentEngine()
 sms_channel = get_channel()
@@ -125,3 +133,83 @@ def tick(session: Session) -> List[RecoveryJob]:
         sent.append(job)
 
     return sent
+
+
+def handle_recovery_reply(session: Session, client: Client, job: RecoveryJob, text: str) -> str:
+    """Process an inbound reply to an active Recovery sequence. Returns the text
+    to send back to the customer (caller sends it — TwiML for SMS)."""
+    log = session.exec(
+        select(RecoveryMessageLog)
+        .where(RecoveryMessageLog.recovery_job_id == job.id)
+        .order_by(RecoveryMessageLog.id.desc())
+    ).first()
+    if log is not None and log.customer_reply is None:
+        log.customer_reply = text
+        log.replied_at = datetime.utcnow()
+        session.add(log)
+
+    history = [{"role": "user", "content": [{"type": "text", "text": text}]}]
+
+    if job.current_status == "awaiting_slot":
+        result = agent.respond(
+            client.to_config(),
+            history,
+            tools=[CONFIRM_SLOT_TOOL],
+            system_prompt=build_recovery_reply_prompt(job, offered_slots=job.offered_slots),
+            max_iters=2,
+        )
+        reply = result["reply"] or "Sorry, could you confirm which time works — the first, second, or third option?"
+        pending = result["pending_tool_call"]
+        if pending and pending["name"] == "confirm_slot":
+            idx = pending["input"]["slot_index"]
+            slots = job.offered_slots
+            if 0 <= idx < len(slots):
+                chosen = slots[idx]
+                new_job = Job(
+                    client_id=client.id,
+                    customer_phone=job.customer_phone,
+                    customer_name=job.customer_name,
+                    service_type=job.service_type,
+                    urgency="routine",
+                    callback_number=job.customer_phone,
+                    notes=f"Booked via Revenue Recovery for {chosen}",
+                )
+                session.add(new_job)
+                session.commit()
+                session.refresh(new_job)
+                job.booked_job_id = new_job.id
+                job.current_status = "booked"
+                reply = f"Perfect, you're booked for {chosen}! We'll text you a reminder. Any questions, just reply here."
+        job.updated_at = datetime.utcnow()
+        session.add(job)
+        session.commit()
+        return reply
+
+    # current_status == "pending": first reply after a sequence message
+    result = agent.respond(
+        client.to_config(),
+        history,
+        tools=[RECORD_RESPONSE_TOOL],
+        system_prompt=build_recovery_reply_prompt(job),
+        max_iters=2,
+    )
+    pending = result["pending_tool_call"]
+    intent = pending["input"]["intent"] if pending and pending["name"] == "record_response" else None
+
+    if intent == "interested":
+        provider = get_calendar_provider(client)
+        slots = provider.get_available_slots(client.hours)
+        job.offered_slots_json = json.dumps(slots)
+        job.current_status = "awaiting_slot"
+        slot_text = "; ".join(f"{i + 1}) {s}" for i, s in enumerate(slots))
+        reply = f"Great! Which works best: {slot_text}?"
+    elif intent in ("not_interested", "unsubscribe"):
+        job.current_status = "declined"
+        reply = "No problem, thanks for letting us know! We won't follow up further."
+    else:
+        reply = result["reply"] or "Thanks for the reply! Are you still interested in booking?"
+
+    job.updated_at = datetime.utcnow()
+    session.add(job)
+    session.commit()
+    return reply

@@ -3,8 +3,9 @@ from datetime import datetime, timedelta
 
 from sqlmodel import Session, select
 
-from db_models import Client, RecoveryJob, RecoveryMessageLog
+from db_models import Client, Job, RecoveryJob, RecoveryMessageLog
 import recovery_service
+from conftest import StubAgent
 
 
 def make_client(session: Session) -> Client:
@@ -103,3 +104,109 @@ def test_tick_marks_no_response_after_final_day(session, monkeypatch):
 
     job = session.exec(select(RecoveryJob)).first()
     assert job.current_status == "no_response"
+
+
+def test_handle_recovery_reply_interested_offers_slots(session, monkeypatch):
+    client = make_client(session)
+    recovery_service.create_campaign(
+        session, client, "quote", "June quotes",
+        [{"phone": "+1", "name": "Mike", "service_type": "AC install"}],
+    )
+    job = session.exec(select(RecoveryJob)).first()
+    job.last_sent_day = 1
+    session.add(job)
+    session.commit()
+    session.add(RecoveryMessageLog(recovery_job_id=job.id, message_day=1, message_text="Hi Mike..."))
+    session.commit()
+
+    monkeypatch.setattr(
+        recovery_service,
+        "agent",
+        StubAgent({
+            "reply": "",
+            "jobs": [],
+            "new_messages": [],
+            "pending_tool_call": {"name": "record_response", "input": {"intent": "interested"}},
+        }),
+    )
+
+    reply = recovery_service.handle_recovery_reply(session, client, job, "Yes I'm interested!")
+
+    session.refresh(job)
+    assert job.current_status == "awaiting_slot"
+    assert len(job.offered_slots) == 3
+    assert "1)" in reply
+
+
+def test_handle_recovery_reply_confirm_slot_books_job(session, monkeypatch):
+    client = make_client(session)
+    recovery_service.create_campaign(
+        session, client, "quote", "June quotes",
+        [{"phone": "+1", "name": "Mike", "service_type": "AC install"}],
+    )
+    job = session.exec(select(RecoveryJob)).first()
+    job.current_status = "awaiting_slot"
+    job.offered_slots_json = json.dumps(["Monday morning", "Tuesday afternoon", "Wednesday morning"])
+    session.add(job)
+    session.commit()
+
+    monkeypatch.setattr(
+        recovery_service,
+        "agent",
+        StubAgent({
+            "reply": "",
+            "jobs": [],
+            "new_messages": [],
+            "pending_tool_call": {"name": "confirm_slot", "input": {"slot_index": 1}},
+        }),
+    )
+
+    reply = recovery_service.handle_recovery_reply(session, client, job, "Tuesday afternoon works")
+
+    session.refresh(job)
+    assert job.current_status == "booked"
+    assert job.booked_job_id is not None
+    booked = session.get(Job, job.booked_job_id)
+    assert booked.service_type == "AC install"
+    assert "Tuesday afternoon" in reply
+
+
+def test_handle_recovery_reply_declined_stops_sequence(session, monkeypatch):
+    client = make_client(session)
+    recovery_service.create_campaign(
+        session, client, "reactivation", "Dormant", [{"phone": "+1", "name": "Sue", "service_type": "Tune-up"}],
+    )
+    job = session.exec(select(RecoveryJob)).first()
+
+    monkeypatch.setattr(
+        recovery_service,
+        "agent",
+        StubAgent({
+            "reply": "",
+            "jobs": [],
+            "new_messages": [],
+            "pending_tool_call": {"name": "record_response", "input": {"intent": "not_interested"}},
+        }),
+    )
+
+    recovery_service.handle_recovery_reply(session, client, job, "No thanks")
+
+    session.refresh(job)
+    assert job.current_status == "declined"
+
+
+def test_find_active_recovery_job_only_matches_active_statuses(session):
+    client = make_client(session)
+    recovery_service.create_campaign(
+        session, client, "quote", "June", [{"phone": "+1", "name": "Mike", "service_type": "AC install"}],
+    )
+    job = session.exec(select(RecoveryJob)).first()
+
+    found = recovery_service.find_active_recovery_job(session, client.id, "+1")
+    assert found is not None
+
+    job.current_status = "booked"
+    session.add(job)
+    session.commit()
+
+    assert recovery_service.find_active_recovery_job(session, client.id, "+1") is None
