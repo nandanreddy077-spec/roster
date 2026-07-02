@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block title %}New Recovery campaign — Roster{% endblock %}
+{% block content %}
+<a class="back-link" href="/clients/{{ client.id }}">&larr; {{ client.business_name }}</a>
+<h1>New Recovery campaign</h1>
+<form method="post" action="/clients/{{ client.id }}/recovery/new" class="form">
+  <label>Campaign type
+    <select name="face">
+      <option value="quote">Quote follow-up — chase unsold estimates</option>
+      <option value="reactivation">Reactivation — rebook lapsed customers</option>
+    </select>
+  </label>
+  <label>Campaign name<input name="name" placeholder="June unsold quotes" required></label>
+  <label>Customers (one per line: phone,name,service_type,amount_or_days_since)
+    <textarea name="customers_raw" rows="8" placeholder="+15551112222,Mike,AC install,8000" required></textarea>
+  </label>
+  <button class="btn btn-primary" type="submit">Start campaign</button>
+</form>
+{% endblock %}

@@ -11,7 +11,8 @@ from sqlmodel import Session, select
 
 from channels import get_channel
 from db import engine, init_db
-from db_models import Client, Job, Message
+from db_models import Client, Job, Message, RecoveryCampaign, RecoveryJob
+from recovery_service import create_campaign, find_active_recovery_job, handle_recovery_reply
 from service import agent as shared_agent
 from service import handle_customer_message
 from voice_adapter import VapiChatRequest, handle_voice_turn
@@ -84,6 +85,41 @@ def create_client(
         session.commit()
         session.refresh(client)
     return RedirectResponse(f"/clients/{client.id}", status_code=303)
+
+
+@app.get("/clients/{client_id}/recovery/new")
+def new_recovery_campaign_form(request: Request, client_id: int):
+    with Session(engine) as session:
+        client = session.get(Client, client_id)
+    return templates.TemplateResponse(request, "recovery_new.html", {"client": client})
+
+
+@app.post("/clients/{client_id}/recovery/new")
+def create_recovery_campaign(
+    client_id: int,
+    face: str = Form(...),
+    name: str = Form(...),
+    customers_raw: str = Form(...),
+):
+    """`customers_raw` is one customer per line: phone,name,service_type,amount_or_days_since"""
+    customers = []
+    for line in customers_raw.strip().splitlines():
+        parts = [p.strip() for p in line.split(",")]
+        if len(parts) < 3:
+            continue
+        entry = {"phone": parts[0], "name": parts[1], "service_type": parts[2]}
+        if len(parts) > 3 and parts[3]:
+            if face == "quote":
+                entry["estimate_amount"] = parts[3]
+            else:
+                entry["days_since"] = parts[3]
+        customers.append(entry)
+
+    with Session(engine) as session:
+        client = session.get(Client, client_id)
+        campaign = create_campaign(session, client, face, name, customers)
+        campaign_id = campaign.id
+    return RedirectResponse(f"/clients/{client_id}/recovery/{campaign_id}", status_code=303)
 
 
 @app.get("/clients/{client_id}")
