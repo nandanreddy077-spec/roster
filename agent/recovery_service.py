@@ -141,19 +141,12 @@ def tick(session: Session) -> List[RecoveryJob]:
     return sent
 
 
-STOP_KEYWORDS = {"stop", "unsubscribe", "cancel", "quit", "stopall"}
+STOP_KEYWORDS = {"stop", "stopall", "unsubscribe", "cancel", "end", "quit"}
 
 
 def handle_recovery_reply(session: Session, client: Client, job: RecoveryJob, text: str) -> str:
     """Process an inbound reply to an active Recovery sequence. Returns the text
     to send back to the customer (caller sends it — TwiML for SMS)."""
-    if text.strip().lower() in STOP_KEYWORDS:
-        job.current_status = "declined"
-        job.updated_at = datetime.utcnow()
-        session.add(job)
-        session.commit()
-        return "You've been unsubscribed and won't receive further messages. Reply START to resume."
-
     log = session.exec(
         select(RecoveryMessageLog)
         .where(RecoveryMessageLog.recovery_job_id == job.id)
@@ -163,6 +156,13 @@ def handle_recovery_reply(session: Session, client: Client, job: RecoveryJob, te
         log.customer_reply = text
         log.replied_at = datetime.utcnow()
         session.add(log)
+
+    if text.strip().lower() in STOP_KEYWORDS:
+        job.current_status = "declined"
+        job.updated_at = datetime.utcnow()
+        session.add(job)
+        session.commit()
+        return "You've been unsubscribed and won't receive further messages. Reply START to resume."
 
     history = [{"role": "user", "content": [{"type": "text", "text": text}]}]
 

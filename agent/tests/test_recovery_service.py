@@ -164,10 +164,15 @@ def test_handle_recovery_reply_stop_keyword_bypasses_llm(session, monkeypatch):
 
     monkeypatch.setattr(recovery_service, "agent", ExplodingAgent())
 
+    session.add(RecoveryMessageLog(recovery_job_id=job.id, message_day=1, message_text="Hi Mike..."))
+    session.commit()
+
     reply = recovery_service.handle_recovery_reply(session, client, job, "STOP")
 
     session.refresh(job)
     assert job.current_status == "declined"
+    log = session.exec(select(RecoveryMessageLog).where(RecoveryMessageLog.recovery_job_id == job.id)).first()
+    assert log.customer_reply == "STOP"  # opt-out text is captured, not silently dropped
     assert "unsubscribed" in reply.lower()
 
 
