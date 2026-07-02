@@ -408,3 +408,99 @@ def test_create_campaign_quote_leaves_anchor_date_none(session):
 
     job = session.exec(select(RecoveryJob).where(RecoveryJob.campaign_id == campaign.id)).first()
     assert job.anchor_date is None
+
+
+def test_tick_sends_membership_offset_before_renewal(session, monkeypatch):
+    fake_channel = FakeSMSChannel()
+    monkeypatch.setattr(recovery_service, "sms_channel", fake_channel)
+
+    client = make_client(session)
+    renewal = (datetime.utcnow() + timedelta(days=25)).strftime("%Y-%m-%d")
+    campaign = recovery_service.create_campaign(
+        session, client, "membership", "July renewals",
+        [{"phone": "+1", "name": "Sarah", "service_type": "AC tune-up", "anchor_date": renewal}],
+    )
+
+    sent = recovery_service.tick(session)
+
+    assert len(sent) == 1
+    assert fake_channel.sent[0]["to"] == "+1"
+    assert "Sarah" in fake_channel.sent[0]["body"]
+    job = session.exec(select(RecoveryJob).where(RecoveryJob.campaign_id == campaign.id)).first()
+    assert job.last_sent_day == -30
+
+
+def test_tick_membership_catch_up_lands_on_latest_offset_not_burst(session, monkeypatch):
+    fake_channel = FakeSMSChannel()
+    monkeypatch.setattr(recovery_service, "sms_channel", fake_channel)
+
+    client = make_client(session)
+    renewal = (datetime.utcnow() + timedelta(days=5)).strftime("%Y-%m-%d")  # added late, 5 days out
+    recovery_service.create_campaign(
+        session, client, "membership", "July renewals",
+        [{"phone": "+1", "name": "Sarah", "service_type": "AC tune-up", "anchor_date": renewal}],
+    )
+
+    sent = recovery_service.tick(session)
+
+    assert len(sent) == 1
+    job = session.exec(select(RecoveryJob)).first()
+    assert job.last_sent_day == -7  # jumps straight to -7, doesn't replay -30/-14 as a burst
+
+
+def test_tick_membership_does_not_resend_same_offset_twice(session, monkeypatch):
+    fake_channel = FakeSMSChannel()
+    monkeypatch.setattr(recovery_service, "sms_channel", fake_channel)
+
+    client = make_client(session)
+    renewal = (datetime.utcnow() + timedelta(days=25)).strftime("%Y-%m-%d")
+    recovery_service.create_campaign(
+        session, client, "membership", "July renewals",
+        [{"phone": "+1", "name": "Sarah", "service_type": "AC tune-up", "anchor_date": renewal}],
+    )
+
+    recovery_service.tick(session)
+    second = recovery_service.tick(session)
+
+    assert second == []
+    assert len(fake_channel.sent) == 1
+
+
+def test_tick_membership_marks_no_response_after_final_offset(session, monkeypatch):
+    fake_channel = FakeSMSChannel()
+    monkeypatch.setattr(recovery_service, "sms_channel", fake_channel)
+
+    client = make_client(session)
+    renewal = (datetime.utcnow() - timedelta(days=10)).strftime("%Y-%m-%d")  # renewed 10 days ago
+    recovery_service.create_campaign(
+        session, client, "membership", "July renewals",
+        [{"phone": "+1", "name": "Sarah", "service_type": "AC tune-up", "anchor_date": renewal}],
+    )
+
+    recovery_service.tick(session)  # catches up: sends the one unsent due offset (+7)
+    recovery_service.tick(session)  # nothing left to send -> marks no_response
+
+    job = session.exec(select(RecoveryJob)).first()
+    assert job.current_status == "no_response"
+
+
+def test_tick_quote_face_unaffected_by_membership_branch(session, monkeypatch):
+    """Regression guard: byte-identical behavior for the pre-existing faces."""
+    fake_channel = FakeSMSChannel()
+    monkeypatch.setattr(recovery_service, "sms_channel", fake_channel)
+
+    client = make_client(session)
+    campaign = recovery_service.create_campaign(
+        session, client, "quote", "June quotes",
+        [{"phone": "+1", "name": "Mike", "service_type": "AC install", "estimate_amount": "8000"}],
+    )
+    campaign.started_at = datetime.utcnow() - timedelta(days=1)
+    session.add(campaign)
+    session.commit()
+
+    sent = recovery_service.tick(session)
+
+    assert len(sent) == 1
+    job = session.exec(select(RecoveryJob).where(RecoveryJob.campaign_id == campaign.id)).first()
+    assert job.last_sent_day == 1
+    assert job.anchor_date is None

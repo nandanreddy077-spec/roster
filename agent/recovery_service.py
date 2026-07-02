@@ -15,6 +15,7 @@ from db_models import Client, Job, RecoveryCampaign, RecoveryJob, RecoveryMessag
 from engine import AgentEngine
 from recovery_engine import (
     CONFIRM_SLOT_TOOL,
+    MEMBERSHIP_OFFSETS,
     RECORD_RESPONSE_TOOL,
     SEQUENCE_DAYS,
     TEMPLATES,
@@ -77,13 +78,16 @@ def find_active_recovery_job(session: Session, client_id: int, customer_phone: s
     ).first()
 
 
-def _next_due_day(job: RecoveryJob, elapsed_days: int) -> Optional[int]:
-    """Latest unsent sequence day whose threshold has passed. Returns the
-    furthest one (not the first) so a job that missed several thresholds
-    because tick() didn't run for a while jumps straight to where it should be,
-    instead of replaying the whole backlog as a burst of texts."""
+def _next_due_day(job: RecoveryJob, elapsed_days: int, day_list: List[int]) -> Optional[int]:
+    """Latest unsent day/offset whose threshold has passed, from `day_list`
+    (must be ascending). Returns the furthest one (not the first) so a job
+    that missed several thresholds jumps straight to where it should be,
+    instead of replaying the whole backlog as a burst of texts. Works
+    identically for the day-count faces (SEQUENCE_DAYS, elapsed_days >= 0)
+    and the date-anchored membership face (MEMBERSHIP_OFFSETS, elapsed_days
+    can be negative — the comparison logic doesn't care about sign)."""
     candidate = None
-    for day in SEQUENCE_DAYS:
+    for day in day_list:
         if job.last_sent_day is not None and day <= job.last_sent_day:
             continue
         if elapsed_days >= day:
@@ -96,7 +100,7 @@ def _next_due_day(job: RecoveryJob, elapsed_days: int) -> Optional[int]:
 def tick(session: Session) -> List[RecoveryJob]:
     """Send any due sequence messages across all active campaigns. Meant to be
     called once a day (see recovery_tick.py) — safe to call more often since
-    it only ever sends a given sequence day's message once (tracked by
+    it only ever sends a given sequence day/offset's message once (tracked by
     last_sent_day)."""
     sent: List[RecoveryJob] = []
     jobs = session.exec(select(RecoveryJob).where(RecoveryJob.current_status == "pending")).all()
@@ -105,11 +109,21 @@ def tick(session: Session) -> List[RecoveryJob]:
         campaign = session.get(RecoveryCampaign, job.campaign_id)
         if campaign is None or not campaign.is_active:
             continue
-        elapsed = (datetime.utcnow() - campaign.started_at).days
-        due_day = _next_due_day(job, elapsed)
+
+        if campaign.face == "membership":
+            if job.anchor_date is None:
+                continue
+            anchor = datetime.strptime(job.anchor_date, "%Y-%m-%d")
+            elapsed = (datetime.utcnow() - anchor).days
+            day_list = MEMBERSHIP_OFFSETS
+        else:
+            elapsed = (datetime.utcnow() - campaign.started_at).days
+            day_list = SEQUENCE_DAYS
+
+        due_day = _next_due_day(job, elapsed, day_list)
 
         if due_day is None:
-            if job.last_sent_day == SEQUENCE_DAYS[-1] and elapsed > SEQUENCE_DAYS[-1]:
+            if job.last_sent_day == day_list[-1] and elapsed > day_list[-1]:
                 job.current_status = "no_response"
                 job.updated_at = datetime.utcnow()
                 session.add(job)
@@ -125,6 +139,7 @@ def tick(session: Session) -> List[RecoveryJob]:
                 service_type=job.service_type,
                 estimate_amount=job.estimate_amount or "",
                 days_since=job.days_since or "",
+                renewal_date=job.anchor_date or "",
             )
 
             sms_channel.send(from_number=client.inbound_number or "", to_number=job.customer_phone, body=text)
