@@ -17,6 +17,7 @@ class Client(SQLModel, table=True):
     escalation_phone: str
     answer_mode: str = Field(default="backup")  # "primary" or "backup" - set during onboarding
     inbound_number: Optional[str] = None  # the business line customers text/call; routes inbound SMS
+    review_link: Optional[str] = None  # owner's Google/Yelp review URL; unset until they provide one
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
     @property
@@ -56,6 +57,7 @@ class Job(SQLModel, table=True):
     callback_number: Optional[str] = None
     notes: Optional[str] = None
     created_at: datetime = Field(default_factory=datetime.utcnow)
+    completed_at: Optional[datetime] = None  # set by the "Mark done" action; drives the Reviews SMS
 
 
 class RecoveryCampaign(SQLModel, table=True):
@@ -87,6 +89,7 @@ class RecoveryJob(SQLModel, table=True):
     service_type: str
     estimate_amount: Optional[str] = None
     days_since: Optional[str] = None
+    anchor_date: Optional[str] = None  # ISO YYYY-MM-DD; only set for the "membership" face
     current_status: str = "pending"  # pending, awaiting_slot, booked, declined, no_response
     last_sent_day: Optional[int] = None
     offered_slots_json: str = "[]"
