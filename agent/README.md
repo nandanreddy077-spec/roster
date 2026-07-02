@@ -68,6 +68,33 @@ new-client form, and have them set matching call forwarding on their existing
 number (forward-all vs. forward-on-no-answer) to the Twilio number you imported
 into Vapi.
 
+## Revenue Recovery (quote follow-up + reactivation)
+
+A standalone agent — independent of Frontdesk — that chases unsold estimates
+("quote" campaigns) and lapsed customers ("reactivation" campaigns) via a
+6-touch SMS sequence over ~4 weeks, and books the job itself when the customer
+says yes.
+
+### Running it
+1. Open a client's dashboard page, click **+ New campaign** under "Revenue
+   Recovery campaigns".
+2. Pick a type (quote follow-up or reactivation), name the campaign, and paste
+   customers one per line: `phone,name,service_type,amount_or_days_since`.
+3. Set up a daily cron job to send due messages:
+   ```bash
+   0 9 * * * cd /path/to/agent && .venv/bin/python recovery_tick.py >> recovery.log 2>&1
+   ```
+   Safe to run more than once a day — each sequence day's message is only ever sent once.
+4. When a customer replies, `/webhook/sms` checks for an active Recovery
+   conversation before falling through to Frontdesk, so replies get routed
+   correctly even on a shared inbound number.
+
+### Scope (Phase 1)
+- Only a manual/business-hours time-slot proposal is wired up — no live Google
+  Calendar/Jobber/Housecall Pro sync yet (see `calendar_provider.py`). Add one
+  when a real client names the system they use.
+- No CRM auto-import — campaigns are seeded from a pasted customer list.
+
 ## Pieces
 | File | Role |
 |---|---|
@@ -77,3 +104,7 @@ into Vapi.
 | `db_models.py` | `Client`, `Message` (threaded per customer), `Job` |
 | `channels.py` | Outbound SMS (Twilio, or console fallback) |
 | `seed.py` | Demo data so the dashboard isn't empty |
+| `recovery_engine.py` | Recovery's templates, tool schemas, and system prompts |
+| `recovery_service.py` | Campaign creation, daily tick, reply handling, booking |
+| `recovery_tick.py` | Cron entry point — sends due sequence messages |
+| `calendar_provider.py` | Pluggable time-slot source (manual fallback today) |
