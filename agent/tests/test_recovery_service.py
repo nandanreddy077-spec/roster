@@ -1,8 +1,9 @@
 import json
+from datetime import datetime, timedelta
 
 from sqlmodel import Session, select
 
-from db_models import Client, RecoveryJob
+from db_models import Client, RecoveryJob, RecoveryMessageLog
 import recovery_service
 
 
@@ -31,3 +32,74 @@ def test_create_campaign_creates_one_job_per_customer(session):
     assert len(jobs) == 2
     assert {j.customer_phone for j in jobs} == {"+1", "+2"}
     assert all(j.current_status == "pending" for j in jobs)
+
+
+class FakeSMSChannel:
+    def __init__(self):
+        self.sent = []
+
+    def send(self, from_number, to_number, body):
+        self.sent.append({"from": from_number, "to": to_number, "body": body})
+
+
+def test_tick_sends_day_one_message_once_elapsed(session, monkeypatch):
+    fake_channel = FakeSMSChannel()
+    monkeypatch.setattr(recovery_service, "sms_channel", fake_channel)
+
+    client = make_client(session)
+    campaign = recovery_service.create_campaign(
+        session, client, "quote", "June quotes",
+        [{"phone": "+1", "name": "Mike", "service_type": "AC install", "estimate_amount": "8000"}],
+    )
+    campaign.started_at = datetime.utcnow() - timedelta(days=1)
+    session.add(campaign)
+    session.commit()
+
+    sent = recovery_service.tick(session)
+
+    assert len(sent) == 1
+    assert fake_channel.sent[0]["to"] == "+1"
+    assert "Mike" in fake_channel.sent[0]["body"]
+    logs = session.exec(select(RecoveryMessageLog)).all()
+    assert len(logs) == 1
+    assert logs[0].message_day == 1
+
+
+def test_tick_does_not_resend_same_day_twice(session, monkeypatch):
+    fake_channel = FakeSMSChannel()
+    monkeypatch.setattr(recovery_service, "sms_channel", fake_channel)
+
+    client = make_client(session)
+    campaign = recovery_service.create_campaign(
+        session, client, "quote", "June quotes",
+        [{"phone": "+1", "name": "Mike", "service_type": "AC install"}],
+    )
+    campaign.started_at = datetime.utcnow() - timedelta(days=1)
+    session.add(campaign)
+    session.commit()
+
+    recovery_service.tick(session)
+    second = recovery_service.tick(session)
+
+    assert second == []
+    assert len(fake_channel.sent) == 1
+
+
+def test_tick_marks_no_response_after_final_day(session, monkeypatch):
+    fake_channel = FakeSMSChannel()
+    monkeypatch.setattr(recovery_service, "sms_channel", fake_channel)
+
+    client = make_client(session)
+    campaign = recovery_service.create_campaign(
+        session, client, "quote", "June quotes",
+        [{"phone": "+1", "name": "Mike", "service_type": "AC install"}],
+    )
+    campaign.started_at = datetime.utcnow() - timedelta(days=40)
+    session.add(campaign)
+    session.commit()
+
+    recovery_service.tick(session)  # catches up: sends the one unsent due message (day 28)
+    recovery_service.tick(session)  # nothing left to send -> marks no_response
+
+    job = session.exec(select(RecoveryJob)).first()
+    assert job.current_status == "no_response"
