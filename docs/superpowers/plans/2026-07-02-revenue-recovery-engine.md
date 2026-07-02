@@ -1131,6 +1131,7 @@ def test_create_campaign_via_form(monkeypatch, test_engine):
     client_id = make_client(test_engine)
     test_client = TestClient(app_module.app)
 
+    # follow_redirects=False: the redirect target route is built in Task 9
     response = test_client.post(
         f"/clients/{client_id}/recovery/new",
         data={
@@ -1138,6 +1139,7 @@ def test_create_campaign_via_form(monkeypatch, test_engine):
             "name": "June quotes",
             "customers_raw": "+15551112222,Mike,AC install,8000",
         },
+        follow_redirects=False,
     )
 
     assert response.status_code == 303
