@@ -176,11 +176,18 @@ def _find_client_by_inbound(session: Session, to_number: str) -> Client | None:
 @app.post("/webhook/sms")
 async def inbound_sms(From: str = Form(...), To: str = Form(...), Body: str = Form(...)):
     """Twilio inbound SMS. Routes by the business line texted (To) and replies via
-    TwiML — so the AI's response is sent with no outbound credentials required."""
+    TwiML — so the AI's response is sent with no outbound credentials required.
+    An active Revenue Recovery conversation for this customer takes priority over
+    Frontdesk, since Recovery started this thread; once it resolves (booked,
+    declined, or no_response) future texts fall through to Frontdesk as before."""
     with Session(engine) as session:
         client = _find_client_by_inbound(session, To)
         if client is None:
             return twiml_reply("Sorry, this number isn't set up to receive messages.")
+        recovery_job = find_active_recovery_job(session, client.id, From)
+        if recovery_job is not None:
+            reply = handle_recovery_reply(session, client, recovery_job, Body)
+            return twiml_reply(reply)
         result = handle_customer_message(session, client, From, Body)
     return twiml_reply(result["reply"])
 
