@@ -6,13 +6,14 @@
 <form method="post" action="/clients/{{ client.id }}/recovery/new" class="form">
   <label>Campaign type
     <select name="face">
-      <option value="quote">Quote follow-up — chase unsold estimates</option>
-      <option value="reactivation">Reactivation — rebook lapsed customers</option>
+      <option value="quote" {{ "selected" if preselect_face == "quote" }}>Chaser — quote follow-up</option>
+      <option value="reactivation" {{ "selected" if preselect_face == "reactivation" }}>Rebooker — reactivate lapsed customers</option>
+      <option value="membership" {{ "selected" if preselect_face == "membership" }}>Renewals — chase membership renewals</option>
     </select>
   </label>
   <label>Campaign name<input name="name" placeholder="June unsold quotes" required></label>
-  <label>Customers (one per line: phone,name,service_type,amount_or_days_since)
-    <textarea name="customers_raw" rows="8" placeholder="+15551112222,Mike,AC install,8000" required></textarea>
+  <label>Customers (one per line: phone,name,service_type,amount_or_days_since_or_renewal_date)
+    <textarea name="customers_raw" rows="8" placeholder="+15551112222,Mike,AC install,8000 (Renewals: use a date like 2026-07-15)" required></textarea>
   </label>
   <button class="btn btn-primary" type="submit">Start campaign</button>
 </form>

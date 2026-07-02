@@ -1,13 +1,14 @@
 import json
 import time
 import uuid
+from datetime import datetime
 from pathlib import Path
 
-from fastapi import FastAPI, Form, Request
+from fastapi import FastAPI, Form, HTTPException, Request
 from fastapi.responses import RedirectResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
-from sqlmodel import Session, select
+from sqlmodel import Session, func, select
 
 from channels import get_channel
 from db import engine, init_db
@@ -50,7 +51,15 @@ def root():
 def list_clients(request: Request):
     with Session(engine) as session:
         clients = session.exec(select(Client).order_by(Client.created_at.desc())).all()
-    return templates.TemplateResponse(request, "clients.html", {"clients": clients})
+        count_rows = session.exec(
+            select(RecoveryCampaign.client_id, func.count(RecoveryCampaign.id)).group_by(
+                RecoveryCampaign.client_id
+            )
+        ).all()
+        recovery_counts = {client_id: count for client_id, count in count_rows}
+    return templates.TemplateResponse(
+        request, "clients.html", {"clients": clients, "recovery_counts": recovery_counts}
+    )
 
 
 @app.get("/clients/new")
@@ -91,7 +100,10 @@ def create_client(
 def new_recovery_campaign_form(request: Request, client_id: int):
     with Session(engine) as session:
         client = session.get(Client, client_id)
-    return templates.TemplateResponse(request, "recovery_new.html", {"client": client})
+    preselect_face = request.query_params.get("face", "quote")
+    return templates.TemplateResponse(
+        request, "recovery_new.html", {"client": client, "preselect_face": preselect_face}
+    )
 
 
 @app.post("/clients/{client_id}/recovery/new")
@@ -101,9 +113,12 @@ def create_recovery_campaign(
     name: str = Form(...),
     customers_raw: str = Form(...),
 ):
-    """`customers_raw` is one customer per line: phone,name,service_type,amount_or_days_since"""
+    """`customers_raw` is one customer per line:
+    phone,name,service_type,amount_or_days_since_or_renewal_date
+    (the 4th column's meaning depends on `face`: estimate_amount for quote,
+    days_since for reactivation, renewal_date (YYYY-MM-DD) for membership)."""
     customers = []
-    for line in customers_raw.strip().splitlines():
+    for i, line in enumerate(customers_raw.strip().splitlines(), start=1):
         parts = [p.strip() for p in line.split(",")]
         if len(parts) < 3:
             continue
@@ -111,6 +126,14 @@ def create_recovery_campaign(
         if len(parts) > 3 and parts[3]:
             if face == "quote":
                 entry["estimate_amount"] = parts[3]
+            elif face == "membership":
+                try:
+                    datetime.strptime(parts[3], "%Y-%m-%d")
+                except ValueError:
+                    raise HTTPException(
+                        400, detail=f"Row {i}: '{parts[3]}' is not a valid renewal date (use YYYY-MM-DD)"
+                    )
+                entry["anchor_date"] = parts[3]
             else:
                 entry["days_since"] = parts[3]
         customers.append(entry)

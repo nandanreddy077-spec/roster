@@ -112,3 +112,44 @@ def test_client_detail_lists_recovery_campaigns(monkeypatch, test_engine):
 
     assert response.status_code == 200
     assert "June quotes" in response.text
+
+
+def test_new_campaign_form_preselects_face_from_query_param(monkeypatch, test_engine):
+    monkeypatch.setattr(app_module, "engine", test_engine)
+    client_id = make_client(test_engine)
+    test_client = TestClient(app_module.app)
+
+    response = test_client.get(f"/clients/{client_id}/recovery/new?face=membership")
+
+    assert response.status_code == 200
+    assert 'value="membership" selected' in response.text
+
+
+def test_create_membership_campaign_accepts_valid_date(monkeypatch, test_engine):
+    monkeypatch.setattr(app_module, "engine", test_engine)
+    client_id = make_client(test_engine)
+    test_client = TestClient(app_module.app)
+
+    response = test_client.post(
+        f"/clients/{client_id}/recovery/new",
+        data={"face": "membership", "name": "July renewals", "customers_raw": "+1,Sarah,AC tune-up,2026-07-15"},
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 303
+    with Session(test_engine) as session:
+        job = session.exec(select(RecoveryJob)).first()
+    assert job.anchor_date == "2026-07-15"
+
+
+def test_create_membership_campaign_rejects_malformed_date(monkeypatch, test_engine):
+    monkeypatch.setattr(app_module, "engine", test_engine)
+    client_id = make_client(test_engine)
+    test_client = TestClient(app_module.app)
+
+    response = test_client.post(
+        f"/clients/{client_id}/recovery/new",
+        data={"face": "membership", "name": "July renewals", "customers_raw": "+1,Sarah,AC tune-up,not-a-date"},
+    )
+
+    assert response.status_code == 400
