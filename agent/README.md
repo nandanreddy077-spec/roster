@@ -34,6 +34,9 @@ The voice receptionist reuses the same engine as the text agent — see
 2. Create a single Vapi assistant (shared across all clients) with:
    - Model provider: Custom LLM
    - Custom LLM URL: `<your-public-url>/voice/chat/completions`
+   - A custom header: `Authorization: Bearer <VAPI_SHARED_SECRET value>` — required
+     once you've set `VAPI_SHARED_SECRET`; the endpoint accepts any request until
+     you do, so this step is what actually locks it down.
    - A `transferCall` tool with an empty `destinations` list — the destination is
      supplied dynamically by the agent per call, not configured here.
 3. Point every imported client number at this one assistant.
@@ -53,13 +56,13 @@ confirm the job shows up in `/clients/<id>` and that a deliberately hard questio
 ("I want to speak to a manager right now") triggers a live transfer to the
 `escalation_phone` on file.
 
-### Security note (deferred — do before going public)
-`/voice/chat/completions` currently has **no authentication**. Anyone who discovers
-the ngrok/deployed URL can drive it directly, and every request triggers a paid
-Claude call (and can trigger real `transfer_call` telephony actions). Before
-exposing this endpoint publicly, add a shared-secret bearer token check (e.g.
-validate an `Authorization: Bearer <secret>` header that Vapi is configured to
-send as a Custom LLM header) so only Vapi can call it.
+### Authentication
+`/voice/chat/completions` requires a shared-secret bearer token once
+`VAPI_SHARED_SECRET` is set in `.env` — a request with a missing or wrong
+`Authorization: Bearer <secret>` header gets `401` immediately, before any Claude
+call or DB lookup. **Until `VAPI_SHARED_SECRET` is set, the endpoint accepts any
+request** — this is the one operator action that actually closes the gap; do it
+before pointing a real client's number at this in production.
 
 ### Per-client onboarding
 When adding a client for this agent: ask whether the AI should answer every call

@@ -1,4 +1,6 @@
+import hmac
 import json
+import os
 import time
 import uuid
 from datetime import datetime
@@ -362,7 +364,14 @@ def _voice_stream(request_id: str, model: str, reply: str, pending_tool_call: di
 
 
 @app.post("/voice/chat/completions")
-async def voice_chat_completions(payload: VapiChatRequest):
+async def voice_chat_completions(payload: VapiChatRequest, request: Request):
+    shared_secret = os.environ.get("VAPI_SHARED_SECRET")
+    if shared_secret:
+        expected = f"Bearer {shared_secret}"
+        provided = request.headers.get("authorization", "")
+        if not hmac.compare_digest(provided, expected):
+            return Response(status_code=401)
+
     request_id = f"chatcmpl-{payload.call.id}"
     called_number = payload.call.phoneNumber.number if payload.call.phoneNumber else None
 

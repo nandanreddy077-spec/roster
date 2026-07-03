@@ -130,6 +130,57 @@ class RaisingAgent:
         raise RuntimeError("boom")
 
 
+def _voice_payload(call_id: str) -> dict:
+    return {
+        "model": "claude-sonnet-4-6",
+        "messages": [{"role": "user", "content": "hello"}],
+        "call": {
+            "id": call_id,
+            "phoneNumber": {"number": "+10000000000"},
+            "customer": {"number": "+15551234567"},
+        },
+    }
+
+
+def test_voice_endpoint_rejects_missing_header_when_secret_configured(monkeypatch, test_engine):
+    monkeypatch.setattr(app_module, "engine", test_engine)
+    monkeypatch.setenv("VAPI_SHARED_SECRET", "test-secret-value")
+
+    test_client = TestClient(app_module.app)
+    response = test_client.post("/voice/chat/completions", json=_voice_payload("call_auth_1"))
+
+    assert response.status_code == 401
+
+
+def test_voice_endpoint_rejects_wrong_header_when_secret_configured(monkeypatch, test_engine):
+    monkeypatch.setattr(app_module, "engine", test_engine)
+    monkeypatch.setenv("VAPI_SHARED_SECRET", "test-secret-value")
+
+    test_client = TestClient(app_module.app)
+    response = test_client.post(
+        "/voice/chat/completions",
+        json=_voice_payload("call_auth_2"),
+        headers={"Authorization": "Bearer wrong-value"},
+    )
+
+    assert response.status_code == 401
+
+
+def test_voice_endpoint_accepts_correct_header_when_secret_configured(monkeypatch, test_engine):
+    monkeypatch.setattr(app_module, "engine", test_engine)
+    monkeypatch.setenv("VAPI_SHARED_SECRET", "test-secret-value")
+
+    test_client = TestClient(app_module.app)
+    response = test_client.post(
+        "/voice/chat/completions",
+        json=_voice_payload("call_auth_3"),
+        headers={"Authorization": "Bearer test-secret-value"},
+    )
+
+    assert response.status_code == 200
+    assert "isn't set up yet" in response.text
+
+
 def test_voice_endpoint_engine_error_falls_back_to_transfer(monkeypatch, test_engine):
     with Session(test_engine) as session:
         session.add(
