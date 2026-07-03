@@ -1,9 +1,10 @@
+import os
 from pathlib import Path
 
 from sqlmodel import Session, SQLModel, create_engine
 
-DATA_DIR = Path(__file__).parent / "data"
-DATA_DIR.mkdir(exist_ok=True)
+DATA_DIR = Path(os.environ.get("ROSTER_DATA_DIR") or (Path(__file__).parent / "data"))
+DATA_DIR.mkdir(exist_ok=True, parents=True)
 
 engine = create_engine(f"sqlite:///{DATA_DIR / 'roster.db'}")
 
