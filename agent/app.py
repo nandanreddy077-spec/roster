@@ -15,6 +15,7 @@ from db import engine, init_db
 from db_models import Client, Job, Message, RecoveryCampaign, RecoveryJob
 from recovery_engine import FACE_DISPLAY_NAMES
 from recovery_service import create_campaign, find_active_recovery_job, handle_recovery_reply
+from referral_service import find_active_referral_ask, handle_referral_reply
 from service import agent as shared_agent
 from service import handle_customer_message
 from voice_adapter import VapiChatRequest, handle_voice_turn
@@ -257,7 +258,10 @@ async def inbound_sms(From: str = Form(...), To: str = Form(...), Body: str = Fo
     TwiML — so the AI's response is sent with no outbound credentials required.
     An active Revenue Recovery conversation for this customer takes priority over
     Frontdesk, since Recovery started this thread; once it resolves (booked,
-    declined, or no_response) future texts fall through to Frontdesk as before."""
+    declined, or no_response) future texts fall through to Frontdesk as before.
+    An active referral ask (sent within the last few days, not yet replied to)
+    is checked next — a one-shot capture with nothing time-sensitive about it,
+    so it comes after Recovery's active negotiation but still ahead of Frontdesk."""
     with Session(engine) as session:
         client = _find_client_by_inbound(session, To)
         if client is None:
@@ -265,6 +269,10 @@ async def inbound_sms(From: str = Form(...), To: str = Form(...), Body: str = Fo
         recovery_job = find_active_recovery_job(session, client.id, From)
         if recovery_job is not None:
             reply = handle_recovery_reply(session, client, recovery_job, Body)
+            return twiml_reply(reply)
+        referral_job = find_active_referral_ask(session, client.id, From)
+        if referral_job is not None:
+            reply = handle_referral_reply(session, client, referral_job, Body)
             return twiml_reply(reply)
         result = handle_customer_message(session, client, From, Body)
     return twiml_reply(result["reply"])

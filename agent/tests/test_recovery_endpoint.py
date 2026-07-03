@@ -1,4 +1,5 @@
 import json
+from datetime import datetime, timedelta
 
 from fastapi.testclient import TestClient
 from sqlmodel import Session, select
@@ -7,6 +8,7 @@ import app as app_module
 from conftest import StubAgent
 from db_models import Client, Job, RecoveryCampaign, RecoveryJob
 import recovery_service
+import referral_service
 
 
 def make_client(test_engine) -> int:
@@ -344,3 +346,79 @@ def test_client_detail_shows_mark_done_then_completed_badge(monkeypatch, test_en
 
     after = test_client.get(f"/clients/{client_id}")
     assert "Completed" in after.text
+
+
+def test_inbound_sms_routes_active_referral_reply(monkeypatch, test_engine):
+    monkeypatch.setattr(app_module, "engine", test_engine)
+    client_id = make_client(test_engine)
+
+    with Session(test_engine) as session:
+        job = Job(
+            client_id=client_id, service_type="AC repair", urgency="routine",
+            customer_name="Mike", callback_number="+15551112222",
+            completed_at=datetime.utcnow() - timedelta(days=5),
+            referral_sent_at=datetime.utcnow(),
+        )
+        session.add(job)
+        session.commit()
+
+    monkeypatch.setattr(
+        referral_service,
+        "agent",
+        StubAgent({
+            "reply": "Thanks, we'll reach out to them!",
+            "jobs": [],
+            "new_messages": [],
+            "pending_tool_call": {"name": "record_referral", "input": {"referred_name": "Sarah"}},
+        }),
+    )
+
+    test_client = TestClient(app_module.app)
+    response = test_client.post(
+        "/webhook/sms",
+        data={"From": "+15551112222", "To": "+15559990000", "Body": "my friend Sarah needs this"},
+    )
+
+    assert response.status_code == 200
+    assert "Thanks, we'll reach out to them!" in response.text
+
+
+def test_inbound_sms_prioritizes_active_recovery_over_referral(monkeypatch, test_engine):
+    monkeypatch.setattr(app_module, "engine", test_engine)
+    client_id = make_client(test_engine)
+    test_client = TestClient(app_module.app)
+    test_client.post(
+        f"/clients/{client_id}/recovery/new",
+        data={"face": "quote", "name": "June quotes", "customers_raw": "+15551112222,Mike,AC install,8000"},
+    )
+    with Session(test_engine) as session:
+        recovery_job = session.exec(select(RecoveryJob)).first()
+        recovery_job.last_sent_day = 1
+        session.add(recovery_job)
+        referral_job = Job(
+            client_id=client_id, service_type="AC repair", urgency="routine",
+            callback_number="+15551112222",
+            completed_at=datetime.utcnow() - timedelta(days=5),
+            referral_sent_at=datetime.utcnow(),
+        )
+        session.add(referral_job)
+        session.commit()
+
+    monkeypatch.setattr(
+        recovery_service,
+        "agent",
+        StubAgent({
+            "reply": "",
+            "jobs": [],
+            "new_messages": [],
+            "pending_tool_call": {"name": "record_response", "input": {"intent": "interested"}},
+        }),
+    )
+
+    response = test_client.post(
+        "/webhook/sms",
+        data={"From": "+15551112222", "To": "+15559990000", "Body": "Yes!"},
+    )
+
+    assert response.status_code == 200
+    assert "1)" in response.text  # Recovery's slot-offer reply wins, not the referral handler
