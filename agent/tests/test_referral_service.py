@@ -3,7 +3,8 @@ from datetime import datetime, timedelta
 
 from sqlmodel import Session, select
 
-from db_models import Client, Job
+from db_models import Client, Job, ReferralLead
+from conftest import StubAgent
 import referral_service
 
 
@@ -143,3 +144,116 @@ def test_send_due_referral_asks_isolates_per_job_failure(session, monkeypatch):
     assert bad_job.referral_sent_at is None
     session.refresh(good_job)
     assert good_job.referral_sent_at is not None
+
+
+def test_find_active_referral_ask_matches_within_window(session):
+    client = make_client(session, referral_incentive="$25 off")
+    job = Job(
+        client_id=client.id, service_type="AC repair", urgency="routine",
+        callback_number="+1", completed_at=datetime.utcnow() - timedelta(days=5),
+        referral_sent_at=datetime.utcnow() - timedelta(days=1),
+    )
+    session.add(job)
+    session.commit()
+    session.refresh(job)
+
+    found = referral_service.find_active_referral_ask(session, client.id, "+1")
+    assert found is not None
+    assert found.id == job.id
+
+
+def test_find_active_referral_ask_ignores_expired_window(session):
+    client = make_client(session, referral_incentive="$25 off")
+    job = Job(
+        client_id=client.id, service_type="AC repair", urgency="routine",
+        callback_number="+1", completed_at=datetime.utcnow() - timedelta(days=10),
+        referral_sent_at=datetime.utcnow() - timedelta(days=5),  # outside the 3-day window
+    )
+    session.add(job)
+    session.commit()
+
+    assert referral_service.find_active_referral_ask(session, client.id, "+1") is None
+
+
+def test_find_active_referral_ask_ignores_already_captured(session):
+    client = make_client(session, referral_incentive="$25 off")
+    job = Job(
+        client_id=client.id, service_type="AC repair", urgency="routine",
+        callback_number="+1", completed_at=datetime.utcnow() - timedelta(days=5),
+        referral_sent_at=datetime.utcnow(),
+    )
+    session.add(job)
+    session.commit()
+    session.refresh(job)
+    session.add(ReferralLead(
+        client_id=client.id, source_job_id=job.id, asker_phone="+1", raw_reply_text="already replied",
+    ))
+    session.commit()
+
+    assert referral_service.find_active_referral_ask(session, client.id, "+1") is None
+
+
+def test_handle_referral_reply_extracts_structured_info(session, monkeypatch):
+    client = make_client(session, referral_incentive="$25 off")
+    job = Job(
+        client_id=client.id, service_type="AC repair", urgency="routine",
+        customer_name="Mike", callback_number="+1",
+        completed_at=datetime.utcnow() - timedelta(days=5),
+        referral_sent_at=datetime.utcnow(),
+    )
+    session.add(job)
+    session.commit()
+    session.refresh(job)
+
+    monkeypatch.setattr(
+        referral_service,
+        "agent",
+        StubAgent({
+            "reply": "",
+            "jobs": [],
+            "new_messages": [],
+            "pending_tool_call": {
+                "name": "record_referral",
+                "input": {"referred_name": "Sarah", "referred_phone": "+15559998888"},
+            },
+        }),
+    )
+
+    reply = referral_service.handle_referral_reply(
+        session, client, job, "yeah, my neighbor Sarah needs this, her number is 555-998-8888"
+    )
+
+    lead = session.exec(select(ReferralLead).where(ReferralLead.source_job_id == job.id)).first()
+    assert lead is not None
+    assert lead.referred_name == "Sarah"
+    assert lead.referred_phone == "+15559998888"
+    assert lead.raw_reply_text == "yeah, my neighbor Sarah needs this, her number is 555-998-8888"
+    assert reply != ""
+
+
+def test_handle_referral_reply_falls_back_to_raw_text_when_extraction_fails(session, monkeypatch):
+    client = make_client(session, referral_incentive="$25 off")
+    job = Job(
+        client_id=client.id, service_type="AC repair", urgency="routine",
+        customer_name="Mike", callback_number="+1",
+        completed_at=datetime.utcnow() - timedelta(days=5),
+        referral_sent_at=datetime.utcnow(),
+    )
+    session.add(job)
+    session.commit()
+    session.refresh(job)
+
+    monkeypatch.setattr(
+        referral_service,
+        "agent",
+        StubAgent({"reply": "No worries!", "jobs": [], "new_messages": [], "pending_tool_call": None}),
+    )
+
+    reply = referral_service.handle_referral_reply(session, client, job, "no thanks")
+
+    lead = session.exec(select(ReferralLead).where(ReferralLead.source_job_id == job.id)).first()
+    assert lead is not None
+    assert lead.referred_name is None
+    assert lead.referred_phone is None
+    assert lead.raw_reply_text == "no thanks"
+    assert reply == "No worries!"
