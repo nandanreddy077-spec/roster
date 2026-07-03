@@ -115,10 +115,11 @@ def complete_job(client_id: int, job_id: int):
     with Session(engine) as session:
         client = session.get(Client, client_id)
         job = session.get(Job, job_id)
-        job.completed_at = datetime.utcnow()
+        already_completed = job.completed_at is not None
+        job.completed_at = job.completed_at or datetime.utcnow()
         session.add(job)
         session.commit()
-        if client.review_link and job.callback_number:
+        if not already_completed and client.review_link and job.callback_number:
             try:
                 sms_channel.send(
                     from_number=client.inbound_number or "",

@@ -254,6 +254,29 @@ def test_mark_job_done_sends_review_sms_when_link_set(monkeypatch, test_engine):
     assert completed.completed_at is not None
 
 
+def test_mark_job_done_twice_only_sends_review_sms_once(monkeypatch, test_engine):
+    monkeypatch.setattr(app_module, "engine", test_engine)
+    client_id = make_client(test_engine)
+    test_client = TestClient(app_module.app)
+    test_client.post(f"/clients/{client_id}/review-link", data={"review_link": "https://g.page/r/test"})
+
+    with Session(test_engine) as session:
+        job = Job(client_id=client_id, service_type="AC repair", urgency="routine", callback_number="+15551234567")
+        session.add(job)
+        session.commit()
+        session.refresh(job)
+        job_id = job.id
+
+    fake = FakeSMS()
+    monkeypatch.setattr(app_module, "sms_channel", fake)
+
+    test_client.post(f"/clients/{client_id}/jobs/{job_id}/complete", follow_redirects=False)
+    second = test_client.post(f"/clients/{client_id}/jobs/{job_id}/complete", follow_redirects=False)
+
+    assert second.status_code == 303
+    assert len(fake.sent) == 1  # re-posting an already-completed job must not re-send
+
+
 def test_mark_job_done_without_review_link_sends_nothing(monkeypatch, test_engine):
     monkeypatch.setattr(app_module, "engine", test_engine)
     client_id = make_client(test_engine)
