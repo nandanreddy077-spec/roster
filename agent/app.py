@@ -12,7 +12,7 @@ from sqlmodel import Session, func, select
 
 from channels import get_channel
 from db import engine, init_db
-from db_models import Client, Job, Message, RecoveryCampaign, RecoveryJob
+from db_models import Client, Job, Message, RecoveryCampaign, RecoveryJob, ReferralLead
 from recovery_engine import FACE_DISPLAY_NAMES
 from recovery_service import create_campaign, find_active_recovery_job, handle_recovery_reply
 from referral_service import find_active_referral_ask, handle_referral_reply
@@ -96,6 +96,16 @@ def create_client(
         session.commit()
         session.refresh(client)
     return RedirectResponse(f"/clients/{client.id}", status_code=303)
+
+
+@app.post("/clients/{client_id}/referral-incentive")
+def set_referral_incentive(client_id: int, referral_incentive: str = Form(...)):
+    with Session(engine) as session:
+        client = session.get(Client, client_id)
+        client.referral_incentive = referral_incentive.strip() or None
+        session.add(client)
+        session.commit()
+    return RedirectResponse(f"/clients/{client_id}", status_code=303)
 
 
 @app.post("/clients/{client_id}/review-link")
@@ -216,6 +226,9 @@ def client_detail(request: Request, client_id: int):
         campaigns = session.exec(
             select(RecoveryCampaign).where(RecoveryCampaign.client_id == client_id).order_by(RecoveryCampaign.created_at.desc())
         ).all()
+        referral_leads = session.exec(
+            select(ReferralLead).where(ReferralLead.client_id == client_id).order_by(ReferralLead.created_at.desc())
+        ).all()
 
     chat = [
         {"role": m.role, "text": extract_display_text(json.loads(m.content_json))}
@@ -236,6 +249,7 @@ def client_detail(request: Request, client_id: int):
             "jobs": jobs,
             "campaigns_by_face": campaigns_by_face,
             "face_display_names": FACE_DISPLAY_NAMES,
+            "referral_leads": referral_leads,
         },
     )
 

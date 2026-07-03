@@ -6,7 +6,7 @@ from sqlmodel import Session, select
 
 import app as app_module
 from conftest import StubAgent
-from db_models import Client, Job, RecoveryCampaign, RecoveryJob
+from db_models import Client, Job, RecoveryCampaign, RecoveryJob, ReferralLead
 import recovery_service
 import referral_service
 
@@ -422,3 +422,43 @@ def test_inbound_sms_prioritizes_active_recovery_over_referral(monkeypatch, test
 
     assert response.status_code == 200
     assert "1)" in response.text  # Recovery's slot-offer reply wins, not the referral handler
+
+
+def test_set_referral_incentive_saves_and_shows_on_client_detail(monkeypatch, test_engine):
+    monkeypatch.setattr(app_module, "engine", test_engine)
+    client_id = make_client(test_engine)
+    test_client = TestClient(app_module.app)
+
+    response = test_client.post(
+        f"/clients/{client_id}/referral-incentive",
+        data={"referral_incentive": "$25 off your next service"},
+        follow_redirects=False,
+    )
+    assert response.status_code == 303
+
+    detail = test_client.get(f"/clients/{client_id}")
+    assert "$25 off your next service" in detail.text
+    assert "Lead-gen" in detail.text
+
+
+def test_client_detail_shows_captured_referral_leads(monkeypatch, test_engine):
+    monkeypatch.setattr(app_module, "engine", test_engine)
+    client_id = make_client(test_engine)
+
+    with Session(test_engine) as session:
+        job = Job(client_id=client_id, service_type="AC repair", urgency="routine", callback_number="+1")
+        session.add(job)
+        session.commit()
+        session.refresh(job)
+        session.add(ReferralLead(
+            client_id=client_id, source_job_id=job.id, asker_phone="+1",
+            referred_name="Sarah", referred_phone="+15559998888",
+            raw_reply_text="my friend Sarah, 555-998-8888",
+        ))
+        session.commit()
+
+    test_client = TestClient(app_module.app)
+    response = test_client.get(f"/clients/{client_id}")
+
+    assert "Sarah" in response.text
+    assert "+15559998888" in response.text

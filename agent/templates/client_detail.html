@@ -44,6 +44,30 @@
         <button class="btn btn-secondary btn-small" type="submit">Save</button>
       </form>
     </div>
+
+    <div class="agent-tile">
+      <div class="agent-tile-head">
+        <span class="agent-badge {{ 'agent-badge-active' if client.referral_incentive else 'agent-badge-off' }}">
+          Lead-gen{% if client.referral_incentive %} &middot; on{% endif %}
+        </span>
+      </div>
+      <p class="agent-tile-desc">Asks happy customers to refer a friend, a few days after the job's done.</p>
+      <form method="post" action="/clients/{{ client.id }}/referral-incentive" class="review-link-form">
+        <input type="text" name="referral_incentive" placeholder="$25 off your next service" value="{{ client.referral_incentive or '' }}">
+        <button class="btn btn-secondary btn-small" type="submit">Save</button>
+      </form>
+      {% for lead in referral_leads %}
+      <div class="job-card">
+        {% if lead.referred_name or lead.referred_phone %}
+        <strong>{{ lead.referred_name or "Unknown name" }}</strong>
+        {% if lead.referred_phone %}<div>{{ lead.referred_phone }}</div>{% endif %}
+        {% else %}
+        <p class="job-notes">{{ lead.raw_reply_text }}</p>
+        {% endif %}
+      </div>
+      {% endfor %}
+      {% if not referral_leads %}<p class="empty">No referrals yet.</p>{% endif %}
+    </div>
   </div>
 </section>
 
