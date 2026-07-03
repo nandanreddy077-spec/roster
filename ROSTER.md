@@ -59,14 +59,21 @@ feature, but being embedded in everything the business runs on.
 
 ## Role sequence (each only after the previous is rock-solid; each reuses the same data)
 1. **Frontdesk** — calls → bookings. _(Built.)_
-2. **Workflow plumbing** — get the booked job into their real calendar/CRM. _Not a new
-   role — it's what makes Frontdesk finish the job._ Built from what real clients use,
-   never guessed.
-3. **Follow-ups / reviews** — reuses existing customer + job data.
-4. **Marketing / content** — once there's a customer base and real before/after numbers.
-5. **Lead-gen, reframed for trades** — Angi/Google capture, referral nudges (NOT
+2. **Chaser** (quote follow-up) — chases every unsold estimate. _(Built.)_
+3. **Rebooker** (reactivation) — wakes up dormant customers. _(Built.)_
+4. **Renewals** (membership) — chases plan renewals on each customer's own date, before
+   they lapse. _(Built.)_ Chaser/Rebooker/Renewals are three faces of one engine, sold
+   as three named agents.
+5. **Reviews** — texts a review link the moment a job's marked done. _(Built.)_ A
+   feature every agent gets, not a separate seat — deliberately unnamed like the agents
+   above, since review automation is already commoditized by incumbents.
+6. **Workflow plumbing** — get the booked job into their real calendar/CRM. _Not a new
+   role — it's what makes every agent above finish the job._ Built from what real
+   clients use, never guessed.
+7. **Marketing / content** — once there's a customer base and real before/after numbers.
+8. **Lead-gen, reframed for trades** — Angi/Google capture, referral nudges (NOT
    LinkedIn scraping — that's a B2B-SaaS tactic, wrong for trades).
-6. **Analytics** — last, because it's the exhaust of everything above.
+9. **Analytics** — last, because it's the exhaust of everything above.
 
 ## Vertical expansion
 Home services first, all the way through the roles, before touching a second vertical.

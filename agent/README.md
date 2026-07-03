@@ -95,6 +95,29 @@ says yes.
   when a real client names the system they use.
 - No CRM auto-import — campaigns are seeded from a pasted customer list.
 
+## Named crew and the third face (Renewals)
+
+Revenue Recovery's two faces are sold under separate names — **Chaser** (`face ==
+"quote"`) and **Rebooker** (`face == "reactivation"`) — via `FACE_DISPLAY_NAMES` in
+`recovery_engine.py`. This is a display-layer mapping only; the underlying `face`
+column, engine, and code all still say "quote"/"reactivation" internally.
+
+A third face, **Renewals** (`face == "membership"`), chases membership/maintenance-plan
+renewals on each customer's own renewal date instead of days since the campaign
+started. Paste customers as `phone,name,service_type,renewal_date` (strict
+`YYYY-MM-DD` — rejected with a clear error otherwise) and the sequence fires at
+30/14/7 days before the renewal, on the day itself, and 7 days after if there's been
+no reply. Everything else — replies, slot booking, STOP handling — is identical to
+Chaser/Rebooker; only the timing clock differs (see `MEMBERSHIP_OFFSETS` in
+`recovery_engine.py`).
+
+## Reviews (feature, not an agent)
+
+Set a client's review link via the "Reviews" tile on their dashboard page. Once set,
+clicking **Mark done** on any captured job texts that customer a one-line review
+request. No sequence, no Claude — deliberately the smallest possible implementation,
+since review requests are already a commodity feature on every competing platform.
+
 ## Pieces
 | File | Role |
 |---|---|
