@@ -462,3 +462,24 @@ def test_client_detail_shows_captured_referral_leads(monkeypatch, test_engine):
 
     assert "Sarah" in response.text
     assert "+15559998888" in response.text
+
+
+def test_client_detail_falls_back_to_raw_text_when_extraction_failed(monkeypatch, test_engine):
+    monkeypatch.setattr(app_module, "engine", test_engine)
+    client_id = make_client(test_engine)
+
+    with Session(test_engine) as session:
+        job = Job(client_id=client_id, service_type="AC repair", urgency="routine", callback_number="+1")
+        session.add(job)
+        session.commit()
+        session.refresh(job)
+        session.add(ReferralLead(
+            client_id=client_id, source_job_id=job.id, asker_phone="+1",
+            raw_reply_text="no thanks, not right now",
+        ))
+        session.commit()
+
+    test_client = TestClient(app_module.app)
+    response = test_client.get(f"/clients/{client_id}")
+
+    assert "no thanks, not right now" in response.text
