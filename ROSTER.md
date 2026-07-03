@@ -91,13 +91,17 @@ team can serve hundreds of businesses. But **not zero people**:
 - Right now (Phase 1) the human needed most is **you** — you are the operation.
 
 ## Build phases (advance only on evidence from the prior phase)
-1. **Prove it by hand (concierge).** Run Frontdesk manually for 3–5 real HVAC/plumbing
-   businesses using the tools already built. Prove they'll pay per booked job and the AI
-   holds real conversations. _← we are here._
+1. **Prove it by hand (concierge).** Run the built roster (Frontdesk, Chaser, Rebooker,
+   Renewals, Reviews) manually for 3–5 real HVAC/plumbing businesses using the tools
+   already built. Prove they'll pay per booked job and the AI holds real conversations.
+   _← we are here — zero paying customers yet; the roster is built ahead of demand
+   because each new role rides Recovery's existing engine at near-zero marginal cost,
+   not because the phase has advanced._
 2. **Productize the wedge.** Manual → repeatable: real calendar/CRM integration, one
    working acquisition channel, locked pricing. ~10–20 paying customers.
-3. **Build the moat.** Add roles 2–6 in order; widen to more trades. Roughly the
-   $1M–$10M ARR band where customers pull you into the next role themselves.
+3. **Build the moat.** Add roles 6–9 (workflow plumbing, marketing, lead-gen, analytics)
+   in order; widen to more trades. Roughly the $1M–$10M ARR band where customers pull
+   you into the next role themselves.
 4. **Expand beyond the wedge.** New verticals; outside capital/accelerator as *tools you
    have leverage to use*, not deadlines you perform for.
 
@@ -109,11 +113,16 @@ team can serve hundreds of businesses. But **not zero people**:
 - Build an elaborate autonomous loop before there are real conversations to engineer against.
 
 ## Where it stands today
-- Brand: **Roster.** Landing page built.
+- Brand: **Roster.** Landing page built, naming the full roster (Frontdesk, Chaser,
+  Rebooker, Renewals) plus the Reviews feature.
 - Agent engine: Claude + `log_job`, now a bounded Think→Act→Observe loop (`MAX_ITERS` cap).
-- Multi-tenant dashboard: clients, per-customer threads, captured jobs.
+- Multi-tenant dashboard: clients, per-customer threads, captured jobs, a 5-tile agent
+  roster per client (Frontdesk, Chaser, Rebooker, Renewals, Reviews).
 - Real channel: Twilio SMS webhook (replies via TwiML, no outbound creds needed) +
   missed-call text-back scaffold. Routing verified.
+- Frontdesk (inbound), Chaser + Rebooker + Renewals (outbound follow-up, one shared
+  engine with three named faces), and Reviews (single-button review-request SMS) are
+  all built and tested.
 - **Missing:** the live LLM path needs `ANTHROPIC_API_KEY` set to verify end-to-end, and —
   the only thing that actually matters — **one real business saying yes.**
 
