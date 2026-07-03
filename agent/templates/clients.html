@@ -8,6 +8,15 @@
   <a class="client-card" href="/clients/{{ c.id }}">
     <h3>{{ c.business_name }}</h3>
     <span class="trade-tag">{{ c.trade }}</span>
+    <div class="agent-badges">
+      <span class="agent-badge agent-badge-active">Frontdesk</span>
+      {% set recovery_count = recovery_counts.get(c.id, 0) %}
+      {% if recovery_count > 0 %}
+      <span class="agent-badge agent-badge-active">Follow-up &middot; {{ recovery_count }}</span>
+      {% else %}
+      <span class="agent-badge agent-badge-off">Follow-up off</span>
+      {% endif %}
+    </div>
   </a>
   {% endfor %}
 </div>
