@@ -115,6 +115,10 @@ def handle_referral_reply(session: Session, client: Client, job: Job, text: str)
         ReferralLead(
             client_id=client.id,
             source_job_id=job.id,
+            # job.callback_number is Optional on Job, but never None here: this
+            # function only runs for jobs find_active_referral_ask matched via
+            # referral_sent_at, which send_due_referral_asks only ever sets
+            # after confirming callback_number was truthy.
             asker_phone=job.callback_number,
             referred_name=referred_name,
             referred_phone=referred_phone,
