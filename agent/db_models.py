@@ -18,6 +18,7 @@ class Client(SQLModel, table=True):
     answer_mode: str = Field(default="backup")  # "primary" or "backup" - set during onboarding
     inbound_number: Optional[str] = None  # the business line customers text/call; routes inbound SMS
     review_link: Optional[str] = None  # owner's Google/Yelp review URL; unset until they provide one
+    referral_incentive: Optional[str] = None  # e.g. "$25 off"; unset = referrals off for this client
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
     @property
@@ -58,6 +59,7 @@ class Job(SQLModel, table=True):
     notes: Optional[str] = None
     created_at: datetime = Field(default_factory=datetime.utcnow)
     completed_at: Optional[datetime] = None  # set by the "Mark done" action; drives the Reviews SMS
+    referral_sent_at: Optional[datetime] = None  # set once the referral ask has gone out for this job
 
 
 class RecoveryCampaign(SQLModel, table=True):
@@ -110,3 +112,14 @@ class RecoveryMessageLog(SQLModel, table=True):
     sent_at: datetime = Field(default_factory=datetime.utcnow)
     customer_reply: Optional[str] = None
     replied_at: Optional[datetime] = None
+
+
+class ReferralLead(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    client_id: int = Field(foreign_key="client.id")
+    source_job_id: int = Field(foreign_key="job.id")  # which completed job triggered this ask
+    asker_phone: str  # the existing customer who was asked
+    referred_name: Optional[str] = None  # extracted by Claude, if present
+    referred_phone: Optional[str] = None  # extracted by Claude, if present
+    raw_reply_text: str  # always stored, regardless of extraction outcome
+    created_at: datetime = Field(default_factory=datetime.utcnow)
