@@ -16,6 +16,55 @@ Open **http://127.0.0.1:8000/clients** — you'll see the seeded demo (Lou's Hea
   replies and logs jobs to the sidebar. (Needs `ANTHROPIC_API_KEY`.)
 - Or the terminal simulator: `.venv/bin/python simulate.py clients/acme_hvac.json`
 
+## Deploying to Railway
+
+Twilio and Vapi both need a stable public HTTPS URL — `ngrok` is fine for local
+testing but the tunnel dies when the terminal closes, which won't work for a real
+client's phone line. This gets Roster onto Railway, always-on, with the database
+surviving redeploys.
+
+**Why Railway specifically:** unlike free-tier Render, it doesn't spin the app down
+on idle — a missed-call agent that's asleep when the webhook fires defeats the
+product. It supports persistent volumes (so SQLite doesn't get wiped every deploy)
+and a native cron-schedule feature, without needing a Dockerfile.
+
+### One-time setup (in Railway's dashboard — an agent can't click through this for you)
+
+1. **Create a new Railway project**, connect it to this GitHub repo.
+2. **Add the web service:**
+   - Set its **Root Directory** to `agent/` — that's where `railway.toml`,
+     `requirements.txt`, and `app.py` live.
+   - Railway will pick up `agent/railway.toml` automatically (build command,
+     multi-worker start command reading Railway's `$PORT`).
+3. **Add a persistent volume** to the web service, mounted at e.g. `/data`.
+4. **Set environment variables** on the web service:
+   - `ANTHROPIC_API_KEY` — same key as local `.env`.
+   - `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN` — once you have a Twilio number (see
+     below).
+   - `VAPI_SHARED_SECRET` — same value as local `.env` (see "AI receptionist" below).
+   - `ROSTER_DATA_DIR=/data` — points the SQLite file at the mounted volume instead
+     of local disk, so it survives redeploys.
+5. **Add a second service** (same repo, same root directory `agent/`) for the daily
+   Recovery/Referrals tick:
+   - Override its **Start Command** to `python recovery_tick.py`.
+   - Set a **Cron Schedule** of `0 9 * * *` (matches the schedule already
+     documented in `recovery_tick.py`'s own docstring).
+   - Mount the **same persistent volume** at the **same path** (`/data`) as the web
+     service, and set the same `ROSTER_DATA_DIR=/data` env var — this service must
+     read/write the *same* database file the web service uses, not a separate one.
+6. **Copy the web service's public URL** (Railway assigns one automatically,
+   `https://<something>.up.railway.app`, or attach a custom domain) — this is the
+   URL Twilio's webhooks and Vapi's Custom LLM connection both point at below,
+   replacing every `<your-public-url>` / `ngrok` reference in this README.
+
+### Why SQLite, not Postgres
+
+At the scale this is actually built for right now (3–5 pilot clients, a realistic
+ceiling in the 50–150-business range once multi-worker concurrency is in place),
+SQLite's single-writer model isn't the binding constraint. Revisit this only if
+real concurrent-write pressure or managed backups/replicas become an actual need —
+Railway hosts Postgres natively, so that migration is straightforward later.
+
 ## Real phone line (Twilio)
 - Point a Twilio number's **inbound SMS webhook** at `POST /webhook/sms`. Replies go
   back as TwiML — no outbound credentials needed.
