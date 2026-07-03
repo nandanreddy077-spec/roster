@@ -5,7 +5,7 @@ from sqlmodel import Session, select
 
 import app as app_module
 from conftest import StubAgent
-from db_models import Client, RecoveryCampaign, RecoveryJob, Job as Job
+from db_models import Client, Job, RecoveryCampaign, RecoveryJob
 import recovery_service
 
 
