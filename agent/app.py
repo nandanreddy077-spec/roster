@@ -107,6 +107,29 @@ def set_review_link(client_id: int, review_link: str = Form(...)):
     return RedirectResponse(f"/clients/{client_id}", status_code=303)
 
 
+@app.post("/clients/{client_id}/jobs/{job_id}/complete")
+def complete_job(client_id: int, job_id: int):
+    """Marks a job done and, best-effort, texts a review-request link. The SMS
+    send never blocks completion — a failed or skipped send still marks the job
+    done, since the review text is a bonus, not the point of this action."""
+    with Session(engine) as session:
+        client = session.get(Client, client_id)
+        job = session.get(Job, job_id)
+        job.completed_at = datetime.utcnow()
+        session.add(job)
+        session.commit()
+        if client.review_link and job.callback_number:
+            try:
+                sms_channel.send(
+                    from_number=client.inbound_number or "",
+                    to_number=job.callback_number,
+                    body=f"Thanks for choosing {client.business_name}! If we did right by you, a quick review means a lot: {client.review_link}",
+                )
+            except Exception as e:
+                print(f"Reviews: failed to send review request for job {job_id}: {e}")
+    return RedirectResponse(f"/clients/{client_id}", status_code=303)
+
+
 @app.get("/clients/{client_id}/recovery/new")
 def new_recovery_campaign_form(request: Request, client_id: int):
     with Session(engine) as session:

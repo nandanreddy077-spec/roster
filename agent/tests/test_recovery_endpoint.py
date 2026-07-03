@@ -213,3 +213,111 @@ def test_set_review_link_saves_and_shows_on_client_detail(monkeypatch, test_engi
 
     detail = test_client.get(f"/clients/{client_id}")
     assert "https://g.page/r/test-review-link" in detail.text
+
+
+class FakeSMS:
+    def __init__(self):
+        self.sent = []
+
+    def send(self, from_number, to_number, body):
+        self.sent.append({"from": from_number, "to": to_number, "body": body})
+
+
+class ExplodingSMS:
+    def send(self, from_number, to_number, body):
+        raise RuntimeError("simulated Twilio failure")
+
+
+def test_mark_job_done_sends_review_sms_when_link_set(monkeypatch, test_engine):
+    monkeypatch.setattr(app_module, "engine", test_engine)
+    client_id = make_client(test_engine)
+    test_client = TestClient(app_module.app)
+    test_client.post(f"/clients/{client_id}/review-link", data={"review_link": "https://g.page/r/test"})
+
+    with Session(test_engine) as session:
+        job = Job(client_id=client_id, service_type="AC repair", urgency="routine", callback_number="+15551234567")
+        session.add(job)
+        session.commit()
+        session.refresh(job)
+        job_id = job.id
+
+    fake = FakeSMS()
+    monkeypatch.setattr(app_module, "sms_channel", fake)
+
+    response = test_client.post(f"/clients/{client_id}/jobs/{job_id}/complete", follow_redirects=False)
+
+    assert response.status_code == 303
+    assert len(fake.sent) == 1
+    assert "https://g.page/r/test" in fake.sent[0]["body"]
+    with Session(test_engine) as session:
+        completed = session.get(Job, job_id)
+    assert completed.completed_at is not None
+
+
+def test_mark_job_done_without_review_link_sends_nothing(monkeypatch, test_engine):
+    monkeypatch.setattr(app_module, "engine", test_engine)
+    client_id = make_client(test_engine)
+    test_client = TestClient(app_module.app)
+
+    with Session(test_engine) as session:
+        job = Job(client_id=client_id, service_type="AC repair", urgency="routine", callback_number="+15551234567")
+        session.add(job)
+        session.commit()
+        session.refresh(job)
+        job_id = job.id
+
+    fake = FakeSMS()
+    monkeypatch.setattr(app_module, "sms_channel", fake)
+
+    response = test_client.post(f"/clients/{client_id}/jobs/{job_id}/complete", follow_redirects=False)
+
+    assert response.status_code == 303
+    assert fake.sent == []
+    with Session(test_engine) as session:
+        completed = session.get(Job, job_id)
+    assert completed.completed_at is not None
+
+
+def test_mark_job_done_still_completes_when_sms_send_fails(monkeypatch, test_engine):
+    monkeypatch.setattr(app_module, "engine", test_engine)
+    client_id = make_client(test_engine)
+    test_client = TestClient(app_module.app)
+    test_client.post(f"/clients/{client_id}/review-link", data={"review_link": "https://g.page/r/test"})
+
+    with Session(test_engine) as session:
+        job = Job(client_id=client_id, service_type="AC repair", urgency="routine", callback_number="+15551234567")
+        session.add(job)
+        session.commit()
+        session.refresh(job)
+        job_id = job.id
+
+    monkeypatch.setattr(app_module, "sms_channel", ExplodingSMS())
+
+    response = test_client.post(f"/clients/{client_id}/jobs/{job_id}/complete", follow_redirects=False)
+
+    assert response.status_code == 303
+    with Session(test_engine) as session:
+        completed = session.get(Job, job_id)
+    assert completed.completed_at is not None
+
+
+def test_client_detail_shows_mark_done_then_completed_badge(monkeypatch, test_engine):
+    monkeypatch.setattr(app_module, "engine", test_engine)
+    client_id = make_client(test_engine)
+    test_client = TestClient(app_module.app)
+
+    with Session(test_engine) as session:
+        job = Job(client_id=client_id, service_type="AC repair", urgency="routine", callback_number="+1")
+        session.add(job)
+        session.commit()
+        session.refresh(job)
+        job_id = job.id
+
+    before = test_client.get(f"/clients/{client_id}")
+    assert "Mark done" in before.text
+
+    monkeypatch.setattr(app_module, "sms_channel", FakeSMS())
+    test_client.post(f"/clients/{client_id}/jobs/{job_id}/complete")
+
+    after = test_client.get(f"/clients/{client_id}")
+    assert "Completed" in after.text

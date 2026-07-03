@@ -72,6 +72,13 @@
       {% if j.address %}<div>{{ j.address }}</div>{% endif %}
       {% if j.callback_number %}<div>{{ j.callback_number }}</div>{% endif %}
       {% if j.notes %}<p class="job-notes">{{ j.notes }}</p>{% endif %}
+      {% if j.completed_at %}
+      <span class="agent-badge agent-badge-active">Completed</span>
+      {% else %}
+      <form method="post" action="/clients/{{ client.id }}/jobs/{{ j.id }}/complete">
+        <button class="btn btn-secondary btn-small" type="submit">Mark done</button>
+      </form>
+      {% endif %}
     </div>
     {% endfor %}
     {% if not jobs %}<p class="empty">No jobs captured yet.</p>{% endif %}
