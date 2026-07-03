@@ -97,6 +97,16 @@ def create_client(
     return RedirectResponse(f"/clients/{client.id}", status_code=303)
 
 
+@app.post("/clients/{client_id}/review-link")
+def set_review_link(client_id: int, review_link: str = Form(...)):
+    with Session(engine) as session:
+        client = session.get(Client, client_id)
+        client.review_link = review_link.strip() or None
+        session.add(client)
+        session.commit()
+    return RedirectResponse(f"/clients/{client_id}", status_code=303)
+
+
 @app.get("/clients/{client_id}/recovery/new")
 def new_recovery_campaign_form(request: Request, client_id: int):
     with Session(engine) as session:

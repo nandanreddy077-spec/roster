@@ -31,6 +31,19 @@
       {% if not campaigns_by_face[face] %}<p class="empty">No {{ face_display_names[face] }} campaigns yet.</p>{% endif %}
     </div>
     {% endfor %}
+
+    <div class="agent-tile">
+      <div class="agent-tile-head">
+        <span class="agent-badge {{ 'agent-badge-active' if client.review_link else 'agent-badge-off' }}">
+          Reviews{% if client.review_link %} &middot; on{% endif %}
+        </span>
+      </div>
+      <p class="agent-tile-desc">Texts a review link the moment a job's marked done.</p>
+      <form method="post" action="/clients/{{ client.id }}/review-link" class="review-link-form">
+        <input type="url" name="review_link" placeholder="https://g.page/r/..." value="{{ client.review_link or '' }}">
+        <button class="btn btn-secondary btn-small" type="submit">Save</button>
+      </form>
+    </div>
   </div>
 </section>
 

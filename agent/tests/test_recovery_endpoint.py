@@ -5,7 +5,7 @@ from sqlmodel import Session, select
 
 import app as app_module
 from conftest import StubAgent
-from db_models import Client, RecoveryCampaign, RecoveryJob
+from db_models import Client, RecoveryCampaign, RecoveryJob, Job as Job
 import recovery_service
 
 
@@ -193,3 +193,23 @@ def test_recovery_campaign_detail_shows_display_name_not_raw_face(monkeypatch, t
 
     assert response.status_code == 200
     assert "Renewals" in response.text
+
+
+def test_set_review_link_saves_and_shows_on_client_detail(monkeypatch, test_engine):
+    monkeypatch.setattr(app_module, "engine", test_engine)
+    client_id = make_client(test_engine)
+    test_client = TestClient(app_module.app)
+
+    response = test_client.post(
+        f"/clients/{client_id}/review-link",
+        data={"review_link": "https://g.page/r/test-review-link"},
+        follow_redirects=False,
+    )
+    assert response.status_code == 303
+
+    with Session(test_engine) as session:
+        client = session.get(Client, client_id)
+    assert client.review_link == "https://g.page/r/test-review-link"
+
+    detail = test_client.get(f"/clients/{client_id}")
+    assert "https://g.page/r/test-review-link" in detail.text

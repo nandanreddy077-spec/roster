@@ -75,6 +75,19 @@ a { color: var(--accent); text-decoration: none; }
 }
 .client-card h3 { color: var(--text); font-size: 17px; margin-bottom: 8px; }
 
+.agent-badges { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+.agent-badge {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  padding: 3px 9px;
+  border-radius: 6px;
+}
+.agent-badge-active { background: rgba(75, 122, 91, 0.12); color: var(--good); }
+.agent-badge-off { background: var(--bg-alt); color: var(--text-dim); }
+
 /* Form */
 .form {
   display: flex;
@@ -181,21 +194,52 @@ a { color: var(--accent); text-decoration: none; }
 .job-urgency.same_day { background: rgba(194, 105, 61, 0.12); color: var(--accent); }
 .job-urgency.routine { background: rgba(75, 122, 91, 0.12); color: var(--good); }
 
-.recovery-panel {
+.recovery-panel .btn { margin-bottom: 14px; }
+
+/* Agent roster (client detail) — one tile per agent type, scales as more agents ship */
+.agent-roster { margin-top: 24px; }
+.agent-roster-heading { font-size: 16px; margin-bottom: 14px; }
+.agent-roster-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 16px;
+}
+.agent-tile {
   background: var(--card);
   border: 1px solid var(--border);
   border-radius: 12px;
-  padding: 20px;
-  margin-top: 24px;
+  padding: 16px;
 }
-.recovery-panel h2 { font-size: 16px; margin-bottom: 14px; }
-.recovery-panel .btn { margin-bottom: 14px; }
+.agent-tile-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.agent-tile-desc { color: var(--text-dim); font-size: 13px; }
+
+.btn-small { padding: 6px 12px; font-size: 12px; border-radius: 8px; }
 
 .job-urgency.status-pending { background: var(--bg-alt); color: var(--text-dim); }
 .job-urgency.status-awaiting_slot { background: rgba(194, 105, 61, 0.12); color: var(--accent); }
 .job-urgency.status-booked { background: rgba(75, 122, 91, 0.12); color: var(--good); }
 .job-urgency.status-declined { background: rgba(176, 71, 62, 0.12); color: var(--bad); }
 .job-urgency.status-no_response { background: var(--bg-alt); color: var(--soon); }
+
+.btn-secondary { background: transparent; color: var(--text); border: 1px solid var(--border); }
+.btn-secondary:hover { border-color: var(--accent); color: var(--accent); }
+
+.review-link-form { display: flex; gap: 8px; margin-top: 10px; }
+.review-link-form input {
+  flex: 1;
+  font-size: 13px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-family: inherit;
+}
 
 @media (max-width: 720px) {
   .client-list { grid-template-columns: 1fr; }
