@@ -153,3 +153,43 @@ def test_create_membership_campaign_rejects_malformed_date(monkeypatch, test_eng
     )
 
     assert response.status_code == 400
+
+
+def test_client_detail_groups_campaigns_by_named_agent_tile(monkeypatch, test_engine):
+    monkeypatch.setattr(app_module, "engine", test_engine)
+    client_id = make_client(test_engine)
+    test_client = TestClient(app_module.app)
+    test_client.post(
+        f"/clients/{client_id}/recovery/new",
+        data={"face": "quote", "name": "June quotes", "customers_raw": "+1,Mike,AC install,8000"},
+    )
+    test_client.post(
+        f"/clients/{client_id}/recovery/new",
+        data={"face": "membership", "name": "July renewals", "customers_raw": "+2,Sarah,AC tune-up,2026-07-15"},
+    )
+
+    response = test_client.get(f"/clients/{client_id}")
+
+    assert response.status_code == 200
+    assert "Chaser" in response.text
+    assert "Rebooker" in response.text
+    assert "Renewals" in response.text
+    assert "June quotes" in response.text
+    assert "July renewals" in response.text
+
+
+def test_recovery_campaign_detail_shows_display_name_not_raw_face(monkeypatch, test_engine):
+    monkeypatch.setattr(app_module, "engine", test_engine)
+    client_id = make_client(test_engine)
+    test_client = TestClient(app_module.app)
+    test_client.post(
+        f"/clients/{client_id}/recovery/new",
+        data={"face": "membership", "name": "July renewals", "customers_raw": "+1,Sarah,AC tune-up,2026-07-15"},
+    )
+    with Session(test_engine) as session:
+        campaign_id = session.exec(select(app_module.RecoveryCampaign)).first().id
+
+    response = test_client.get(f"/clients/{client_id}/recovery/{campaign_id}")
+
+    assert response.status_code == 200
+    assert "Renewals" in response.text

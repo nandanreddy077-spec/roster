@@ -13,6 +13,7 @@ from sqlmodel import Session, func, select
 from channels import get_channel
 from db import engine, init_db
 from db_models import Client, Job, Message, RecoveryCampaign, RecoveryJob
+from recovery_engine import FACE_DISPLAY_NAMES
 from recovery_service import create_campaign, find_active_recovery_job, handle_recovery_reply
 from service import agent as shared_agent
 from service import handle_customer_message
@@ -154,7 +155,14 @@ def recovery_campaign_detail(request: Request, client_id: int, campaign_id: int)
             select(RecoveryJob).where(RecoveryJob.campaign_id == campaign_id).order_by(RecoveryJob.id)
         ).all()
     return templates.TemplateResponse(
-        request, "recovery_detail.html", {"client": client, "campaign": campaign, "jobs": jobs}
+        request,
+        "recovery_detail.html",
+        {
+            "client": client,
+            "campaign": campaign,
+            "jobs": jobs,
+            "face_display_name": FACE_DISPLAY_NAMES[campaign.face],
+        },
     )
 
 
@@ -180,10 +188,20 @@ def client_detail(request: Request, client_id: int):
     ]
     chat = [c for c in chat if c["text"]]
 
+    campaigns_by_face = {"quote": [], "reactivation": [], "membership": []}
+    for c in campaigns:
+        campaigns_by_face.setdefault(c.face, []).append(c)
+
     return templates.TemplateResponse(
         request,
         "client_detail.html",
-        {"client": client, "chat": chat, "jobs": jobs, "campaigns": campaigns},
+        {
+            "client": client,
+            "chat": chat,
+            "jobs": jobs,
+            "campaigns_by_face": campaigns_by_face,
+            "face_display_names": FACE_DISPLAY_NAMES,
+        },
     )
 
 

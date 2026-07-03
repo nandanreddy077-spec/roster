@@ -5,16 +5,33 @@
 <h1>{{ client.business_name }}</h1>
 <span class="trade-tag">{{ client.trade }}</span>
 
-<section class="recovery-panel">
-  <h2>Revenue Recovery campaigns</h2>
-  <a class="btn btn-primary" href="/clients/{{ client.id }}/recovery/new">+ New campaign</a>
-  {% for c in campaigns %}
-  <div class="job-card">
-    <a href="/clients/{{ client.id }}/recovery/{{ c.id }}"><strong>{{ c.name }}</strong></a>
-    <span class="trade-tag">{{ c.face }}</span>
+<section class="agent-roster">
+  <h2 class="agent-roster-heading">Agent roster</h2>
+  <div class="agent-roster-grid">
+    <div class="agent-tile">
+      <div class="agent-tile-head">
+        <span class="agent-badge agent-badge-active">Frontdesk</span>
+      </div>
+      <p class="agent-tile-desc">Always on — answers inbound calls &amp; texts for this client.</p>
+    </div>
+
+    {% for face in ["quote", "reactivation", "membership"] %}
+    <div class="agent-tile recovery-panel">
+      <div class="agent-tile-head">
+        <span class="agent-badge {{ 'agent-badge-active' if campaigns_by_face[face] else 'agent-badge-off' }}">
+          {{ face_display_names[face] }}{% if campaigns_by_face[face] %} &middot; {{ campaigns_by_face[face]|length }}{% endif %}
+        </span>
+        <a class="btn btn-primary btn-small" href="/clients/{{ client.id }}/recovery/new?face={{ face }}">+ New campaign</a>
+      </div>
+      {% for c in campaigns_by_face[face] %}
+      <div class="job-card">
+        <a href="/clients/{{ client.id }}/recovery/{{ c.id }}"><strong>{{ c.name }}</strong></a>
+      </div>
+      {% endfor %}
+      {% if not campaigns_by_face[face] %}<p class="empty">No {{ face_display_names[face] }} campaigns yet.</p>{% endif %}
+    </div>
+    {% endfor %}
   </div>
-  {% endfor %}
-  {% if not campaigns %}<p class="empty">No Recovery campaigns yet.</p>{% endif %}
 </section>
 
 <div class="detail-grid">
