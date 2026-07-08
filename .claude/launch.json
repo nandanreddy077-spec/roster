@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "dashboard",
+      "runtimeExecutable": "/Users/nandanreddyavanaganti/new_idea/agent/.venv/bin/uvicorn",
+      "runtimeArgs": ["app:app", "--reload", "--port", "8722", "--app-dir", "/Users/nandanreddyavanaganti/new_idea/agent"],
+      "port": 8722
+    }
+  ]
+}

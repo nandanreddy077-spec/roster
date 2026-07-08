@@ -5,7 +5,7 @@ from fastapi.testclient import TestClient
 from sqlmodel import Session, select
 
 import app as app_module
-from conftest import StubAgent
+from conftest import DASH_AUTH, StubAgent
 from db_models import Client, Job, RecoveryCampaign, RecoveryJob, ReferralLead
 import recovery_service
 import referral_service
@@ -27,7 +27,7 @@ def make_client(test_engine) -> int:
 def test_create_campaign_via_form(monkeypatch, test_engine):
     monkeypatch.setattr(app_module, "engine", test_engine)
     client_id = make_client(test_engine)
-    test_client = TestClient(app_module.app)
+    test_client = TestClient(app_module.app, headers=DASH_AUTH)
 
     # follow_redirects=False: the redirect target route is built in Task 9
     response = test_client.post(
@@ -50,7 +50,7 @@ def test_create_campaign_via_form(monkeypatch, test_engine):
 def test_recovery_campaign_detail_renders(monkeypatch, test_engine):
     monkeypatch.setattr(app_module, "engine", test_engine)
     client_id = make_client(test_engine)
-    test_client = TestClient(app_module.app)
+    test_client = TestClient(app_module.app, headers=DASH_AUTH)
     test_client.post(
         f"/clients/{client_id}/recovery/new",
         data={"face": "reactivation", "name": "Dormant list", "customers_raw": "+1,Sue,Tune-up,400"},
@@ -67,7 +67,7 @@ def test_recovery_campaign_detail_renders(monkeypatch, test_engine):
 def test_inbound_sms_routes_active_recovery_reply_to_recovery(monkeypatch, test_engine):
     monkeypatch.setattr(app_module, "engine", test_engine)
     client_id = make_client(test_engine)
-    test_client = TestClient(app_module.app)
+    test_client = TestClient(app_module.app, headers=DASH_AUTH)
     test_client.post(
         f"/clients/{client_id}/recovery/new",
         data={"face": "quote", "name": "June quotes", "customers_raw": "+15551112222,Mike,AC install,8000"},
@@ -104,7 +104,7 @@ def test_inbound_sms_routes_active_recovery_reply_to_recovery(monkeypatch, test_
 def test_client_detail_lists_recovery_campaigns(monkeypatch, test_engine):
     monkeypatch.setattr(app_module, "engine", test_engine)
     client_id = make_client(test_engine)
-    test_client = TestClient(app_module.app)
+    test_client = TestClient(app_module.app, headers=DASH_AUTH)
     test_client.post(
         f"/clients/{client_id}/recovery/new",
         data={"face": "quote", "name": "June quotes", "customers_raw": "+1,Mike,AC install,8000"},
@@ -119,7 +119,7 @@ def test_client_detail_lists_recovery_campaigns(monkeypatch, test_engine):
 def test_new_campaign_form_preselects_face_from_query_param(monkeypatch, test_engine):
     monkeypatch.setattr(app_module, "engine", test_engine)
     client_id = make_client(test_engine)
-    test_client = TestClient(app_module.app)
+    test_client = TestClient(app_module.app, headers=DASH_AUTH)
 
     response = test_client.get(f"/clients/{client_id}/recovery/new?face=membership")
 
@@ -130,7 +130,7 @@ def test_new_campaign_form_preselects_face_from_query_param(monkeypatch, test_en
 def test_create_membership_campaign_accepts_valid_date(monkeypatch, test_engine):
     monkeypatch.setattr(app_module, "engine", test_engine)
     client_id = make_client(test_engine)
-    test_client = TestClient(app_module.app)
+    test_client = TestClient(app_module.app, headers=DASH_AUTH)
 
     response = test_client.post(
         f"/clients/{client_id}/recovery/new",
@@ -147,7 +147,7 @@ def test_create_membership_campaign_accepts_valid_date(monkeypatch, test_engine)
 def test_create_membership_campaign_rejects_malformed_date(monkeypatch, test_engine):
     monkeypatch.setattr(app_module, "engine", test_engine)
     client_id = make_client(test_engine)
-    test_client = TestClient(app_module.app)
+    test_client = TestClient(app_module.app, headers=DASH_AUTH)
 
     response = test_client.post(
         f"/clients/{client_id}/recovery/new",
@@ -160,7 +160,7 @@ def test_create_membership_campaign_rejects_malformed_date(monkeypatch, test_eng
 def test_client_detail_groups_campaigns_by_named_agent_tile(monkeypatch, test_engine):
     monkeypatch.setattr(app_module, "engine", test_engine)
     client_id = make_client(test_engine)
-    test_client = TestClient(app_module.app)
+    test_client = TestClient(app_module.app, headers=DASH_AUTH)
     test_client.post(
         f"/clients/{client_id}/recovery/new",
         data={"face": "quote", "name": "June quotes", "customers_raw": "+1,Mike,AC install,8000"},
@@ -183,7 +183,7 @@ def test_client_detail_groups_campaigns_by_named_agent_tile(monkeypatch, test_en
 def test_recovery_campaign_detail_shows_display_name_not_raw_face(monkeypatch, test_engine):
     monkeypatch.setattr(app_module, "engine", test_engine)
     client_id = make_client(test_engine)
-    test_client = TestClient(app_module.app)
+    test_client = TestClient(app_module.app, headers=DASH_AUTH)
     test_client.post(
         f"/clients/{client_id}/recovery/new",
         data={"face": "membership", "name": "July renewals", "customers_raw": "+1,Sarah,AC tune-up,2026-07-15"},
@@ -200,7 +200,7 @@ def test_recovery_campaign_detail_shows_display_name_not_raw_face(monkeypatch, t
 def test_set_review_link_saves_and_shows_on_client_detail(monkeypatch, test_engine):
     monkeypatch.setattr(app_module, "engine", test_engine)
     client_id = make_client(test_engine)
-    test_client = TestClient(app_module.app)
+    test_client = TestClient(app_module.app, headers=DASH_AUTH)
 
     response = test_client.post(
         f"/clients/{client_id}/review-link",
@@ -233,7 +233,7 @@ class ExplodingSMS:
 def test_mark_job_done_sends_review_sms_when_link_set(monkeypatch, test_engine):
     monkeypatch.setattr(app_module, "engine", test_engine)
     client_id = make_client(test_engine)
-    test_client = TestClient(app_module.app)
+    test_client = TestClient(app_module.app, headers=DASH_AUTH)
     test_client.post(f"/clients/{client_id}/review-link", data={"review_link": "https://g.page/r/test"})
 
     with Session(test_engine) as session:
@@ -259,7 +259,7 @@ def test_mark_job_done_sends_review_sms_when_link_set(monkeypatch, test_engine):
 def test_mark_job_done_twice_only_sends_review_sms_once(monkeypatch, test_engine):
     monkeypatch.setattr(app_module, "engine", test_engine)
     client_id = make_client(test_engine)
-    test_client = TestClient(app_module.app)
+    test_client = TestClient(app_module.app, headers=DASH_AUTH)
     test_client.post(f"/clients/{client_id}/review-link", data={"review_link": "https://g.page/r/test"})
 
     with Session(test_engine) as session:
@@ -282,7 +282,7 @@ def test_mark_job_done_twice_only_sends_review_sms_once(monkeypatch, test_engine
 def test_mark_job_done_without_review_link_sends_nothing(monkeypatch, test_engine):
     monkeypatch.setattr(app_module, "engine", test_engine)
     client_id = make_client(test_engine)
-    test_client = TestClient(app_module.app)
+    test_client = TestClient(app_module.app, headers=DASH_AUTH)
 
     with Session(test_engine) as session:
         job = Job(client_id=client_id, service_type="AC repair", urgency="routine", callback_number="+15551234567")
@@ -306,7 +306,7 @@ def test_mark_job_done_without_review_link_sends_nothing(monkeypatch, test_engin
 def test_mark_job_done_still_completes_when_sms_send_fails(monkeypatch, test_engine):
     monkeypatch.setattr(app_module, "engine", test_engine)
     client_id = make_client(test_engine)
-    test_client = TestClient(app_module.app)
+    test_client = TestClient(app_module.app, headers=DASH_AUTH)
     test_client.post(f"/clients/{client_id}/review-link", data={"review_link": "https://g.page/r/test"})
 
     with Session(test_engine) as session:
@@ -329,7 +329,7 @@ def test_mark_job_done_still_completes_when_sms_send_fails(monkeypatch, test_eng
 def test_client_detail_shows_mark_done_then_completed_badge(monkeypatch, test_engine):
     monkeypatch.setattr(app_module, "engine", test_engine)
     client_id = make_client(test_engine)
-    test_client = TestClient(app_module.app)
+    test_client = TestClient(app_module.app, headers=DASH_AUTH)
 
     with Session(test_engine) as session:
         job = Job(client_id=client_id, service_type="AC repair", urgency="routine", callback_number="+1")
@@ -373,7 +373,7 @@ def test_inbound_sms_routes_active_referral_reply(monkeypatch, test_engine):
         }),
     )
 
-    test_client = TestClient(app_module.app)
+    test_client = TestClient(app_module.app, headers=DASH_AUTH)
     response = test_client.post(
         "/webhook/sms",
         data={"From": "+15551112222", "To": "+15559990000", "Body": "my friend Sarah needs this"},
@@ -386,7 +386,7 @@ def test_inbound_sms_routes_active_referral_reply(monkeypatch, test_engine):
 def test_inbound_sms_prioritizes_active_recovery_over_referral(monkeypatch, test_engine):
     monkeypatch.setattr(app_module, "engine", test_engine)
     client_id = make_client(test_engine)
-    test_client = TestClient(app_module.app)
+    test_client = TestClient(app_module.app, headers=DASH_AUTH)
     test_client.post(
         f"/clients/{client_id}/recovery/new",
         data={"face": "quote", "name": "June quotes", "customers_raw": "+15551112222,Mike,AC install,8000"},
@@ -427,7 +427,7 @@ def test_inbound_sms_prioritizes_active_recovery_over_referral(monkeypatch, test
 def test_set_referral_incentive_saves_and_shows_on_client_detail(monkeypatch, test_engine):
     monkeypatch.setattr(app_module, "engine", test_engine)
     client_id = make_client(test_engine)
-    test_client = TestClient(app_module.app)
+    test_client = TestClient(app_module.app, headers=DASH_AUTH)
 
     response = test_client.post(
         f"/clients/{client_id}/referral-incentive",
@@ -457,7 +457,7 @@ def test_client_detail_shows_captured_referral_leads(monkeypatch, test_engine):
         ))
         session.commit()
 
-    test_client = TestClient(app_module.app)
+    test_client = TestClient(app_module.app, headers=DASH_AUTH)
     response = test_client.get(f"/clients/{client_id}")
 
     assert "Sarah" in response.text
@@ -479,7 +479,7 @@ def test_client_detail_falls_back_to_raw_text_when_extraction_failed(monkeypatch
         ))
         session.commit()
 
-    test_client = TestClient(app_module.app)
+    test_client = TestClient(app_module.app, headers=DASH_AUTH)
     response = test_client.get(f"/clients/{client_id}")
 
     assert "no thanks, not right now" in response.text

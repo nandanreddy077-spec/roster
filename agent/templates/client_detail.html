@@ -15,6 +15,28 @@
       <p class="agent-tile-desc">Always on — answers inbound calls &amp; texts for this client.</p>
     </div>
 
+    <div class="agent-tile">
+      <div class="agent-tile-head">
+        <span class="agent-badge {{ 'agent-badge-active' if client.xai_phone_number else 'agent-badge-off' }}">
+          Phone number{% if client.inbound_number %} &middot; {{ client.inbound_number }}{% endif %}
+        </span>
+      </div>
+      {% if client.inbound_number and client.xai_phone_number %}
+      <p class="agent-tile-desc">Live — voice + SMS both wired up. Have the client forward their real number to {{ client.inbound_number }}.</p>
+      {% elif client.inbound_number %}
+      <p class="agent-tile-desc">Number bought and SMS-ready ({{ client.inbound_number }}), but voice registration with xAI didn't complete — see server logs.</p>
+      {% else %}
+      <p class="agent-tile-desc">No number yet — buy one to enable SMS and voice for this client.</p>
+      <form method="post" action="/clients/{{ client.id }}/provision-number" class="review-link-form">
+        <input type="text" name="area_code" placeholder="Area code (optional)" maxlength="3">
+        <button class="btn btn-primary btn-small" type="submit">Buy &amp; wire up number</button>
+      </form>
+      {% endif %}
+      {% if provision_error %}
+      <p class="job-notes">{{ provision_error }}</p>
+      {% endif %}
+    </div>
+
     {% for face in ["quote", "reactivation", "membership"] %}
     <div class="agent-tile recovery-panel">
       <div class="agent-tile-head">

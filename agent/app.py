@@ -1,28 +1,34 @@
-import hmac
+import asyncio
+import base64
 import json
 import os
-import time
-import uuid
+import secrets
 from datetime import datetime
 from pathlib import Path
 
 from fastapi import FastAPI, Form, HTTPException, Request
-from fastapi.responses import RedirectResponse, Response, StreamingResponse
+from fastapi.responses import FileResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from sqlmodel import Session, func, select
+from starlette.concurrency import run_in_threadpool
 
 from channels import get_channel
 from db import engine, init_db
 from db_models import Client, Job, Message, RecoveryCampaign, RecoveryJob, ReferralLead
+from provisioning import ProvisioningError, attach_number_to_xai_trunk, buy_twilio_number, register_number_with_xai
 from recovery_engine import FACE_DISPLAY_NAMES
 from recovery_service import create_campaign, find_active_recovery_job, handle_recovery_reply
 from referral_service import find_active_referral_ask, handle_referral_reply
-from service import agent as shared_agent
 from service import handle_customer_message
-from voice_adapter import VapiChatRequest, handle_voice_turn
+from xai_voice_adapter import (
+    parse_incoming_call_webhook as parse_xai_incoming_call,
+    run_call as run_xai_call,
+    verify_webhook_signature as verify_xai_signature,
+)
 
 BASE_DIR = Path(__file__).parent
+LANDING_DIR = BASE_DIR / "landing"
 DASHBOARD_THREAD = "dashboard"
 
 app = FastAPI(title="Roster")
@@ -31,6 +37,47 @@ templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
 sms_channel = get_channel()
 
 init_db()
+
+
+# ---- Dashboard auth --------------------------------------------------------
+# The founder dashboard (/clients and everything under it) holds every shop's
+# conversations and jobs — it must never be public. HTTP Basic behind a single
+# ADMIN_PASSWORD env var: enough for a one-founder ops tool, no login system to
+# build. Fail-closed: if ADMIN_PASSWORD isn't set, the dashboard refuses to
+# serve rather than silently opening up (forgetting an env var on a fresh
+# deploy must not expose client data). Public surface stays public: the
+# landing (/, /styles.css), the hire flow (/hire*), /static, and the Twilio/xAI
+# webhooks (which authenticate their own way — routing by known number, xAI
+# signature verification).
+PROTECTED_PREFIX = "/clients"
+
+
+def _authorized(header: str | None, expected_password: str) -> bool:
+    if not header or not header.startswith("Basic "):
+        return False
+    try:
+        decoded = base64.b64decode(header[len("Basic "):]).decode()
+        _, _, password = decoded.partition(":")
+    except Exception:
+        return False
+    return secrets.compare_digest(password, expected_password)
+
+
+@app.middleware("http")
+async def dashboard_auth(request: Request, call_next):
+    if request.url.path == PROTECTED_PREFIX or request.url.path.startswith(PROTECTED_PREFIX + "/"):
+        expected = os.environ.get("ADMIN_PASSWORD", "")
+        if not expected:
+            return Response(
+                "Dashboard locked: set the ADMIN_PASSWORD environment variable to enable access.",
+                status_code=503,
+            )
+        if not _authorized(request.headers.get("authorization"), expected):
+            return Response(
+                status_code=401,
+                headers={"WWW-Authenticate": 'Basic realm="Roster dashboard"'},
+            )
+    return await call_next(request)
 
 
 def extract_display_text(content) -> str:
@@ -46,9 +93,146 @@ def twiml_reply(body: str) -> Response:
     return Response(content=xml, media_type="application/xml")
 
 
+# ---- Public landing page ---------------------------------------------------
+# The marketing site is served by this same app (Railway's root directory is
+# agent/, so files outside it never reach the deployed image). index.html links
+# its stylesheet as a relative "styles.css", which resolves to /styles.css when
+# served at the root — hence the dedicated route beside it.
+
+
 @app.get("/")
 def root():
-    return RedirectResponse("/clients")
+    return FileResponse(LANDING_DIR / "index.html", media_type="text/html")
+
+
+@app.get("/styles.css")
+def landing_styles():
+    return FileResponse(LANDING_DIR / "styles.css", media_type="text/css")
+
+
+# ---- Self-serve hire flow (public) -------------------------------------------
+# Psychology-driven onboarding wizard: an owner hires their Frontdesk in ~2 min
+# by answering a handful of judgment calls, framed as briefing a new employee
+# rather than configuring software (see hire.html + hire.css, DESIGN.md, and the
+# onboarding-psychology research). Creates a real, usable Client — the same model
+# the concierge /clients/new flow produces — so a pilot shop can actually go live.
+
+
+def _build_hire_sample(business_name: str, services: str, pricing_answer: str) -> dict:
+    """Builds the 'Meet your Frontdesk' sample text exchange from the owner's own
+    answers, so the confirmation shows their business — not fake stock copy. Kept
+    deterministic (no LLM call) so the confirmation page renders instantly and the
+    owner sees a concrete, trustworthy playback of how their line will be answered."""
+    first_service = (services.split(",")[0] or "that").strip().lower() or "that"
+    pricing = (pricing_answer or "").strip()
+    # Trim the owner's pricing answer to the first sentence for the sample bubble.
+    for sep in (". ", "! ", "? "):
+        if sep in pricing:
+            pricing = pricing.split(sep)[0]
+            break
+    pricing = pricing[:140].rstrip(" .") or "Happy to help — let me get you on the schedule"
+    return {
+        "greeting": f"Hi, this is {business_name} — sorry we missed your call! What's going on?",
+        "customer": f"Need someone for {first_service}, how soon can you come out?",
+        "reply": f"{pricing}. I can get a tech out this afternoon between 2–4 — want me to lock that in?",
+        "booked": "Job booked · 2:00 PM today",
+    }
+
+
+@app.get("/hire")
+def hire_form(request: Request):
+    return templates.TemplateResponse(request, "hire.html", {})
+
+
+@app.post("/hire")
+def hire_submit(
+    business_name: str = Form(...),
+    inbound_number: str = Form(...),
+    trade: str = Form(...),
+    services: str = Form(...),
+    hours: str = Form(...),
+    answer_mode: str = Form("backup"),
+    pricing_answer: str = Form(""),
+    turn_away: str = Form(""),
+    escalation_rule: str = Form("emergencies"),
+    owner_name: str = Form(""),
+    escalation_phone: str = Form(...),
+    addons: list[str] = Form(default=[]),
+    custom_role: str = Form(""),
+):
+    """Creates the Client from the wizard's answers. The five judgment calls are
+    composed into the model's free-text config fields the agent already reads:
+    pricing_answer + turn_away + escalation_rule fold into `pricing_faq`, since
+    that's the block the Frontdesk agent consults for how to talk about price,
+    scope, and when to hand off."""
+    service_list = [s.strip() for s in services.split(",") if s.strip()]
+
+    escalation_copy = {
+        "emergencies": "Hand off to the owner for emergencies and any caller who asks for a person; handle everything else.",
+        "all_new": "Gather every detail but check with the owner before booking any new job.",
+        "after_hours": "Book freely during business hours; hand off anything urgent after hours.",
+    }.get(escalation_rule, "Hand off emergencies and anyone who asks for a person.")
+
+    pricing_faq_parts = []
+    if pricing_answer.strip():
+        pricing_faq_parts.append(f"Pricing: {pricing_answer.strip()}")
+    if turn_away.strip():
+        pricing_faq_parts.append(f"Do not book / turn away: {turn_away.strip()}")
+    pricing_faq_parts.append(f"Escalation: {escalation_copy}")
+    pricing_faq = "\n".join(pricing_faq_parts)
+
+    # Extra roster picks are queued for founder setup (Frontdesk is the hire this
+    # flow actually configures). The "__custom__" sentinel becomes the free-text role.
+    requested = [a for a in addons if a and a != "__custom__"]
+    if "__custom__" in addons and custom_role.strip():
+        requested.append(f"Custom: {custom_role.strip()}")
+    requested_roster = json.dumps(requested) if requested else None
+
+    client = Client(
+        business_name=business_name.strip(),
+        trade=trade.strip(),
+        services_json=json.dumps(service_list),
+        hours=hours.strip(),
+        pricing_faq=pricing_faq,
+        escalation_phone=escalation_phone.strip(),
+        answer_mode=answer_mode if answer_mode in ("primary", "backup") else "backup",
+        inbound_number=inbound_number.strip() or None,
+        requested_roster=requested_roster,
+    )
+    with Session(engine) as session:
+        session.add(client)
+        session.commit()
+        session.refresh(client)
+        client_id = client.id
+
+    from urllib.parse import quote
+
+    suffix = f"?name={quote(owner_name.strip())}" if owner_name.strip() else ""
+    return RedirectResponse(f"/hire/done/{client_id}{suffix}", status_code=303)
+
+
+@app.get("/hire/done/{client_id}")
+def hire_done(request: Request, client_id: int):
+    with Session(engine) as session:
+        client = session.get(Client, client_id)
+    if client is None:
+        raise HTTPException(404, detail="Hire not found")
+    services = ", ".join(json.loads(client.services_json))
+    # Recover the owner's raw pricing answer from the first "Pricing: ..." line
+    # of pricing_faq (composed in hire_submit) for the sample bubble.
+    pricing_line = ""
+    for line in client.pricing_faq.splitlines():
+        if line.startswith("Pricing: "):
+            pricing_line = line[len("Pricing: "):]
+            break
+    sample = _build_hire_sample(client.business_name, services, pricing_line)
+    owner_name = request.query_params.get("name") or "you"
+    requested_roster = json.loads(client.requested_roster) if client.requested_roster else []
+    return templates.TemplateResponse(
+        request,
+        "hire_done.html",
+        {"client": client, "sample": sample, "owner_name": owner_name, "requested_roster": requested_roster},
+    )
 
 
 @app.get("/clients")
@@ -108,6 +292,47 @@ def set_referral_incentive(client_id: int, referral_incentive: str = Form(...)):
         session.add(client)
         session.commit()
     return RedirectResponse(f"/clients/{client_id}", status_code=303)
+
+
+@app.post("/clients/{client_id}/provision-number")
+def provision_number(client_id: int, area_code: str = Form("")):
+    """Buys a Twilio number and attaches it to the shared xAI-origination
+    trunk in one click. The xAI registration step (which would set
+    xai_phone_number + xai_signing_secret) isn't implemented yet — see
+    provisioning.py — so this saves the Twilio half (enough for SMS agents
+    to work immediately) and reports that voice needs a manual follow-up,
+    rather than losing the purchased number to an unimplemented step."""
+    error = None
+    with Session(engine) as session:
+        client = session.get(Client, client_id)
+        try:
+            purchase = buy_twilio_number(area_code.strip() or None)
+            attach_number_to_xai_trunk(purchase["sid"])
+            client.inbound_number = purchase["phone_number"]
+            client.twilio_number_sid = purchase["sid"]
+            session.add(client)
+            session.commit()
+
+            try:
+                xai_registration = register_number_with_xai(purchase["phone_number"])
+                client.xai_phone_number = purchase["phone_number"]
+                client.xai_signing_secret = xai_registration["signing_secret"]
+                session.add(client)
+                session.commit()
+            except NotImplementedError:
+                error = (
+                    f"Number {purchase['phone_number']} bought and SMS-ready, but voice "
+                    "registration with xAI needs a manual step for now — see provisioning.py."
+                )
+        except ProvisioningError as e:
+            error = str(e)
+
+    redirect_url = f"/clients/{client_id}"
+    if error:
+        from urllib.parse import quote
+
+        redirect_url += f"?provision_error={quote(error)}"
+    return RedirectResponse(redirect_url, status_code=303)
 
 
 @app.post("/clients/{client_id}/review-link")
@@ -252,6 +477,7 @@ def client_detail(request: Request, client_id: int):
             "campaigns_by_face": campaigns_by_face,
             "face_display_names": FACE_DISPLAY_NAMES,
             "referral_leads": referral_leads,
+            "provision_error": request.query_params.get("provision_error"),
         },
     )
 
@@ -268,6 +494,10 @@ def _find_client_by_inbound(session: Session, to_number: str) -> Client | None:
     return session.exec(select(Client).where(Client.inbound_number == to_number)).first()
 
 
+def _find_client_by_xai_number(session: Session, to_number: str) -> Client | None:
+    return session.exec(select(Client).where(Client.xai_phone_number == to_number)).first()
+
+
 @app.post("/webhook/sms")
 async def inbound_sms(From: str = Form(...), To: str = Form(...), Body: str = Form(...)):
     """Twilio inbound SMS. Routes by the business line texted (To) and replies via
@@ -278,20 +508,26 @@ async def inbound_sms(From: str = Form(...), To: str = Form(...), Body: str = Fo
     An active referral ask (sent within the last few days, not yet replied to)
     is checked next — a one-shot capture with nothing time-sensitive about it,
     so it comes after Recovery's active negotiation but still ahead of Frontdesk."""
+    reply = await run_in_threadpool(_process_inbound_sms, From, To, Body)
+    return twiml_reply(reply)
+
+
+def _process_inbound_sms(from_number: str, to_number: str, body: str) -> str:
+    """The actual (blocking) work for an inbound SMS turn — runs in a worker
+    thread so one slow Claude call doesn't stall every other concurrent call/text
+    this process is handling (see run_in_threadpool call above)."""
     with Session(engine) as session:
-        client = _find_client_by_inbound(session, To)
+        client = _find_client_by_inbound(session, to_number)
         if client is None:
-            return twiml_reply("Sorry, this number isn't set up to receive messages.")
-        recovery_job = find_active_recovery_job(session, client.id, From)
+            return "Sorry, this number isn't set up to receive messages."
+        recovery_job = find_active_recovery_job(session, client.id, from_number)
         if recovery_job is not None:
-            reply = handle_recovery_reply(session, client, recovery_job, Body)
-            return twiml_reply(reply)
-        referral_job = find_active_referral_ask(session, client.id, From)
+            return handle_recovery_reply(session, client, recovery_job, body)
+        referral_job = find_active_referral_ask(session, client.id, from_number)
         if referral_job is not None:
-            reply = handle_referral_reply(session, client, referral_job, Body)
-            return twiml_reply(reply)
-        result = handle_customer_message(session, client, From, Body)
-    return twiml_reply(result["reply"])
+            return handle_referral_reply(session, client, referral_job, body)
+        result = handle_customer_message(session, client, from_number, body)
+        return result["reply"]
 
 
 @app.post("/webhook/voice-status")
@@ -322,79 +558,41 @@ async def missed_call(From: str = Form(...), To: str = Form(...), CallStatus: st
     return Response(status_code=204)
 
 
-def _sse_chunk(request_id: str, model: str, delta: dict, finish_reason: str | None = None) -> str:
-    chunk = {
-        "id": request_id,
-        "object": "chat.completion.chunk",
-        "created": int(time.time()),
-        "model": model,
-        "choices": [{"index": 0, "delta": delta, "finish_reason": finish_reason}],
-    }
-    return f"data: {json.dumps(chunk)}\n\n"
+@app.post("/webhook/xai-incoming-call")
+async def xai_incoming_call(request: Request):
+    """xAI's `realtime.call.incoming` webhook, fired when a call lands on a
+    number registered with the Grok Voice Agent API (see xai_voice_adapter.py
+    and agent/README.md for the Twilio-SIP-trunk setup this depends on).
 
-
-def _voice_stream(request_id: str, model: str, reply: str, pending_tool_call: dict | None):
-    if pending_tool_call:
-        if reply:
-            yield _sse_chunk(request_id, model, {"role": "assistant", "content": reply})
-        tool_call_id = f"call_{uuid.uuid4().hex[:24]}"
-        yield _sse_chunk(
-            request_id,
-            model,
-            {
-                "role": "assistant",
-                "tool_calls": [
-                    {
-                        "index": 0,
-                        "id": tool_call_id,
-                        "type": "function",
-                        "function": {
-                            "name": pending_tool_call["name"],
-                            "arguments": json.dumps(pending_tool_call["input"]),
-                        },
-                    }
-                ],
-            },
-        )
-        yield _sse_chunk(request_id, model, {}, finish_reason="tool_calls")
-    else:
-        yield _sse_chunk(request_id, model, {"role": "assistant", "content": reply})
-        yield _sse_chunk(request_id, model, {}, finish_reason="stop")
-    yield "data: [DONE]\n\n"
-
-
-@app.post("/voice/chat/completions")
-async def voice_chat_completions(payload: VapiChatRequest, request: Request):
-    shared_secret = os.environ.get("VAPI_SHARED_SECRET")
-    if shared_secret:
-        expected = f"Bearer {shared_secret}"
-        provided = request.headers.get("authorization", "")
-        if not hmac.compare_digest(provided, expected):
-            return Response(status_code=401)
-
-    request_id = f"chatcmpl-{payload.call.id}"
-    called_number = payload.call.phoneNumber.number if payload.call.phoneNumber else None
+    The signing secret is per-number (returned when that number was
+    registered with xAI — see provisioning.py), so we look up the client by
+    the dialed number *before* we can verify, then verify using that
+    client's own stored secret. An unknown number can't be verified at all
+    (no secret to check against) and is dropped either way.
+    """
+    raw_body = await request.body()
+    parsed = parse_xai_incoming_call(json.loads(raw_body))
+    if parsed is None:
+        return Response(status_code=204)
 
     with Session(engine) as session:
-        client = _find_client_by_inbound(session, called_number) if called_number else None
+        client = _find_client_by_xai_number(session, parsed["to"])
         if client is None:
-            reply = "Sorry, this number isn't set up yet. Let me get someone on the line."
-            return StreamingResponse(
-                _voice_stream(request_id, payload.model, reply, None),
-                media_type="text/event-stream",
-            )
+            return Response(status_code=204)
 
-        try:
-            result = handle_voice_turn(session, shared_agent, client, payload)
-        except Exception:
-            fallback = "Sorry, I'm having trouble right now — let me get you a person."
-            pending = {"name": "transfer_call", "input": {"destination": client.escalation_phone}}
-            return StreamingResponse(
-                _voice_stream(request_id, payload.model, fallback, pending),
-                media_type="text/event-stream",
-            )
+        if client.xai_signing_secret:
+            if not verify_xai_signature(
+                request.headers.get("webhook-id"),
+                request.headers.get("webhook-timestamp"),
+                raw_body,
+                request.headers.get("webhook-signature"),
+                client.xai_signing_secret,
+            ):
+                return Response(status_code=401)
 
-    return StreamingResponse(
-        _voice_stream(request_id, payload.model, result["reply"], result["pending_tool_call"]),
-        media_type="text/event-stream",
+    # Must not block this webhook response on the call itself — the call
+    # lives for minutes, xAI just wants a fast ack that we're handling it.
+    asyncio.create_task(
+        run_xai_call(parsed["call_id"], client, parsed["from"], lambda: Session(engine))
     )
+    return Response(status_code=200)

@@ -18,10 +18,10 @@ Open **http://127.0.0.1:8000/clients** — you'll see the seeded demo (Lou's Hea
 
 ## Deploying to Railway
 
-Twilio and Vapi both need a stable public HTTPS URL — `ngrok` is fine for local
-testing but the tunnel dies when the terminal closes, which won't work for a real
-client's phone line. This gets Roster onto Railway, always-on, with the database
-surviving redeploys.
+Twilio (SMS) and xAI (voice) both need a stable public HTTPS URL — `ngrok` is fine
+for local testing but the tunnel dies when the terminal closes, which won't work
+for a real client's phone line. This gets Roster onto Railway, always-on, with the
+database surviving redeploys.
 
 **Why Railway specifically:** unlike free-tier Render, it doesn't spin the app down
 on idle — a missed-call agent that's asleep when the webhook fires defeats the
@@ -39,9 +39,14 @@ and a native cron-schedule feature, without needing a Dockerfile.
 3. **Add a persistent volume** to the web service, mounted at e.g. `/data`.
 4. **Set environment variables** on the web service:
    - `ANTHROPIC_API_KEY` — same key as local `.env`.
+   - `ADMIN_PASSWORD` — the founder-dashboard password. `/clients` (every shop's
+     conversations and jobs) sits behind HTTP Basic auth with it; if unset, the
+     dashboard fail-closes with a 503 instead of serving publicly. The landing
+     page (`/`) and self-serve hire flow (`/hire`) stay public.
    - `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN` — once you have a Twilio number (see
-     below).
-   - `VAPI_SHARED_SECRET` — same value as local `.env` (see "AI receptionist" below).
+     below). Twilio is SMS-only now (Chaser, Rebooker, Renewals, Referrals, Reviews,
+     Frontdesk text-back) — it no longer carries live voice.
+   - `XAI_API_KEY`, `XAI_SIGNING_SECRET` — see "AI receptionist" below.
    - `ROSTER_DATA_DIR=/data` — points the SQLite file at the mounted volume instead
      of local disk, so it survives redeploys.
 5. **Add a second service** (same repo, same root directory `agent/`) for the daily
@@ -54,8 +59,9 @@ and a native cron-schedule feature, without needing a Dockerfile.
      read/write the *same* database file the web service uses, not a separate one.
 6. **Copy the web service's public URL** (Railway assigns one automatically,
    `https://<something>.up.railway.app`, or attach a custom domain) — this is the
-   URL Twilio's webhooks and Vapi's Custom LLM connection both point at below,
-   replacing every `<your-public-url>` / `ngrok` reference in this README.
+   URL Twilio's SMS webhooks point at, and the URL xAI's `realtime.call.incoming`
+   webhook points at, below — replacing every `<your-public-url>` / `ngrok`
+   reference in this README.
 
 ### Why SQLite, not Postgres
 
@@ -65,60 +71,69 @@ SQLite's single-writer model isn't the binding constraint. Revisit this only if
 real concurrent-write pressure or managed backups/replicas become an actual need —
 Railway hosts Postgres natively, so that migration is straightforward later.
 
-## Real phone line (Twilio)
+## SMS agents (Twilio)
 - Point a Twilio number's **inbound SMS webhook** at `POST /webhook/sms`. Replies go
   back as TwiML — no outbound credentials needed.
 - Point the **call status callback** at `POST /webhook/voice-status` for the
-  missed-call text-back (needs `TWILIO_*` creds, or prints to console in dev).
-- Set each client's `inbound_number` to the business line so inbound routes correctly.
+  missed-call text-back (needs `TWILIO_*` creds, or prints to console in dev). This
+  is Twilio's own call-status detection (a call rang unanswered), independent of
+  who — if anyone — is answering it live; it's what triggers Frontdesk's SMS
+  fallback and is unrelated to the live-voice provider below.
+- Set each client's `inbound_number` to the business line so inbound SMS routes
+  correctly. Chaser, Rebooker, Renewals, Referrals, and Reviews all ride on this
+  same Twilio SMS channel.
 
-## AI receptionist (Vapi, live voice)
+## AI receptionist (xAI Grok Voice Agent API, live voice)
 
-The voice receptionist reuses the same engine as the text agent — see
-`docs/superpowers/specs/2026-07-01-ai-receptionist-design.md` for the full design.
+Live voice runs on xAI's Grok Voice Agent API (`xai_voice_adapter.py`), not Vapi —
+Vapi has been removed. Architecturally different from the SMS agents: instead of a
+per-turn HTTP request, xAI holds one WebSocket session open for the whole call and
+we only speak on the wire when a tool (`log_job` / `transfer_call`) fires.
 
 ### One-time setup
-1. Create a Vapi account and import each client's Twilio number
-   (docs.vapi.ai/phone-numbers/import-twilio).
-2. Create a single Vapi assistant (shared across all clients) with:
-   - Model provider: Custom LLM
-   - Custom LLM URL: `<your-public-url>/voice/chat/completions`
-   - A custom header: `Authorization: Bearer <VAPI_SHARED_SECRET value>` — required
-     once you've set `VAPI_SHARED_SECRET`; the endpoint accepts any request until
-     you do, so this step is what actually locks it down.
-   - A `transferCall` tool with an empty `destinations` list — the destination is
-     supplied dynamically by the agent per call, not configured here.
-3. Point every imported client number at this one assistant.
+1. Get an xAI API key (x.ai) and set `XAI_API_KEY` in `.env`.
+2. Register each client's phone number with xAI:
+   - **Reuse an existing Twilio number** (`origin: "byo_trunk"`) — in Twilio,
+     create an **Elastic SIP Trunk** with origination URI
+     `sip:{number}@sip.voice.x.ai;transport=tls`, and assign the client's Twilio
+     number to that trunk. xAI still manages the routing endpoint even though the
+     number itself stays with Twilio.
+   - Or take one of xAI's own **Direct SIP numbers** directly, no Twilio number
+     needed for voice at all.
+3. Registration returns a **signing secret** — set it as `XAI_SIGNING_SECRET`.
+4. Set the client's `xai_phone_number` field to the registered number (this is
+   separate from `inbound_number`, which stays the Twilio number used for SMS).
+
+### How a call flows
+xAI sends a signed `realtime.call.incoming` webhook to
+`POST /webhook/xai-incoming-call` with a `call_id`. We verify the signature,
+look up the client by `xai_phone_number`, and spawn `xai_voice_adapter.run_call()`
+as a background task — it opens `wss://api.x.ai/v1/realtime?call_id={call_id}`,
+sends a `session.update` (voice, the same `build_voice_system_prompt` the old Vapi
+path used, and the `log_job`/`transfer_call` tools), and streams for the life of
+the call. Job/message persistence works the same as before.
+
+### Unverified — needs a real test call
+The exact webhook body field names (`call_id`, `to`, `from`) and the
+`x-xai-signature` header are read from xAI's docs, not a confirmed live payload.
+The first real call may 400/404 on a field-name mismatch — check the raw webhook
+body if so and adjust `xai_incoming_call()` / `verify_webhook_signature()`
+accordingly. Also unverified: whether `response.done` events actually carry a
+`transcript` field in the shape `_extract_transcript()` expects — confirm once a
+real call has run, since dashboard message history depends on it.
 
 ### Local testing (no deployment yet)
-Needs `ANTHROPIC_API_KEY` set in `.env` — same as the SMS agent, `/voice/chat/completions`
-calls the live Claude API, so nothing will respond without it.
-
-Vapi needs a public URL to reach your local server:
+Needs `ANTHROPIC_API_KEY` in `.env` (the agent's reasoning) and `XAI_API_KEY` (the
+voice layer). Because xAI reaches your server via a webhook (not a per-turn HTTP
+call from a service you control), you need a public URL even for local testing:
 ```bash
 ./run.sh                 # starts the app on :8000
 ngrok http 8000           # in a second terminal; gives you a public https URL
 ```
-Use the `ngrok` URL (plus `/voice/chat/completions`) as the assistant's Custom LLM
-URL while testing. Call the imported Twilio number from your phone to test live;
-confirm the job shows up in `/clients/<id>` and that a deliberately hard question
-("I want to speak to a manager right now") triggers a live transfer to the
-`escalation_phone` on file.
-
-### Authentication
-`/voice/chat/completions` requires a shared-secret bearer token once
-`VAPI_SHARED_SECRET` is set in `.env` — a request with a missing or wrong
-`Authorization: Bearer <secret>` header gets `401` immediately, before any Claude
-call or DB lookup. **Until `VAPI_SHARED_SECRET` is set, the endpoint accepts any
-request** — this is the one operator action that actually closes the gap; do it
-before pointing a real client's number at this in production.
-
-### Per-client onboarding
-When adding a client for this agent: ask whether the AI should answer every call
-or only unanswered ones, set `answer_mode` accordingly (`primary`/`backup`) on the
-new-client form, and have them set matching call forwarding on their existing
-number (forward-all vs. forward-on-no-answer) to the Twilio number you imported
-into Vapi.
+Use the `ngrok` URL + `/webhook/xai-incoming-call` when registering the number
+with xAI. Call the number from your phone; confirm the job shows up in
+`/clients/<id>` and that a deliberately hard question ("I want to speak to a
+manager right now") triggers a live transfer to the `escalation_phone` on file.
 
 ## Revenue Recovery (quote follow-up + reactivation)
 

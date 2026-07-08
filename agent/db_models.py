@@ -17,8 +17,12 @@ class Client(SQLModel, table=True):
     escalation_phone: str
     answer_mode: str = Field(default="backup")  # "primary" or "backup" - set during onboarding
     inbound_number: Optional[str] = None  # the business line customers text/call; routes inbound SMS
+    xai_phone_number: Optional[str] = None  # number registered with xAI's Voice Agent API (see xai_voice_adapter.py); unset = no live-voice receptionist configured for this client yet
+    xai_signing_secret: Optional[str] = None  # webhook signing secret returned when xai_phone_number was registered (per-number, not account-wide — see provisioning.py)
+    twilio_number_sid: Optional[str] = None  # Twilio's SID for the purchased number, needed to later attach it to a SIP trunk
     review_link: Optional[str] = None  # owner's Google/Yelp review URL; unset until they provide one
     referral_incentive: Optional[str] = None  # e.g. "$25 off"; unset = referrals off for this client
+    requested_roster: Optional[str] = None  # JSON list of extra agents the owner asked for during self-serve /hire (e.g. ["chaser", "custom: chase permits"]); Frontdesk is the primary hire the flow configures, these are queued for founder setup
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
     @property

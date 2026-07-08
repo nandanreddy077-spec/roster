@@ -130,7 +130,7 @@ class AgentEngine:
 
         `log_job` is resolved internally (the loop feeds an acknowledgment back and
         keeps going). Any other tool call (e.g. `transfer_call`) is a passthrough:
-        only the caller (e.g. Vapi) can actually execute it, so the loop stops
+        only the caller (e.g. the live-voice provider) can actually execute it, so the loop stops
         immediately and returns it as `pending_tool_call` instead of resolving it.
 
         Returns:
