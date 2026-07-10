@@ -11,6 +11,7 @@ from sqlmodel import Session, select
 
 from db_models import Client, Job, Message
 from engine import AgentEngine, merge_consecutive_roles
+from trial_cap import can_respond, record_usage
 
 agent = AgentEngine()
 
@@ -30,8 +31,11 @@ def handle_customer_message(
 ) -> Dict[str, Any]:
     """Run one customer turn through the agent. Persists messages and any jobs.
 
-    Returns {"reply": str, "jobs": list[Job]}. Does not send anything itself —
-    the caller decides how the reply leaves the building (TwiML, REST, or UI).
+    Returns {"reply": str | None, "jobs": list[Job]}. `reply` is None once the
+    client's trial spend cap (hard cap + soft buffer) is exhausted — the
+    inbound message is still recorded, but no paid model call is made and no
+    reply is sent. Does not send anything itself — the caller decides how the
+    reply leaves the building (TwiML, REST, or UI).
     """
     history = _load_history(session, client.id, customer_phone)
     history.append({"role": "user", "content": [{"type": "text", "text": text}]})
@@ -44,8 +48,13 @@ def handle_customer_message(
             content_json=json.dumps(text),
         )
     )
+    session.commit()
+
+    if not can_respond(client):
+        return {"reply": None, "jobs": []}
 
     result = agent.respond(client.to_config(), history)
+    record_usage(session, client)
 
     # The engine produced the full turn (assistant tool_use, tool_result, final
     # reply); persist each so the next turn loads valid alternating history.

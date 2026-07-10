@@ -105,6 +105,10 @@ def twiml_reply(body: str) -> Response:
     return Response(content=xml, media_type="application/xml")
 
 
+def twiml_empty() -> Response:
+    return Response(content='<?xml version="1.0" encoding="UTF-8"?><Response></Response>', media_type="application/xml")
+
+
 # ---- Public landing page ---------------------------------------------------
 # The marketing site is served by this same app (Railway's root directory is
 # agent/, so files outside it never reach the deployed image). index.html links
@@ -521,10 +525,12 @@ async def inbound_sms(From: str = Form(...), To: str = Form(...), Body: str = Fo
     is checked next — a one-shot capture with nothing time-sensitive about it,
     so it comes after Recovery's active negotiation but still ahead of Frontdesk."""
     reply = await run_in_threadpool(_process_inbound_sms, From, To, Body)
+    if reply is None:
+        return twiml_empty()
     return twiml_reply(reply)
 
 
-def _process_inbound_sms(from_number: str, to_number: str, body: str) -> str:
+def _process_inbound_sms(from_number: str, to_number: str, body: str) -> str | None:
     """The actual (blocking) work for an inbound SMS turn — runs in a worker
     thread so one slow Claude call doesn't stall every other concurrent call/text
     this process is handling (see run_in_threadpool call above)."""

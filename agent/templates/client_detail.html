@@ -35,6 +35,9 @@
       {% if provision_error %}
       <p class="job-notes">{{ provision_error }}</p>
       {% endif %}
+      {% if client.trial_spend_cents >= client.trial_cap_cents %}
+      <p class="job-notes">⚠ Trial cap reached (${{ "%.2f"|format(client.trial_spend_cents / 100) }} spent, ${{ "%.2f"|format((client.trial_cap_cents + client.trial_soft_buffer_cents) / 100) }} hard stop) — raise the cap or move this client to paid.</p>
+      {% endif %}
     </div>
 
     {% for face in ["quote", "reactivation", "membership"] %}

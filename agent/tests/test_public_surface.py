@@ -121,3 +121,30 @@ def test_sms_webhook_is_public(monkeypatch, test_engine):
     # Unknown number → polite TwiML fallback, but crucially not 401/503.
     assert response.status_code == 200
     assert "isn't set up" in response.text
+
+
+def test_sms_webhook_stays_silent_once_trial_cap_exhausted(monkeypatch, test_engine):
+    monkeypatch.setenv("ADMIN_PASSWORD", "hunter2")
+    monkeypatch.setattr(app_module, "engine", test_engine)
+    from sqlmodel import Session
+
+    from db_models import Client
+
+    with Session(test_engine) as session:
+        session.add(
+            Client(
+                email="owner@example.com", password_hash="x", business_name="Ridgeline",
+                trade="Plumbing", services_json="[]", hours="9-5", escalation_phone="555",
+                inbound_number="+15559998888",
+                trial_spend_cents=2200, trial_cap_cents=2000, trial_soft_buffer_cents=200,
+            )
+        )
+        session.commit()
+
+    client = TestClient(app_module.app)
+    response = client.post(
+        "/webhook/sms",
+        data={"From": "+15550001111", "To": "+15559998888", "Body": "hello"},
+    )
+    assert response.status_code == 200
+    assert "<Message>" not in response.text
