@@ -42,7 +42,16 @@ and a native cron-schedule feature, without needing a Dockerfile.
    - `ADMIN_PASSWORD` — the founder-dashboard password. `/clients` (every shop's
      conversations and jobs) sits behind HTTP Basic auth with it; if unset, the
      dashboard fail-closes with a 503 instead of serving publicly. The landing
-     page (`/`) and self-serve hire flow (`/hire`) stay public.
+     page (`/`) and self-serve signup flow (`/signup`) stay public.
+   - `SESSION_SECRET_KEY` — **required in production.** Signs the customer-portal
+     session cookie (the `/signup → /dashboard` flow). It has an insecure dev
+     fallback, so if you don't set it here every redeploy logs customers out and
+     the cookie is forgeable. Generate one with
+     `python -c "import secrets; print(secrets.token_urlsafe(48))"`.
+   - `FOUNDER_ALERT_PHONE` — optional. The number that gets the one-time SMS when
+     a trial client crosses their spend cap (needs `TWILIO_*` set to actually
+     send). Unset = no SMS, but the founder dashboard still shows a cap-reached
+     badge on that client.
    - `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN` — once you have a Twilio number (see
      below). Twilio is SMS-only now (Chaser, Rebooker, Renewals, Referrals, Reviews,
      Frontdesk text-back) — it no longer carries live voice.
@@ -58,10 +67,33 @@ and a native cron-schedule feature, without needing a Dockerfile.
      service, and set the same `ROSTER_DATA_DIR=/data` env var — this service must
      read/write the *same* database file the web service uses, not a separate one.
 6. **Copy the web service's public URL** (Railway assigns one automatically,
-   `https://<something>.up.railway.app`, or attach a custom domain) — this is the
-   URL Twilio's SMS webhooks point at, and the URL xAI's `realtime.call.incoming`
-   webhook points at, below — replacing every `<your-public-url>` / `ngrok`
-   reference in this README.
+   `https://<something>.up.railway.app`, or attach a custom domain per below) —
+   this is the URL Twilio's SMS webhooks point at, and the URL xAI's
+   `realtime.call.incoming` webhook points at, below — replacing every
+   `<your-public-url>` / `ngrok` reference in this README.
+
+### Attaching your custom domain
+
+Do this on the **web service** (not the cron service — that one has no public URL).
+
+1. In Railway: web service → **Settings → Networking → Custom Domain**, enter your
+   domain (e.g. `app.yourdomain.com` for a subdomain, or the apex `yourdomain.com`).
+2. Railway shows you a **DNS target** to point at:
+   - **Subdomain** (recommended, e.g. `app.` or `www.`): add a **CNAME** record at
+     your registrar with that host, pointing at the `...railway.app` target Railway
+     gives you.
+   - **Apex/root** (`yourdomain.com` with no subdomain): most registrars can't
+     CNAME the apex. Either use a registrar that supports **ALIAS/ANAME** at the
+     root pointing at Railway's target, or use your registrar's forwarding to
+     redirect the apex to the `www` subdomain and put the CNAME on `www`.
+3. Wait for DNS to propagate (usually minutes, up to ~24h). Railway auto-issues the
+   HTTPS certificate once it resolves — no cert work on your side.
+4. **After the domain is live, update the two things that hardcode a URL:**
+   - Twilio number → Messaging webhook → `https://<your-domain>/webhook/sms`
+     (see "SMS agents" below).
+   - The landing page's contact/CTA copy is domain-agnostic (links are relative
+     `/signup`), so nothing to change there — but double-check any absolute URL if
+     you add one later.
 
 ### Why SQLite, not Postgres
 
