@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Hire your AI employee — Roster</title>
+<meta name="robots" content="noindex">
+<link rel="stylesheet" href="/static/portal.css">
+</head>
+<body>
+<header class="nav"><a class="logo" href="/">Roster</a></header>
+
+<div class="portal-card">
+  <h2>Hire your AI employee</h2>
+  <p class="lede">Create your account — we'll ask a couple of quick questions about your business next.</p>
+
+  <form method="post" action="/signup">
+    <input type="hidden" name="trade" value="{{ trade }}">
+    <div class="field">
+      <label for="email">Email</label>
+      <input type="email" id="email" name="email" value="{{ email }}" required autocomplete="email">
+    </div>
+    <div class="field">
+      <label for="password">Password</label>
+      <input type="password" id="password" name="password" required autocomplete="new-password" minlength="8">
+    </div>
+    <button type="submit" class="btn btn-primary">Create account</button>
+    <div class="err">{{ error or "" }}</div>
+  </form>
+
+  <p class="portal-foot">Already hired your team? <a href="/login">Log in</a></p>
+</div>
+</body>
+</html>

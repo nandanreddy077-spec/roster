@@ -17,6 +17,7 @@ from starlette.middleware.sessions import SessionMiddleware
 from channels import get_channel
 from db import engine, init_db
 from db_models import Client, Job, Message, RecoveryCampaign, RecoveryJob, ReferralLead
+from portal import router as portal_router
 from provisioning import ProvisioningError, attach_number_to_xai_trunk, buy_twilio_number, register_number_with_xai
 from recovery_engine import FACE_DISPLAY_NAMES
 from recovery_service import create_campaign, find_active_recovery_job, handle_recovery_reply
@@ -45,6 +46,7 @@ app.add_middleware(
 app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="static")
 templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
 sms_channel = get_channel()
+app.include_router(portal_router)
 
 init_db()
 
