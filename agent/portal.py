@@ -56,3 +56,30 @@ def signup_submit(request: Request, email: str = Form(...), password: str = Form
         if trade.strip():
             request.session["prefill_trade"] = trade.strip()
     return RedirectResponse("/onboarding/business", status_code=303)
+
+
+@router.get("/login")
+def login_form(request: Request):
+    return templates.TemplateResponse(request, "login.html", {"error": None, "email": ""})
+
+
+@router.post("/login")
+def login_submit(request: Request, email: str = Form(...), password: str = Form(...)):
+    email = email.strip().lower()
+    with Session(engine) as session:
+        client = session.exec(select(Client).where(Client.email == email)).first()
+        if client is None or not client.password_hash or not verify_password(password, client.password_hash):
+            return templates.TemplateResponse(
+                request,
+                "login.html",
+                {"error": "Invalid email or password.", "email": email},
+                status_code=400,
+            )
+        request.session["client_id"] = client.id
+    return RedirectResponse("/dashboard", status_code=303)
+
+
+@router.post("/logout")
+def logout(request: Request):
+    request.session.clear()
+    return RedirectResponse("/login", status_code=303)
