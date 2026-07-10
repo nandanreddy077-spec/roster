@@ -19,6 +19,7 @@ from referral_engine import (
     build_referral_reply_prompt,
     render_referral_template,
 )
+from trial_cap import can_respond, record_usage
 
 agent = AgentEngine()
 sms_channel = get_channel()
@@ -92,10 +93,27 @@ def find_active_referral_ask(session: Session, client_id: int, customer_phone: s
     return None
 
 
-def handle_referral_reply(session: Session, client: Client, job: Job, text: str) -> str:
+def handle_referral_reply(session: Session, client: Client, job: Job, text: str) -> Optional[str]:
     """Process an inbound reply to a referral ask. Always logs a ReferralLead,
     regardless of whether Claude can extract a clean name/phone from the
     reply — the raw text is never lost just because extraction was messy."""
+    # Trial cap: past the soft buffer, skip the paid extraction call — but
+    # still persist the raw reply so the "raw text is never lost" guarantee
+    # holds even when we can't run extraction.
+    if not can_respond(client):
+        session.add(
+            ReferralLead(
+                client_id=client.id,
+                source_job_id=job.id,
+                asker_phone=job.callback_number,
+                referred_name=None,
+                referred_phone=None,
+                raw_reply_text=text,
+            )
+        )
+        session.commit()
+        return None
+
     history = [{"role": "user", "content": [{"type": "text", "text": text}]}]
     result = agent.respond(
         client.to_config(),
@@ -104,6 +122,7 @@ def handle_referral_reply(session: Session, client: Client, job: Job, text: str)
         system_prompt=build_referral_reply_prompt(),
         max_iters=2,
     )
+    record_usage(session, client)
     pending = result["pending_tool_call"]
     referred_name = None
     referred_phone = None

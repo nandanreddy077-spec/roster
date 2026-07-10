@@ -22,6 +22,7 @@ from recovery_engine import (
     build_recovery_reply_prompt,
     render_template,
 )
+from trial_cap import can_respond, record_usage
 
 agent = AgentEngine()
 sms_channel = get_channel()
@@ -160,7 +161,7 @@ def tick(session: Session) -> List[RecoveryJob]:
 STOP_KEYWORDS = {"stop", "stopall", "unsubscribe", "cancel", "end", "quit"}
 
 
-def handle_recovery_reply(session: Session, client: Client, job: RecoveryJob, text: str) -> str:
+def handle_recovery_reply(session: Session, client: Client, job: RecoveryJob, text: str) -> Optional[str]:
     """Process an inbound reply to an active Recovery sequence. Returns the text
     to send back to the customer (caller sends it — TwiML for SMS)."""
     log = session.exec(
@@ -180,6 +181,13 @@ def handle_recovery_reply(session: Session, client: Client, job: RecoveryJob, te
         session.commit()
         return "You've been unsubscribed and won't receive further messages. Reply START to resume."
 
+    # Trial cap: STOP is always honored (free); a paid follow-up turn is not.
+    # Past the soft buffer, skip the paid call and stay silent (webhook sends
+    # empty TwiML). The customer's reply is already logged above, so nothing
+    # is lost.
+    if not can_respond(client):
+        return None
+
     history = [{"role": "user", "content": [{"type": "text", "text": text}]}]
 
     if job.current_status == "awaiting_slot":
@@ -190,6 +198,7 @@ def handle_recovery_reply(session: Session, client: Client, job: RecoveryJob, te
             system_prompt=build_recovery_reply_prompt(job, offered_slots=job.offered_slots),
             max_iters=2,
         )
+        record_usage(session, client)
         reply = result["reply"] or "Sorry, could you confirm which time works — the first, second, or third option?"
         pending = result["pending_tool_call"]
         if pending and pending["name"] == "confirm_slot":
@@ -232,6 +241,7 @@ def handle_recovery_reply(session: Session, client: Client, job: RecoveryJob, te
         system_prompt=build_recovery_reply_prompt(job),
         max_iters=2,
     )
+    record_usage(session, client)
     pending = result["pending_tool_call"]
     intent = pending["input"]["intent"] if pending and pending["name"] == "record_response" else None
 

@@ -33,6 +33,7 @@ class Client(SQLModel, table=True):
     trial_spend_cents: int = 0
     trial_cap_cents: int = 2000  # $20 hard cap
     trial_soft_buffer_cents: int = 200  # $2 grace on top of the hard cap — see trial_cap.py
+    trial_cap_notified: bool = False  # set once the founder has been alerted the hard cap was crossed, so the alert fires only once
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
     @property
