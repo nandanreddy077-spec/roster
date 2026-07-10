@@ -13,6 +13,7 @@ from fastapi.responses import RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlmodel import Session, select
 
+from activation import activate_frontdesk
 from auth import hash_password, verify_password
 from db import engine
 from db_models import Client
@@ -117,3 +118,35 @@ def onboarding_business_submit(
         session.add(client)
         session.commit()
     return RedirectResponse("/onboarding/receptionist", status_code=303)
+
+
+@router.get("/onboarding/receptionist")
+def onboarding_receptionist_form(request: Request):
+    with Session(engine) as session:
+        client = _current_client(request, session)
+        if client is None:
+            return RedirectResponse("/login", status_code=303)
+        if client.frontdesk_live:
+            return RedirectResponse("/dashboard", status_code=303)
+        if not client.business_name:
+            return RedirectResponse("/onboarding/business", status_code=303)
+    return templates.TemplateResponse(request, "onboarding_receptionist.html", {})
+
+
+@router.post("/onboarding/receptionist")
+def onboarding_receptionist_submit(request: Request, escalation_phone: str = Form(...)):
+    with Session(engine) as session:
+        client = _current_client(request, session)
+        if client is None:
+            return RedirectResponse("/login", status_code=303)
+        if not client.business_name:
+            return RedirectResponse("/onboarding/business", status_code=303)
+        client.escalation_phone = escalation_phone.strip()
+        client.pricing_faq = (
+            "Escalation: Hand off to the owner for emergencies and any caller "
+            "who asks for a person; handle everything else."
+        )
+        session.add(client)
+        session.commit()
+        activate_frontdesk(session, client)
+    return RedirectResponse("/activation/live", status_code=303)

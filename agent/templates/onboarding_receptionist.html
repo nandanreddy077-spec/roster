@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>One last thing — Roster</title>
+<meta name="robots" content="noindex">
+<link rel="stylesheet" href="/static/portal.css">
+</head>
+<body>
+<header class="nav"><a class="logo" href="/">Roster</a></header>
+
+<div class="portal-card">
+  <h2>One last thing</h2>
+  <p class="lede">Where should we reach you if something needs your attention — an emergency, or a caller who asks for a person?</p>
+
+  <form method="post" action="/onboarding/receptionist">
+    <div class="field">
+      <label for="escalation_phone">Your cell <span class="hint">— never shared with customers</span></label>
+      <input type="tel" id="escalation_phone" name="escalation_phone" required autocomplete="tel" placeholder="(555) 555-0142">
+    </div>
+    <button type="submit" class="btn btn-primary">Hire</button>
+  </form>
+</div>
+</body>
+</html>
