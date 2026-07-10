@@ -135,7 +135,12 @@ def onboarding_receptionist_form(request: Request):
 
 
 @router.post("/onboarding/receptionist")
-def onboarding_receptionist_submit(request: Request, escalation_phone: str = Form(...)):
+def onboarding_receptionist_submit(
+    request: Request,
+    escalation_phone: str = Form(...),
+    answer_mode: str = Form("backup"),
+    business_phone: str = Form(""),
+):
     with Session(engine) as session:
         client = _current_client(request, session)
         if client is None:
@@ -143,6 +148,10 @@ def onboarding_receptionist_submit(request: Request, escalation_phone: str = For
         if not client.business_name:
             return RedirectResponse("/onboarding/business", status_code=303)
         client.escalation_phone = escalation_phone.strip()
+        # "primary" = AI answers every call; "backup" = AI catches only missed
+        # calls. Anything unexpected falls back to the safe backup mode.
+        client.answer_mode = answer_mode if answer_mode in ("primary", "backup") else "backup"
+        client.business_phone = business_phone.strip()
         client.pricing_faq = (
             "Escalation: Hand off to the owner for emergencies and any caller "
             "who asks for a person; handle everything else."

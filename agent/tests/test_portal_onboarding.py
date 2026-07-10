@@ -89,3 +89,52 @@ def test_onboarding_receptionist_activates_and_redirects(monkeypatch, test_engin
         saved = select_client_by_email("owner@example.com", session)
     assert saved.escalation_phone == "(555) 555-0101"
     assert saved.frontdesk_live is True
+
+
+def test_onboarding_receptionist_saves_answer_mode_and_business_phone(monkeypatch, test_engine):
+    monkeypatch.setattr(app_module, "engine", test_engine)
+    monkeypatch.setattr(db_module, "engine", test_engine)
+    monkeypatch.setattr(portal_module, "engine", test_engine)
+    monkeypatch.delenv("TWILIO_ACCOUNT_SID", raising=False)
+    monkeypatch.delenv("TWILIO_AUTH_TOKEN", raising=False)
+    client = TestClient(app_module.app)
+    _signed_up_client(client)
+    client.post(
+        "/onboarding/business",
+        data={"business_name": "Ridgeline Plumbing", "trade": "Plumbing", "services": "Drains", "hours": "9-5"},
+    )
+
+    client.post(
+        "/onboarding/receptionist",
+        data={
+            "escalation_phone": "(555) 555-0101",
+            "answer_mode": "primary",
+            "business_phone": "(555) 999-1000",
+        },
+    )
+
+    with Session(test_engine) as session:
+        saved = select_client_by_email("owner@example.com", session)
+    assert saved.answer_mode == "primary"
+    assert saved.business_phone == "(555) 999-1000"
+
+
+def test_onboarding_receptionist_defaults_answer_mode_to_backup_on_bad_value(monkeypatch, test_engine):
+    monkeypatch.setattr(app_module, "engine", test_engine)
+    monkeypatch.setattr(db_module, "engine", test_engine)
+    monkeypatch.setattr(portal_module, "engine", test_engine)
+    monkeypatch.delenv("TWILIO_ACCOUNT_SID", raising=False)
+    monkeypatch.delenv("TWILIO_AUTH_TOKEN", raising=False)
+    client = TestClient(app_module.app)
+    _signed_up_client(client)
+    client.post(
+        "/onboarding/business",
+        data={"business_name": "Ridgeline Plumbing", "trade": "Plumbing", "services": "Drains", "hours": "9-5"},
+    )
+    client.post(
+        "/onboarding/receptionist",
+        data={"escalation_phone": "x", "answer_mode": "garbage"},
+    )
+    with Session(test_engine) as session:
+        saved = select_client_by_email("owner@example.com", session)
+    assert saved.answer_mode == "backup"

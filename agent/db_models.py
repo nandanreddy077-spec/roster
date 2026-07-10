@@ -15,7 +15,8 @@ class Client(SQLModel, table=True):
     hours: str = ""
     pricing_faq: str = ""
     escalation_phone: str = ""
-    answer_mode: str = Field(default="backup")  # "primary" or "backup" - set during onboarding
+    answer_mode: str = Field(default="backup")  # "primary" (AI picks up every call) or "backup" (AI catches only calls the owner misses) - asked during onboarding; drives the call-forwarding instructions
+    business_phone: str = ""  # the number customers currently dial; the owner forwards it to inbound_number so calls reach the receptionist
     inbound_number: Optional[str] = None  # the business line customers text/call; routes inbound SMS
     xai_phone_number: Optional[str] = None  # number registered with xAI's Voice Agent API (see xai_voice_adapter.py); unset = no live-voice receptionist configured for this client yet
     xai_signing_secret: Optional[str] = None  # webhook signing secret returned when xai_phone_number was registered (per-number, not account-wide — see provisioning.py)

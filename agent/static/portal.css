@@ -58,6 +58,9 @@ h1, h2, .logo { font-family: var(--serif); font-weight: 600; color: var(--ink); 
   color: var(--text);
 }
 .field textarea { min-height: 90px; resize: vertical; }
+.field input[type="radio"] { width: auto; padding: 0; margin: 3px 10px 0 0; flex-shrink: 0; }
+.choice { display: flex; align-items: flex-start; font-size: 14px; color: var(--text); cursor: pointer; line-height: 1.45; }
+.choice strong { color: var(--text); }
 
 .btn {
   display: inline-block;

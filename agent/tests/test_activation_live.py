@@ -40,3 +40,21 @@ def test_activation_live_shows_role_name_and_checklist(monkeypatch, test_engine)
     assert "Receptionist" in response.text  # Plumbing -> "Receptionist" per roles.py
     assert "Ridgeline Plumbing" in response.text
     assert "Answer" in response.text
+
+
+def test_activation_live_shows_connect_your_line(monkeypatch, test_engine):
+    monkeypatch.setattr(app_module, "engine", test_engine)
+    monkeypatch.setattr(db_module, "engine", test_engine)
+    monkeypatch.setattr(portal_module, "engine", test_engine)
+    monkeypatch.delenv("TWILIO_ACCOUNT_SID", raising=False)
+    monkeypatch.delenv("TWILIO_AUTH_TOKEN", raising=False)
+    client = TestClient(app_module.app)
+    _fully_onboarded_client(client)
+
+    response = client.get("/activation/live")
+    assert response.status_code == 200
+    # The forwarding step is how calls actually reach the receptionist — it must
+    # be surfaced. No Twilio creds in test → no inbound_number → the
+    # "we're setting up your number, here's what forwarding will do" variant.
+    assert "Connect your line" in response.text
+    assert "forward" in response.text.lower()

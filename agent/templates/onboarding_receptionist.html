@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>One last thing — Roster</title>
+<title>How should your receptionist work? — Roster</title>
 <meta name="robots" content="noindex">
 <link rel="stylesheet" href="/static/portal.css">
 </head>
@@ -11,14 +11,34 @@
 <header class="nav"><a class="logo" href="/">Roster</a></header>
 
 <div class="portal-card">
-  <h2>One last thing</h2>
-  <p class="lede">Where should we reach you if something needs your attention — an emergency, or a caller who asks for a person?</p>
+  <h2>How should your receptionist work?</h2>
+  <p class="lede">A couple of quick calls about how you want them to answer the phone — the way you'd brief any new hire on day one.</p>
 
   <form method="post" action="/onboarding/receptionist">
+    <fieldset class="field" style="border:none; padding:0; margin:0 0 20px;">
+      <legend style="font-weight:600; margin-bottom:8px;">When should they pick up?</legend>
+      <label class="choice" style="margin-bottom:10px;">
+        <input type="radio" name="answer_mode" value="backup" checked>
+        <span><strong>Only the calls I miss.</strong> They're my backup — if I don't answer after a few rings, they take it.</span>
+      </label>
+      <label class="choice">
+        <input type="radio" name="answer_mode" value="primary">
+        <span><strong>Every call.</strong> I want them to answer first, every time.</span>
+      </label>
+    </fieldset>
+
     <div class="field">
-      <label for="escalation_phone">Your cell <span class="hint">— never shared with customers</span></label>
-      <input type="tel" id="escalation_phone" name="escalation_phone" required autocomplete="tel" placeholder="(555) 555-0142">
+      <label for="business_phone">What number do customers call today? <span class="hint">— your business line</span></label>
+      <input type="tel" id="business_phone" name="business_phone" autocomplete="tel" placeholder="(555) 123-4567">
+      <p class="hint" style="margin-top:6px;">We'll give you a number to forward this to so calls reach your receptionist — takes about 2 minutes.</p>
     </div>
+
+    <div class="field">
+      <label for="escalation_phone">Your personal cell <span class="hint">— never shared with customers</span></label>
+      <input type="tel" id="escalation_phone" name="escalation_phone" required autocomplete="tel" placeholder="(555) 555-0142">
+      <p class="hint" style="margin-top:6px;">Where we text <em>you</em> if there's an emergency or a caller insists on a real person.</p>
+    </div>
+
     <button type="submit" class="btn btn-primary">Hire</button>
   </form>
 </div>

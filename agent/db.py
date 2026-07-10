@@ -51,6 +51,8 @@ def _migrate_add_columns():
         "ALTER TABLE client ADD COLUMN trial_cap_cents INTEGER DEFAULT 2000",
         "ALTER TABLE client ADD COLUMN trial_soft_buffer_cents INTEGER DEFAULT 200",
         "ALTER TABLE client ADD COLUMN trial_cap_notified BOOLEAN DEFAULT 0",
+        "ALTER TABLE client ADD COLUMN answer_mode VARCHAR DEFAULT 'backup'",
+        "ALTER TABLE client ADD COLUMN business_phone VARCHAR DEFAULT ''",
     )
     with engine.connect() as conn:
         for ddl in statements:

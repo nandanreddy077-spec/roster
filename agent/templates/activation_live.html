@@ -30,5 +30,18 @@
   {% endif %}
   <a class="btn btn-secondary" href="/dashboard" style="display:block; text-align:center; margin-top:12px;">Go to dashboard</a>
 </div>
+
+<div class="portal-card" style="margin-top:16px;">
+  <p style="font-weight:600; margin-bottom:8px;">Connect your line</p>
+  {% if client.inbound_number %}
+    {% if client.answer_mode == "primary" %}
+    <p class="lede">Forward <strong>all</strong> your calls to your new number, <strong>{{ client.inbound_number }}</strong> — your {{ role_name }} picks up first, every time. It takes about 2 minutes on your phone; we'll email the exact steps for your carrier.</p>
+    {% else %}
+    <p class="lede">Set your business line to forward the calls you don't answer (after 3–4 rings) to your new number, <strong>{{ client.inbound_number }}</strong> — your {{ role_name }} catches every one you miss. It takes about 2 minutes; we'll email the exact steps for your carrier.</p>
+    {% endif %}
+  {% else %}
+    <p class="lede">We're setting up your dedicated number now. The moment it's ready we'll text you the 2-minute steps to forward {% if client.business_phone %}<strong>{{ client.business_phone }}</strong>{% else %}your business line{% endif %} to it — that's the piece that connects your {{ role_name }} to your phone, so no call goes unanswered.</p>
+  {% endif %}
+</div>
 </body>
 </html>
