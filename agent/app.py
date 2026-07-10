@@ -12,6 +12,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from sqlmodel import Session, func, select
 from starlette.concurrency import run_in_threadpool
+from starlette.middleware.sessions import SessionMiddleware
 
 from channels import get_channel
 from db import engine, init_db
@@ -32,6 +33,15 @@ LANDING_DIR = BASE_DIR / "landing"
 DASHBOARD_THREAD = "dashboard"
 
 app = FastAPI(title="Roster")
+# Customer-portal session cookie — separate from the founder's HTTP-Basic
+# admin auth above. SESSION_SECRET_KEY signs the cookie; a dev fallback keeps
+# local runs working without extra setup (unlike ADMIN_PASSWORD, a leaked
+# portal session cookie only exposes one customer's own dashboard, not every
+# client's data, so this doesn't need to fail closed).
+app.add_middleware(
+    SessionMiddleware,
+    secret_key=os.environ.get("SESSION_SECRET_KEY", "dev-only-insecure-secret-change-in-production"),
+)
 app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="static")
 templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
 sms_channel = get_channel()

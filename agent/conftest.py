@@ -16,6 +16,11 @@ def _admin_password(monkeypatch):
     monkeypatch.setenv("ADMIN_PASSWORD", TEST_ADMIN_PASSWORD)
 
 
+@pytest.fixture(autouse=True)
+def _session_secret(monkeypatch):
+    monkeypatch.setenv("SESSION_SECRET_KEY", "test-session-secret-key")
+
+
 @pytest.fixture
 def test_engine():
     # StaticPool keeps a single shared connection across threads. Needed because
