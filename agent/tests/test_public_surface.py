@@ -1,4 +1,4 @@
-"""The deployed app has exactly two faces: a public one (landing, hire flow,
+"""The deployed app has exactly two faces: a public one (landing, signup flow,
 webhooks) and a founder-only one (/clients dashboard, behind HTTP Basic).
 These tests pin that boundary — the dashboard must never serve without
 credentials, and the public surface must never *require* them."""
@@ -7,6 +7,8 @@ import base64
 from fastapi.testclient import TestClient
 
 import app as app_module
+import db as db_module
+import portal as portal_module
 
 
 def _basic(password: str) -> dict:
@@ -76,36 +78,27 @@ def test_landing_stylesheet_served(monkeypatch):
     assert response.headers["content-type"].startswith("text/css")
 
 
-def test_hire_flow_is_public(monkeypatch):
+def test_signup_flow_is_public(monkeypatch):
     monkeypatch.delenv("ADMIN_PASSWORD", raising=False)
     client = TestClient(app_module.app)
-    response = client.get("/hire")
+    response = client.get("/signup")
     assert response.status_code == 200
-    assert "Frontdesk" in response.text
+    assert "Roster" in response.text
 
 
-def test_hire_submit_is_public(monkeypatch, test_engine):
+def test_signup_submit_is_public(monkeypatch, test_engine):
     monkeypatch.delenv("ADMIN_PASSWORD", raising=False)
     monkeypatch.setattr(app_module, "engine", test_engine)
+    monkeypatch.setattr(db_module, "engine", test_engine)
+    monkeypatch.setattr(portal_module, "engine", test_engine)
     client = TestClient(app_module.app)
     response = client.post(
-        "/hire",
-        data={
-            "business_name": "Auth Test Plumbing",
-            "inbound_number": "(555) 555-0100",
-            "trade": "Plumbing",
-            "services": "Drains",
-            "hours": "9-5",
-            "answer_mode": "backup",
-            "pricing_answer": "$79 service call",
-            "escalation_rule": "emergencies",
-            "owner_name": "Pat",
-            "escalation_phone": "(555) 555-0101",
-        },
+        "/signup",
+        data={"email": "auth-test@example.com", "password": "hunter22"},
         follow_redirects=False,
     )
     assert response.status_code == 303
-    assert response.headers["location"].startswith("/hire/done/")
+    assert response.headers["location"] == "/onboarding/business"
 
 
 def test_sms_webhook_is_public(monkeypatch, test_engine):

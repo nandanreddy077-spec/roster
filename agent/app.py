@@ -58,9 +58,9 @@ init_db()
 # build. Fail-closed: if ADMIN_PASSWORD isn't set, the dashboard refuses to
 # serve rather than silently opening up (forgetting an env var on a fresh
 # deploy must not expose client data). Public surface stays public: the
-# landing (/, /styles.css), the hire flow (/hire*), /static, and the Twilio/xAI
-# webhooks (which authenticate their own way — routing by known number, xAI
-# signature verification).
+# landing (/, /styles.css), the self-serve signup flow (/signup*), /static, and
+# the Twilio/xAI webhooks (which authenticate their own way — routing by known
+# number, xAI signature verification).
 PROTECTED_PREFIX = "/clients"
 
 
@@ -124,131 +124,6 @@ def root():
 @app.get("/styles.css")
 def landing_styles():
     return FileResponse(LANDING_DIR / "styles.css", media_type="text/css")
-
-
-# ---- Self-serve hire flow (public) -------------------------------------------
-# Psychology-driven onboarding wizard: an owner hires their Frontdesk in ~2 min
-# by answering a handful of judgment calls, framed as briefing a new employee
-# rather than configuring software (see hire.html + hire.css, DESIGN.md, and the
-# onboarding-psychology research). Creates a real, usable Client — the same model
-# the concierge /clients/new flow produces — so a pilot shop can actually go live.
-
-
-def _build_hire_sample(business_name: str, services: str, pricing_answer: str) -> dict:
-    """Builds the 'Meet your Frontdesk' sample text exchange from the owner's own
-    answers, so the confirmation shows their business — not fake stock copy. Kept
-    deterministic (no LLM call) so the confirmation page renders instantly and the
-    owner sees a concrete, trustworthy playback of how their line will be answered."""
-    first_service = (services.split(",")[0] or "that").strip().lower() or "that"
-    pricing = (pricing_answer or "").strip()
-    # Trim the owner's pricing answer to the first sentence for the sample bubble.
-    for sep in (". ", "! ", "? "):
-        if sep in pricing:
-            pricing = pricing.split(sep)[0]
-            break
-    pricing = pricing[:140].rstrip(" .") or "Happy to help — let me get you on the schedule"
-    return {
-        "greeting": f"Hi, this is {business_name} — sorry we missed your call! What's going on?",
-        "customer": f"Need someone for {first_service}, how soon can you come out?",
-        "reply": f"{pricing}. I can get a tech out this afternoon between 2–4 — want me to lock that in?",
-        "booked": "Job booked · 2:00 PM today",
-    }
-
-
-@app.get("/hire")
-def hire_form(request: Request):
-    return templates.TemplateResponse(request, "hire.html", {})
-
-
-@app.post("/hire")
-def hire_submit(
-    business_name: str = Form(...),
-    inbound_number: str = Form(...),
-    trade: str = Form(...),
-    services: str = Form(...),
-    hours: str = Form(...),
-    answer_mode: str = Form("backup"),
-    pricing_answer: str = Form(""),
-    turn_away: str = Form(""),
-    escalation_rule: str = Form("emergencies"),
-    owner_name: str = Form(""),
-    escalation_phone: str = Form(...),
-    addons: list[str] = Form(default=[]),
-    custom_role: str = Form(""),
-):
-    """Creates the Client from the wizard's answers. The five judgment calls are
-    composed into the model's free-text config fields the agent already reads:
-    pricing_answer + turn_away + escalation_rule fold into `pricing_faq`, since
-    that's the block the Frontdesk agent consults for how to talk about price,
-    scope, and when to hand off."""
-    service_list = [s.strip() for s in services.split(",") if s.strip()]
-
-    escalation_copy = {
-        "emergencies": "Hand off to the owner for emergencies and any caller who asks for a person; handle everything else.",
-        "all_new": "Gather every detail but check with the owner before booking any new job.",
-        "after_hours": "Book freely during business hours; hand off anything urgent after hours.",
-    }.get(escalation_rule, "Hand off emergencies and anyone who asks for a person.")
-
-    pricing_faq_parts = []
-    if pricing_answer.strip():
-        pricing_faq_parts.append(f"Pricing: {pricing_answer.strip()}")
-    if turn_away.strip():
-        pricing_faq_parts.append(f"Do not book / turn away: {turn_away.strip()}")
-    pricing_faq_parts.append(f"Escalation: {escalation_copy}")
-    pricing_faq = "\n".join(pricing_faq_parts)
-
-    # Extra roster picks are queued for founder setup (Frontdesk is the hire this
-    # flow actually configures). The "__custom__" sentinel becomes the free-text role.
-    requested = [a for a in addons if a and a != "__custom__"]
-    if "__custom__" in addons and custom_role.strip():
-        requested.append(f"Custom: {custom_role.strip()}")
-    requested_roster = json.dumps(requested) if requested else None
-
-    client = Client(
-        business_name=business_name.strip(),
-        trade=trade.strip(),
-        services_json=json.dumps(service_list),
-        hours=hours.strip(),
-        pricing_faq=pricing_faq,
-        escalation_phone=escalation_phone.strip(),
-        answer_mode=answer_mode if answer_mode in ("primary", "backup") else "backup",
-        inbound_number=inbound_number.strip() or None,
-        requested_roster=requested_roster,
-    )
-    with Session(engine) as session:
-        session.add(client)
-        session.commit()
-        session.refresh(client)
-        client_id = client.id
-
-    from urllib.parse import quote
-
-    suffix = f"?name={quote(owner_name.strip())}" if owner_name.strip() else ""
-    return RedirectResponse(f"/hire/done/{client_id}{suffix}", status_code=303)
-
-
-@app.get("/hire/done/{client_id}")
-def hire_done(request: Request, client_id: int):
-    with Session(engine) as session:
-        client = session.get(Client, client_id)
-    if client is None:
-        raise HTTPException(404, detail="Hire not found")
-    services = ", ".join(json.loads(client.services_json))
-    # Recover the owner's raw pricing answer from the first "Pricing: ..." line
-    # of pricing_faq (composed in hire_submit) for the sample bubble.
-    pricing_line = ""
-    for line in client.pricing_faq.splitlines():
-        if line.startswith("Pricing: "):
-            pricing_line = line[len("Pricing: "):]
-            break
-    sample = _build_hire_sample(client.business_name, services, pricing_line)
-    owner_name = request.query_params.get("name") or "you"
-    requested_roster = json.loads(client.requested_roster) if client.requested_roster else []
-    return templates.TemplateResponse(
-        request,
-        "hire_done.html",
-        {"client": client, "sample": sample, "owner_name": owner_name, "requested_roster": requested_roster},
-    )
 
 
 @app.get("/clients")
