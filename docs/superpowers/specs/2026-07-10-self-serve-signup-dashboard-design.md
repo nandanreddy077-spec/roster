@@ -1,11 +1,11 @@
 # Self-Serve Signup, Frontdesk-First Activation, Customer Dashboard
 
-**Date:** 2026-07-10
+**Date:** 2026-07-10 (revised same day after founder review)
 **Surfaces:** new `agent/auth.py`; new templates (`signup.html`, `login.html`,
-`onboarding_source.html`, `onboarding_frontdesk.html`, `dashboard.html`,
-`catalog.html`); retires `agent/templates/hire.html`, `hire_done.html`, and the
-`/hire` routes in `agent/app.py`. Founder-facing admin dashboard (Basic-Auth,
-`clients.html`, `client_detail.html`) is untouched.
+`onboarding_business.html`, `onboarding_frontdesk.html`, `activation_live.html`,
+`dashboard.html`, `catalog.html`); retires `agent/templates/hire.html`,
+`hire_done.html`, and the `/hire` routes in `agent/app.py`. Founder-facing admin
+dashboard (Basic-Auth, `clients.html`, `client_detail.html`) is untouched.
 
 ## Why
 
@@ -22,28 +22,41 @@ Two problems drove this:
    (Housecall Pro's CSR AI) already ship for free — that would erase Roster's
    differentiation ("we run it for you," not "here's a tool to configure").
 
-## Resolution: Frontdesk-first, catalog-as-expansion
+## Resolution: Frontdesk-first, minimal questions, catalog-as-expansion
 
-Signup leads with **one agent, Frontdesk** — no catalog, no choice-paralysis,
-matching the existing "hire one role at a time" positioning and avoiding the
-flat-menu failure mode already solved once in the original `/hire` wizard.
-The trade-filtered agent catalog (Chaser, Rebooker, Renewals, Reviews) only
-appears *after* Frontdesk is live, surfaced from inside the dashboard as an
-"Add another agent" expansion — proven value before asking for the next
-commitment, and outward-facing framing stays wedge-first, not platform-first.
+Signup leads with **one agent, Frontdesk** — no catalog, no choice-paralysis.
+Onboarding asks only what a real employer would tell a new hire on day one
+(hours, what you do, how to talk to customers) — everything else is deferred
+to manual edits later or to the auto-research build (see Roadmap). Attribution
+("where'd you hear about us") is asked *after* the person already trusts the
+product, not as a gate before value. The trade-filtered agent catalog
+(Chaser, Rebooker, Renewals, Reviews) only appears after Frontdesk is live,
+framed as hiring more staff, never as enabling features.
 
 ## Flow
 
 ```
 /signup (email + password)
-   → /onboarding/source     ("where'd you hear about us?" + trade: HVAC/plumbing/electrical/...)
-   → /onboarding/frontdesk  (shared business profile: hours, services, tone
-                             + Frontdesk's own 1-2 judgment-call questions)
+   → /onboarding/business   (business name, hours, one-line "what do you do",
+                             tone — 4 fields, ~30 seconds)
+   → /onboarding/frontdesk  (0-1 Frontdesk-specific question, only if genuinely needed)
    → activation             (provision Twilio number if missing, mark Frontdesk
                              live, initialize trial spend cap)
-   → /dashboard             (outcomes summary: calls answered, jobs booked)
-       → "Add another agent" opens the trade-filtered catalog; each agent picked
-         gets its own 1-2 short questions, then goes live the same way.
+   → "Your employee is live" reveal (activation_live.html):
+        Frontdesk is live. Your new number: (555) 123-4567.
+        We're now answering calls for <business name>.
+        Checklist: Answer calls / Book jobs / Send confirmations.
+        [Go to dashboard]
+   → /dashboard
+        - Zero-data state: "Frontdesk: Live — waiting for your first call." + [Test it now]
+          (dials the client's own new number)
+        - Once Job/Message rows exist for this client: switches to outcomes
+          (calls answered, jobs booked, revenue recovered)
+        - One-time dismissible banner, shown a few days after activation (not
+          at signup): "Quick question — where'd you hear about Roster?"
+        - "Your office now has ✓ Frontdesk — want another employee?" opens the
+          catalog: each agent card shows a one-line outcome stat and a
+          **[Hire]** button (never "add," "install," or "enable").
 ```
 
 Returning visits: `/login` (email + password) → `/dashboard`.
@@ -52,9 +65,13 @@ Returning visits: `/login` (email + password) → `/dashboard`.
 
 Extend `Client` (agent/db_models.py) with:
 - `email` (unique, indexed), `password_hash`
-- `source` (free text: how they heard about Roster)
-- `trade` (HVAC / plumbing / electrical / roofing / landscaping / pest control / other)
-- `trial_spend_cents` (default 0), `trial_cap_cents` (default cap, e.g. 2000 = $20)
+- `business_hours`, `business_summary` (one-line "what you do"), `tone`
+  (a short pick-one, e.g. professional / casual / friendly)
+- `source` (nullable — filled in later from the dashboard banner, not at signup)
+- `trade`
+- `trial_spend_cents` (default 0), `trial_cap_cents` (default hard cap, e.g.
+  2000 = $20), `trial_soft_buffer_cents` (default 200 = $2 grace on top of the
+  hard cap)
 
 No new schema needed for agent state — Frontdesk/Chaser/Rebooker/Renewals/Reviews
 already have live/config representation on `Client` and the recovery models.
@@ -64,9 +81,11 @@ already have live/config representation on `Client` and the recovery models.
 - **`agent/auth.py`** (new): signup/login routes, password hashing (bcrypt via
   `passlib`), session cookies via Starlette `SessionMiddleware`. Fully separate
   from the founder's Basic-Auth-protected admin routes — no shared auth path.
-- **New templates**: `signup.html`, `login.html`, `onboarding_source.html`,
-  `onboarding_frontdesk.html`, `dashboard.html` (customer-facing outcomes view),
-  `catalog.html` (the "add another agent" surface, rendered inside the dashboard).
+- **New templates**: `signup.html`, `login.html`, `onboarding_business.html`,
+  `onboarding_frontdesk.html`, `activation_live.html` (the emotional "you're
+  live" reveal), `dashboard.html` (customer-facing, with a zero-data state and
+  a data state), `catalog.html` (the "hire another employee" surface, rendered
+  inside the dashboard).
 - **Retired**: `hire.html`, `hire_done.html`, their routes in `app.py`. The
   landing page's `/hire` CTAs are repointed to `/signup`.
 
@@ -75,37 +94,66 @@ already have live/config representation on `Client` and the recovery models.
 On activation: provision a Twilio number if the client doesn't have one, mark
 Frontdesk live, set `trial_spend_cents = 0`. Every LLM/Twilio call in
 `engine.py` and `recovery_engine.py` increments `trial_spend_cents` for that
-client before running the call; if `trial_spend_cents >= trial_cap_cents`,
-the agent pauses (no LLM/Twilio call made) and the dashboard shows a "trial
-limit reached" banner. The customer's incoming call/text is not dropped with
-an error — the agent simply doesn't respond, and the founder gets a signal to
-raise the cap or move the client to a paid plan.
+client before running the call.
 
-## Dashboard (outcomes-first)
+- Crossing `trial_cap_cents` (hard cap): notify the founder immediately (so
+  they can raise the cap or move the client to paid) and show a dashboard
+  banner to the customer. The agent **keeps answering** through the soft
+  buffer — a caller mid-conversation is never silently dropped.
+- Crossing `trial_cap_cents + trial_soft_buffer_cents`: agent pauses. This
+  only happens after the founder has already been notified once, so it's a
+  backstop, not the primary control.
 
-Primary content: jobs booked, calls answered (from existing `Job`/`Message`
-tables filtered by `client_id`); revenue-recovered figure once available.
-Secondary: a simple "Frontdesk: Live" status card and the "Add another agent"
-entry point into the catalog. No raw conversation transcripts by default —
-outcomes, not activity logs, per the founder's explicit choice.
+## Dashboard states
+
+- **Zero-data (first login, no Job/Message rows yet):** "Frontdesk: Live —
+  waiting for your first call" + a "Test it now" affordance that dials the
+  client's own number. No 0/0/$0 metrics grid — an empty numbers table reads
+  as broken, not as "nothing happened yet."
+- **Has-data:** outcomes summary (calls answered, jobs booked, revenue
+  recovered), pulled from existing `Job`/`Message` tables filtered by
+  `client_id`.
+- **Expansion:** "Your office now has ✓ Frontdesk — want another employee?"
+  → catalog cards (Chaser, Rebooker, Renewals, Reviews), each with a one-line
+  outcome stat (e.g. "Average shop recovers $2,800/month") and a **[Hire]**
+  button. Copy always uses hiring language, never automation/feature language.
+- **Attribution banner:** one-time, dismissible, appears a few days post-
+  activation, not blocking anything: "Where'd you hear about Roster?"
 
 ## Error handling
 
 - Duplicate email at signup → inline field error.
 - Wrong email/password at login → generic "invalid email or password" (no
   user enumeration).
-- Spend cap exceeded mid-session → silent agent pause + dashboard banner,
-  never a customer-facing error.
+- Trial hard-cap crossed → founder notification + dashboard banner, agent
+  keeps running through the soft buffer (see above).
+- Soft-buffer exhausted → agent pauses; this is the only case where the
+  agent stops responding, and only after two prior warnings (cap + buffer).
 
 ## Testing
 
 - Password hash/verify round-trip.
-- Signup → activation → dashboard end-to-end (Frontdesk only, no add-ons).
-- Add-another-agent flow from the dashboard (second agent activates
+- Signup → activation → reveal screen → dashboard zero-state end-to-end
+  (Frontdesk only, no add-ons).
+- Dashboard transitions from zero-state to outcomes-state once a Job/Message
+  row exists for the client.
+- Hire-another-employee flow from the dashboard (second agent activates
   independently of the first).
-- Spend-cap enforcement: agent does not fire once cap is reached.
+- Trial cap: agent keeps answering through the soft buffer, founder gets
+  notified at the hard cap, agent pauses only after the buffer is exhausted.
 - Dashboard query scoping: a logged-in client can only ever see their own
   `client_id`'s data.
+
+## Roadmap (not building now, reprioritized)
+
+**Auto-research pre-fill** (scrape the shop's website/Google Business Profile
+→ pre-fill services, hours, FAQ → owner reviews and approves rather than
+typing it) is the **next spec after this one**, not a someday-item. It's what
+eventually collapses onboarding to just business name / website / phone /
+trade — directly tied to Roster's differentiation ("it already knows my
+business" vs. filling out forms). This spec ships the reduced-manual-question
+version now; the follow-up spec replaces the manual business questions once
+auto-research is built.
 
 ## Explicitly out of scope (this spec)
 
@@ -113,6 +161,5 @@ outcomes, not activity logs, per the founder's explicit choice.
 - Founder review/approval gate before an agent goes live (deliberately
   decided against — self-serve activation is immediate; see "Why" above for
   the trust/scale tradeoff this accepts).
-- Auto-research pre-fill (scraping the shop's site/GBP) — still the
-  separately-flagged next build from the original hire-flow work, not part
-  of this signup redesign.
+- Auto-research pre-fill itself (see Roadmap above — flagged as the
+  immediate next spec, not built here).
