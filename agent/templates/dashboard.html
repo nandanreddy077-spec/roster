@@ -15,6 +15,16 @@
   </form>
 </header>
 
+{% if show_source_banner %}
+<div class="portal-card" style="max-width:560px; padding:16px 24px;">
+  <form method="post" action="/dashboard/source" style="display:flex; gap:8px; align-items:center;">
+    <span style="flex:1;">Quick question — where'd you hear about Roster?</span>
+    <input type="text" name="source" placeholder="e.g. Google, a friend..." style="flex:1; padding:8px; border:1px solid var(--border); border-radius:8px;">
+    <button type="submit" class="btn btn-secondary" style="width:auto; padding:8px 16px;">Send</button>
+  </form>
+</div>
+{% endif %}
+
 <div class="portal-card" style="max-width:560px;">
   <h2>{{ client.business_name }}</h2>
 

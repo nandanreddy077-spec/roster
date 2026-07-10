@@ -186,6 +186,13 @@ def dashboard(request: Request):
         next_role = next_hire(requested)
         coming_later = coming_later_after(next_role)
 
+        show_source_banner = (
+            client.source is None
+            and not client.source_prompt_dismissed
+            and client.activated_at is not None
+            and datetime.utcnow() - client.activated_at >= timedelta(days=3)
+        )
+
         return templates.TemplateResponse(
             request,
             "dashboard.html",
@@ -197,8 +204,24 @@ def dashboard(request: Request):
                 "next_role": next_role,
                 "next_role_description": ROSTER_DESCRIPTIONS.get(next_role, ""),
                 "coming_later": coming_later,
+                "show_source_banner": show_source_banner,
             },
         )
+
+
+@router.post("/dashboard/source")
+def set_source(request: Request, source: str = Form("")):
+    with Session(engine) as session:
+        client = _current_client(request, session)
+        if client is None:
+            return RedirectResponse("/login", status_code=303)
+        source = source.strip()
+        if source:
+            client.source = source
+        client.source_prompt_dismissed = True
+        session.add(client)
+        session.commit()
+    return RedirectResponse("/dashboard", status_code=303)
 
 
 @router.post("/roster/hire")

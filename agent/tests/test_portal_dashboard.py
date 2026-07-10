@@ -1,4 +1,5 @@
 import json
+from datetime import datetime, timedelta
 
 from fastapi.testclient import TestClient
 from sqlmodel import Session, select
@@ -91,3 +92,55 @@ def test_roster_hire_rejects_out_of_order_role(monkeypatch, test_engine):
     with Session(test_engine) as session:
         owner = session.exec(select(Client).where(Client.email == "owner@example.com")).first()
         assert owner.requested_roster is None
+
+
+def test_source_banner_hidden_before_three_days(monkeypatch, test_engine):
+    monkeypatch.setattr(app_module, "engine", test_engine)
+    monkeypatch.setattr(db_module, "engine", test_engine)
+    monkeypatch.setattr(portal_module, "engine", test_engine)
+    client = TestClient(app_module.app)
+    _fully_onboarded_client(client, monkeypatch)
+
+    response = client.get("/dashboard")
+    assert "Where" not in response.text or "hear about Roster" not in response.text
+
+
+def test_source_banner_shown_after_three_days(monkeypatch, test_engine):
+    monkeypatch.setattr(app_module, "engine", test_engine)
+    monkeypatch.setattr(db_module, "engine", test_engine)
+    monkeypatch.setattr(portal_module, "engine", test_engine)
+    client = TestClient(app_module.app)
+    _fully_onboarded_client(client, monkeypatch)
+
+    with Session(test_engine) as session:
+        owner = session.exec(select(Client).where(Client.email == "owner@example.com")).first()
+        owner.activated_at = datetime.utcnow() - timedelta(days=4)
+        session.add(owner)
+        session.commit()
+
+    response = client.get("/dashboard")
+    assert "hear about Roster" in response.text
+
+
+def test_dismissing_source_banner_hides_it_going_forward(monkeypatch, test_engine):
+    monkeypatch.setattr(app_module, "engine", test_engine)
+    monkeypatch.setattr(db_module, "engine", test_engine)
+    monkeypatch.setattr(portal_module, "engine", test_engine)
+    client = TestClient(app_module.app)
+    _fully_onboarded_client(client, monkeypatch)
+
+    with Session(test_engine) as session:
+        owner = session.exec(select(Client).where(Client.email == "owner@example.com")).first()
+        owner.activated_at = datetime.utcnow() - timedelta(days=4)
+        session.add(owner)
+        session.commit()
+
+    client.post("/dashboard/source", data={"source": "A friend recommended us"})
+
+    with Session(test_engine) as session:
+        owner = session.exec(select(Client).where(Client.email == "owner@example.com")).first()
+        assert owner.source == "A friend recommended us"
+        assert owner.source_prompt_dismissed is True
+
+    response = client.get("/dashboard")
+    assert "hear about Roster" not in response.text
