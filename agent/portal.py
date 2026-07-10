@@ -11,13 +11,13 @@ from typing import Optional
 from fastapi import APIRouter, Form, Request
 from fastapi.responses import RedirectResponse
 from fastapi.templating import Jinja2Templates
-from sqlmodel import Session, select
+from sqlmodel import Session, func, select
 
 from activation import activate_frontdesk
 from auth import hash_password, verify_password
 from db import engine
-from db_models import Client
-from roles import receptionist_display_name
+from db_models import Client, Job, Message
+from roles import ROSTER_DESCRIPTIONS, coming_later_after, next_hire, receptionist_display_name
 
 BASE_DIR = Path(__file__).parent
 templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
@@ -165,3 +165,52 @@ def activation_live(request: Request):
         return templates.TemplateResponse(
             request, "activation_live.html", {"client": client, "role_name": role_name}
         )
+
+
+@router.get("/dashboard")
+def dashboard(request: Request):
+    with Session(engine) as session:
+        client = _current_client(request, session)
+        if client is None:
+            return RedirectResponse("/login", status_code=303)
+        if not client.frontdesk_live:
+            return RedirectResponse("/onboarding/business", status_code=303)
+
+        job_count = session.exec(select(func.count(Job.id)).where(Job.client_id == client.id)).one()
+        assistant_message_count = session.exec(
+            select(func.count(Message.id)).where(Message.client_id == client.id, Message.role == "assistant")
+        ).one()
+        has_data = job_count > 0 or assistant_message_count > 0
+
+        requested = json.loads(client.requested_roster) if client.requested_roster else []
+        next_role = next_hire(requested)
+        coming_later = coming_later_after(next_role)
+
+        return templates.TemplateResponse(
+            request,
+            "dashboard.html",
+            {
+                "client": client,
+                "role_name": receptionist_display_name(client.trade),
+                "has_data": has_data,
+                "job_count": job_count,
+                "next_role": next_role,
+                "next_role_description": ROSTER_DESCRIPTIONS.get(next_role, ""),
+                "coming_later": coming_later,
+            },
+        )
+
+
+@router.post("/roster/hire")
+def roster_hire(request: Request, role: str = Form(...)):
+    with Session(engine) as session:
+        client = _current_client(request, session)
+        if client is None:
+            return RedirectResponse("/login", status_code=303)
+        requested = json.loads(client.requested_roster) if client.requested_roster else []
+        if role == next_hire(requested):
+            requested.append(role)
+            client.requested_roster = json.dumps(requested)
+            session.add(client)
+            session.commit()
+    return RedirectResponse("/dashboard", status_code=303)

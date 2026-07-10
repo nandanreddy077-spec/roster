@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Dashboard — Roster</title>
+<meta name="robots" content="noindex">
+<link rel="stylesheet" href="/static/portal.css">
+</head>
+<body>
+<header class="nav">
+  <a class="logo" href="/">Roster</a>
+  <form method="post" action="/logout" style="display:inline; float:right;">
+    <button type="submit" class="btn btn-secondary" style="padding:6px 12px;">Log out</button>
+  </form>
+</header>
+
+<div class="portal-card" style="max-width:560px;">
+  <h2>{{ client.business_name }}</h2>
+
+  {% if not has_data %}
+  <p class="lede">{{ role_name }}: Live — waiting for your first call.</p>
+  {% if client.inbound_number %}
+  <a class="btn btn-primary" href="tel:{{ client.inbound_number }}">📞 Call your {{ role_name }}</a>
+  {% endif %}
+  {% else %}
+  <p class="lede">{{ role_name }}: Live</p>
+  <p style="font-size:28px; font-weight:600; margin-bottom:4px;">{{ job_count }}</p>
+  <p style="color:var(--text-dim); margin-bottom:24px;">jobs booked</p>
+  {% endif %}
+</div>
+
+<div class="portal-card" style="max-width:560px;">
+  <h2 style="font-size:20px;">Your Roster</h2>
+  <p style="margin:12px 0;">✅ {{ role_name }} — Live</p>
+
+  {% if next_role %}
+  <div style="border-top:1px solid var(--border); padding-top:16px; margin-top:8px;">
+    <p style="color:var(--text-dim); font-size:13px;">Hire next</p>
+    <p style="font-weight:600;">{{ next_role }}</p>
+    <p style="color:var(--text-dim); margin-bottom:12px;">{{ next_role_description }}</p>
+    <form method="post" action="/roster/hire">
+      <input type="hidden" name="role" value="{{ next_role }}">
+      <button type="submit" class="btn btn-primary" style="width:auto; padding:10px 20px;">Hire</button>
+    </form>
+  </div>
+  {% endif %}
+
+  {% if coming_later %}
+  <div style="border-top:1px solid var(--border); padding-top:16px; margin-top:16px; opacity:0.55;">
+    <p style="color:var(--text-dim); font-size:13px;">Coming later</p>
+    <p style="font-weight:600;">{{ coming_later }}</p>
+  </div>
+  {% endif %}
+</div>
+</body>
+</html>
