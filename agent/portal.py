@@ -83,3 +83,37 @@ def login_submit(request: Request, email: str = Form(...), password: str = Form(
 def logout(request: Request):
     request.session.clear()
     return RedirectResponse("/login", status_code=303)
+
+
+@router.get("/onboarding/business")
+def onboarding_business_form(request: Request):
+    with Session(engine) as session:
+        client = _current_client(request, session)
+        if client is None:
+            return RedirectResponse("/login", status_code=303)
+        if client.frontdesk_live:
+            return RedirectResponse("/dashboard", status_code=303)
+    prefill_trade = request.session.get("prefill_trade", "")
+    return templates.TemplateResponse(request, "onboarding_business.html", {"prefill_trade": prefill_trade})
+
+
+@router.post("/onboarding/business")
+def onboarding_business_submit(
+    request: Request,
+    business_name: str = Form(...),
+    trade: str = Form(...),
+    services: str = Form(...),
+    hours: str = Form(...),
+):
+    service_list = [s.strip() for s in services.split(",") if s.strip()]
+    with Session(engine) as session:
+        client = _current_client(request, session)
+        if client is None:
+            return RedirectResponse("/login", status_code=303)
+        client.business_name = business_name.strip()
+        client.trade = trade.strip()
+        client.services_json = json.dumps(service_list)
+        client.hours = hours.strip()
+        session.add(client)
+        session.commit()
+    return RedirectResponse("/onboarding/receptionist", status_code=303)

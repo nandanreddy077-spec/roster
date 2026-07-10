@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Tell us about your business — Roster</title>
+<meta name="robots" content="noindex">
+<link rel="stylesheet" href="/static/portal.css">
+</head>
+<body>
+<header class="nav"><a class="logo" href="/">Roster</a></header>
+
+<div class="portal-card">
+  <h2>Tell us about your business</h2>
+  <p class="lede">Just what a new hire needs on day one — everything else you can edit later.</p>
+
+  <form method="post" action="/onboarding/business">
+    <div class="field">
+      <label for="business_name">What's your business called?</label>
+      <input type="text" id="business_name" name="business_name" required autocomplete="organization" placeholder="e.g. Ridgeline Plumbing">
+    </div>
+    <div class="field">
+      <label for="trade">Your trade</label>
+      <select id="trade" name="trade" required>
+        <option value="" disabled {{ '' if prefill_trade else 'selected' }}>Choose one…</option>
+        {% for t in ["Plumbing", "HVAC", "Electrical", "Roofing", "Landscaping", "Pest control", "Other"] %}
+        <option value="{{ t }}" {{ 'selected' if t.lower() == prefill_trade.lower() else '' }}>{{ t }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="field">
+      <label for="services">What services do you offer? <span class="hint">— separate with commas</span></label>
+      <input type="text" id="services" name="services" required placeholder="Drain cleaning, water heaters, leak repair...">
+    </div>
+    <div class="field">
+      <label for="hours">Your hours</label>
+      <input type="text" id="hours" name="hours" required placeholder="Mon–Sat 7am–7pm">
+    </div>
+    <button type="submit" class="btn btn-primary">Continue</button>
+  </form>
+</div>
+</body>
+</html>
