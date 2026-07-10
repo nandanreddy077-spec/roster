@@ -9,12 +9,12 @@ from models import ClientConfig
 
 class Client(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
-    business_name: str
-    trade: str
-    services_json: str  # JSON-encoded list[str]
-    hours: str
-    pricing_faq: str
-    escalation_phone: str
+    business_name: str = ""
+    trade: str = ""
+    services_json: str = "[]"  # JSON-encoded list[str]
+    hours: str = ""
+    pricing_faq: str = ""
+    escalation_phone: str = ""
     answer_mode: str = Field(default="backup")  # "primary" or "backup" - set during onboarding
     inbound_number: Optional[str] = None  # the business line customers text/call; routes inbound SMS
     xai_phone_number: Optional[str] = None  # number registered with xAI's Voice Agent API (see xai_voice_adapter.py); unset = no live-voice receptionist configured for this client yet
@@ -22,7 +22,17 @@ class Client(SQLModel, table=True):
     twilio_number_sid: Optional[str] = None  # Twilio's SID for the purchased number, needed to later attach it to a SIP trunk
     review_link: Optional[str] = None  # owner's Google/Yelp review URL; unset until they provide one
     referral_incentive: Optional[str] = None  # e.g. "$25 off"; unset = referrals off for this client
-    requested_roster: Optional[str] = None  # JSON list of extra agents the owner asked for during self-serve /hire (e.g. ["chaser", "custom: chase permits"]); Frontdesk is the primary hire the flow configures, these are queued for founder setup
+    requested_roster: Optional[str] = None  # JSON list of extra roles queued for founder setup — self-serve "Hire" clicks on Quote Chaser/Retention Manager append here (see agent/roles.py), same mechanism the old /hire addons used
+    email: Optional[str] = Field(default=None, unique=True, index=True)
+    password_hash: Optional[str] = None
+    tone: str = "professional and friendly"
+    source: Optional[str] = None  # how the owner heard about Roster; asked from the dashboard, not at signup
+    source_prompt_dismissed: bool = False
+    frontdesk_live: bool = False
+    activated_at: Optional[datetime] = None
+    trial_spend_cents: int = 0
+    trial_cap_cents: int = 2000  # $20 hard cap
+    trial_soft_buffer_cents: int = 200  # $2 grace on top of the hard cap — see trial_cap.py
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
     @property

@@ -38,7 +38,19 @@ def _migrate_add_columns():
     an existing roster.db working without a manual migration step."""
     from sqlalchemy import text
 
-    statements = ("ALTER TABLE client ADD COLUMN requested_roster VARCHAR",)
+    statements = (
+        "ALTER TABLE client ADD COLUMN requested_roster VARCHAR",
+        "ALTER TABLE client ADD COLUMN email VARCHAR",
+        "ALTER TABLE client ADD COLUMN password_hash VARCHAR",
+        "ALTER TABLE client ADD COLUMN tone VARCHAR DEFAULT 'professional and friendly'",
+        "ALTER TABLE client ADD COLUMN source VARCHAR",
+        "ALTER TABLE client ADD COLUMN source_prompt_dismissed BOOLEAN DEFAULT 0",
+        "ALTER TABLE client ADD COLUMN frontdesk_live BOOLEAN DEFAULT 0",
+        "ALTER TABLE client ADD COLUMN activated_at DATETIME",
+        "ALTER TABLE client ADD COLUMN trial_spend_cents INTEGER DEFAULT 0",
+        "ALTER TABLE client ADD COLUMN trial_cap_cents INTEGER DEFAULT 2000",
+        "ALTER TABLE client ADD COLUMN trial_soft_buffer_cents INTEGER DEFAULT 200",
+    )
     with engine.connect() as conn:
         for ddl in statements:
             try:
