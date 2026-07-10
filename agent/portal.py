@@ -17,6 +17,7 @@ from activation import activate_frontdesk
 from auth import hash_password, verify_password
 from db import engine
 from db_models import Client
+from roles import receptionist_display_name
 
 BASE_DIR = Path(__file__).parent
 templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
@@ -150,3 +151,17 @@ def onboarding_receptionist_submit(request: Request, escalation_phone: str = For
         session.commit()
         activate_frontdesk(session, client)
     return RedirectResponse("/activation/live", status_code=303)
+
+
+@router.get("/activation/live")
+def activation_live(request: Request):
+    with Session(engine) as session:
+        client = _current_client(request, session)
+        if client is None:
+            return RedirectResponse("/login", status_code=303)
+        if not client.frontdesk_live:
+            return RedirectResponse("/onboarding/business", status_code=303)
+        role_name = receptionist_display_name(client.trade)
+        return templates.TemplateResponse(
+            request, "activation_live.html", {"client": client, "role_name": role_name}
+        )

@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>You're live — Roster</title>
+<meta name="robots" content="noindex">
+<link rel="stylesheet" href="/static/portal.css">
+</head>
+<body>
+<header class="nav"><a class="logo" href="/">Roster</a></header>
+
+<div class="portal-card">
+  <h2>{{ role_name }} is live 🎉</h2>
+  {% if client.inbound_number %}
+  <p class="lede">Your new number: <strong>{{ client.inbound_number }}</strong></p>
+  {% endif %}
+  <p class="lede">We're now answering calls for {{ client.business_name }}.</p>
+
+  <p style="font-weight:600; margin-bottom:8px;">What happens now</p>
+  <ul style="margin-bottom:24px; padding-left:20px;">
+    <li>✓ Answer every incoming call.</li>
+    <li>✓ Book jobs.</li>
+    <li>✓ Text confirmations.</li>
+    <li>✓ Edit anything later.</li>
+  </ul>
+
+  {% if client.inbound_number %}
+  <a class="btn btn-primary" href="tel:{{ client.inbound_number }}">📞 Call your {{ role_name }}</a>
+  {% endif %}
+  <a class="btn btn-secondary" href="/dashboard" style="display:block; text-align:center; margin-top:12px;">Go to dashboard</a>
+</div>
+</body>
+</html>
