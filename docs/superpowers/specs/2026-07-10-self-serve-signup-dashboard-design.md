@@ -239,3 +239,13 @@ auto-research is built.
   exists" (e.g. industry-specific renewal cadences) — the adaptive-by-data
   behavior described above is the full scope here; deeper tuning is a later
   iteration once real clients are on it.
+- **Automatic target-discovery for Quote Chaser / Retention Manager.** Today
+  those agents only work off a customer list the founder manually uploads
+  (`recovery_service.create_campaign`) — there's no engine yet that scans
+  existing `Job` records to find cold quotes or dormant customers on its own.
+  This spec implements full self-serve activation for the Receptionist only.
+  When Quote Chaser becomes the "Hire next" card, clicking [Hire] captures
+  its short question(s) and queues the request the same way today's
+  `requested_roster` field does — the founder still sets up the actual
+  campaign by hand. Building real target-discovery so this goes fully
+  self-serve is its own follow-up spec, sized on its own.
