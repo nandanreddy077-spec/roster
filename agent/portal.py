@@ -26,6 +26,15 @@ from service import handle_customer_message
 BASE_DIR = Path(__file__).parent
 templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
 
+# Cache-busting for portal.css: its filename never changes, so browsers that
+# cached it before a deploy keep using the stale copy (harmless for most
+# edits, but a class added/renamed in CSS silently stops applying — e.g. the
+# Google button rendering as a bare unstyled link after the button was added
+# in the same deploy). File mtime changes on every deploy, so a `?v=` query
+# param built from it forces a fresh fetch without hand-bumping a version.
+PORTAL_CSS_VERSION = str(int((BASE_DIR / "static" / "portal.css").stat().st_mtime))
+templates.env.globals["portal_css_version"] = PORTAL_CSS_VERSION
+
 router = APIRouter()
 
 # The owner's own dashboard test chat runs on its own conversation thread, kept
