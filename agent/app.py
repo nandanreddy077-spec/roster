@@ -198,7 +198,7 @@ def provision_number(client_id: int, area_code: str = Form("")):
         client = session.get(Client, client_id)
         try:
             purchase = buy_twilio_number(area_code.strip() or None)
-            attach_number_to_xai_trunk(purchase["sid"])
+            attach_number_to_xai_trunk(purchase["sid"], purchase["phone_number"])
             client.inbound_number = purchase["phone_number"]
             client.twilio_number_sid = purchase["sid"]
             session.add(client)

@@ -17,7 +17,7 @@ def activate_frontdesk(session: Session, client: Client) -> None:
     if not client.inbound_number:
         try:
             purchase = buy_twilio_number()
-            attach_number_to_xai_trunk(purchase["sid"])
+            attach_number_to_xai_trunk(purchase["sid"], purchase["phone_number"])
             client.inbound_number = purchase["phone_number"]
             client.twilio_number_sid = purchase["sid"]
             try:

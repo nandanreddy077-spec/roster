@@ -84,13 +84,22 @@ def test_attach_number_reuses_existing_trunk(monkeypatch):
     fake_client.trunking.v1.trunks.list.return_value = [existing_trunk]
     monkeypatch.setattr(provisioning, "_twilio_client", lambda: fake_client)
 
-    attach_number_to_xai_trunk("PN123")
+    attach_number_to_xai_trunk("PN123", "+14155550123")
 
     fake_client.trunking.v1.trunks.assert_any_call("TK_existing")
     fake_client.trunking.v1.trunks.return_value.phone_numbers.create.assert_called_once_with(
         phone_number_sid="PN123"
     )
     fake_client.trunking.v1.trunks.create.assert_not_called()
+    # xAI's origination URI is per-number (embeds the E.164 number), so it must
+    # be added every time a number is attached, not just once at trunk creation.
+    fake_client.trunking.v1.trunks.return_value.origination_urls.create.assert_called_once_with(
+        friendly_name="xAI Voice Agent API - +14155550123",
+        sip_url="sip:+14155550123@sip.voice.x.ai;transport=tls",
+        weight=1,
+        priority=1,
+        enabled=True,
+    )
 
 
 def test_attach_number_creates_trunk_when_none_exists(monkeypatch):
@@ -103,12 +112,11 @@ def test_attach_number_creates_trunk_when_none_exists(monkeypatch):
     fake_client.trunking.v1.trunks.create.return_value = new_trunk
     monkeypatch.setattr(provisioning, "_twilio_client", lambda: fake_client)
 
-    attach_number_to_xai_trunk("PN123")
+    attach_number_to_xai_trunk("PN123", "+14155550123")
 
     fake_client.trunking.v1.trunks.create.assert_called_once_with(
         friendly_name=provisioning.XAI_TRUNK_FRIENDLY_NAME
     )
-    fake_client.trunking.v1.trunks.return_value.origination_urls.create.assert_called_once()
     fake_client.trunking.v1.trunks.return_value.phone_numbers.create.assert_called_once_with(
         phone_number_sid="PN123"
     )

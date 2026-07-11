@@ -26,7 +26,6 @@ from twilio.rest import Client as TwilioRestClient
 from db_models import Client
 
 XAI_TRUNK_FRIENDLY_NAME = "Roster - xAI Voice"
-XAI_ORIGINATION_SIP_URL = "sip:sip.voice.x.ai;transport=tls"
 DEFAULT_PUBLIC_BASE_URL = "https://rosterhires.com"
 
 
@@ -66,30 +65,34 @@ def buy_twilio_number(area_code: Optional[str] = None) -> dict:
 
 
 def _get_or_create_xai_trunk(client: TwilioRestClient):
-    """Reuses one shared trunk across all clients (the origination URL is the
-    same for everyone — it's Twilio routing to xAI's SIP endpoint, not a
-    per-client destination), rather than creating a new trunk per client."""
+    """Reuses one shared trunk across all clients — the trunk itself is just a
+    container Twilio numbers attach to. What's NOT shared is the origination
+    URI: per xAI's SIP docs, that URI embeds the specific phone number
+    (sip:{number}@sip.voice.x.ai) so xAI can tell which registered number an
+    inbound call belongs to. So origination URLs are added per-number by the
+    caller, not once here at trunk-creation time."""
     existing = client.trunking.v1.trunks.list(limit=20)
     for trunk in existing:
         if trunk.friendly_name == XAI_TRUNK_FRIENDLY_NAME:
             return trunk
+    return client.trunking.v1.trunks.create(friendly_name=XAI_TRUNK_FRIENDLY_NAME)
 
-    trunk = client.trunking.v1.trunks.create(friendly_name=XAI_TRUNK_FRIENDLY_NAME)
+
+def attach_number_to_xai_trunk(phone_number_sid: str, phone_number: str) -> None:
+    """Assigns a purchased Twilio number to the shared xAI-origination trunk
+    and adds that number's own origination URI (xAI's routing requires the
+    E.164 number embedded in the SIP URI, per number — see
+    docs.x.ai/.../voice-agent/sip's Twilio section), so inbound calls to it
+    route to xAI instead of ringing nowhere."""
+    client = _twilio_client()
+    trunk = _get_or_create_xai_trunk(client)
     client.trunking.v1.trunks(trunk.sid).origination_urls.create(
-        friendly_name="xAI Voice Agent API",
-        sip_url=XAI_ORIGINATION_SIP_URL,
+        friendly_name=f"xAI Voice Agent API - {phone_number}",
+        sip_url=f"sip:{phone_number}@sip.voice.x.ai;transport=tls",
         weight=1,
         priority=1,
         enabled=True,
     )
-    return trunk
-
-
-def attach_number_to_xai_trunk(phone_number_sid: str) -> None:
-    """Assigns a purchased Twilio number to the shared xAI-origination trunk,
-    so inbound calls to it route to xAI instead of ringing nowhere."""
-    client = _twilio_client()
-    trunk = _get_or_create_xai_trunk(client)
     client.trunking.v1.trunks(trunk.sid).phone_numbers.create(phone_number_sid=phone_number_sid)
 
 
