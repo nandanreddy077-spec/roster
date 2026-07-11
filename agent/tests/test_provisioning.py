@@ -46,7 +46,33 @@ def test_buy_twilio_number_purchases_first_available(monkeypatch):
     result = buy_twilio_number(area_code="415")
 
     assert result == {"phone_number": "+14155550123", "sid": "PN123"}
-    fake_client.incoming_phone_numbers.create.assert_called_once_with(phone_number="+14155550123")
+    fake_client.incoming_phone_numbers.create.assert_called_once_with(
+        phone_number="+14155550123",
+        sms_url="https://rosterhires.com/webhook/sms",
+        sms_method="POST",
+    )
+
+
+def test_buy_twilio_number_uses_public_base_url_override(monkeypatch):
+    monkeypatch.setenv("TWILIO_ACCOUNT_SID", "AC_test")
+    monkeypatch.setenv("TWILIO_AUTH_TOKEN", "token_test")
+    monkeypatch.setenv("PUBLIC_BASE_URL", "https://staging.example.com")
+
+    available_number = MagicMock(phone_number="+14155550123")
+    purchased = MagicMock(phone_number="+14155550123", sid="PN123")
+
+    fake_client = MagicMock()
+    fake_client.available_phone_numbers.return_value.local.list.return_value = [available_number]
+    fake_client.incoming_phone_numbers.create.return_value = purchased
+    monkeypatch.setattr(provisioning, "_twilio_client", lambda: fake_client)
+
+    buy_twilio_number(area_code="415")
+
+    fake_client.incoming_phone_numbers.create.assert_called_once_with(
+        phone_number="+14155550123",
+        sms_url="https://staging.example.com/webhook/sms",
+        sms_method="POST",
+    )
 
 
 def test_attach_number_reuses_existing_trunk(monkeypatch):

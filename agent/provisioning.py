@@ -27,6 +27,7 @@ from db_models import Client
 
 XAI_TRUNK_FRIENDLY_NAME = "Roster - xAI Voice"
 XAI_ORIGINATION_SIP_URL = "sip:sip.voice.x.ai;transport=tls"
+DEFAULT_PUBLIC_BASE_URL = "https://rosterhires.com"
 
 
 class ProvisioningError(Exception):
@@ -42,7 +43,10 @@ def _twilio_client() -> TwilioRestClient:
 
 
 def buy_twilio_number(area_code: Optional[str] = None) -> dict:
-    """Searches for and purchases one available US local number. Returns
+    """Searches for and purchases one available US local number, and points
+    its "a message comes in" webhook at our /webhook/sms endpoint — without
+    this, a purchased number can receive texts but nothing ever reaches the
+    app, since Twilio doesn't know where to forward them. Returns
     {"phone_number": "+1...", "sid": "PN..."}. Raises ProvisioningError if
     none are available for the given area code (try a nearby one, or omit
     area_code to let Twilio pick anywhere)."""
@@ -52,7 +56,12 @@ def buy_twilio_number(area_code: Optional[str] = None) -> dict:
         raise ProvisioningError(
             f"No numbers available for area_code={area_code!r} — try a different area code"
         )
-    purchased = client.incoming_phone_numbers.create(phone_number=available[0].phone_number)
+    base_url = os.environ.get("PUBLIC_BASE_URL", DEFAULT_PUBLIC_BASE_URL)
+    purchased = client.incoming_phone_numbers.create(
+        phone_number=available[0].phone_number,
+        sms_url=f"{base_url}/webhook/sms",
+        sms_method="POST",
+    )
     return {"phone_number": purchased.phone_number, "sid": purchased.sid}
 
 

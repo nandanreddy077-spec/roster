@@ -8,6 +8,7 @@ Set TWILIO_ACCOUNT_SID + TWILIO_AUTH_TOKEN to send for real; otherwise messages
 print to the console so the flow is fully testable without an account.
 """
 import os
+import sys
 from typing import Protocol
 
 
@@ -35,4 +36,11 @@ def get_channel() -> SMSChannel:
     token = os.environ.get("TWILIO_AUTH_TOKEN")
     if sid and token:
         return TwilioChannel(sid, token)
+    # Deliberately loud, not a silent no-op: in production this means real
+    # customer SMS never sends and nothing else would ever surface that.
+    print(
+        "[WARNING] TWILIO_ACCOUNT_SID/TWILIO_AUTH_TOKEN not set — outbound SMS "
+        "will only print to console, not actually send.",
+        file=sys.stderr,
+    )
     return ConsoleChannel()
