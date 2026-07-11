@@ -122,9 +122,81 @@ def test_attach_number_creates_trunk_when_none_exists(monkeypatch):
     )
 
 
-def test_register_number_with_xai_is_not_implemented():
-    """Deliberate — see provisioning.py's module docstring. This must keep
-    raising until the real xAI registration endpoint is confirmed; it must
-    never be "implemented" with a guessed URL."""
-    with pytest.raises(NotImplementedError):
+def test_register_number_with_xai_posts_correct_request(monkeypatch):
+    monkeypatch.setenv("XAI_API_KEY", "xai-test-key")
+    monkeypatch.setenv("PUBLIC_BASE_URL", "https://rosterhires.com")
+    monkeypatch.delenv("XAI_SIP_ALLOWED_ADDRESSES", raising=False)
+
+    captured = {}
+
+    def fake_post(url, headers=None, json=None, timeout=None):
+        captured["url"] = url
+        captured["headers"] = headers
+        captured["json"] = json
+        resp = MagicMock()
+        resp.raise_for_status.return_value = None
+        resp.json.return_value = {"phone_number": "+14155550123", "signing_secret": "whsec_abc123"}
+        return resp
+
+    monkeypatch.setattr(provisioning.httpx, "post", fake_post)
+
+    result = register_number_with_xai("+14155550123")
+
+    assert captured["url"] == "https://api.x.ai/v2/phone-numbers"
+    assert captured["headers"]["Authorization"] == "Bearer xai-test-key"
+    body = captured["json"]
+    assert body["origin"] == "byo_trunk"
+    assert body["phone_number"] == "+14155550123"
+    assert body["webhook"]["url"] == "https://rosterhires.com/webhook/xai-incoming-call"
+    # no sip_auth when no allowlist env is configured
+    assert "sip_auth" not in body
+    assert result["signing_secret"] == "whsec_abc123"
+
+
+def test_register_number_with_xai_includes_allowlist_when_configured(monkeypatch):
+    monkeypatch.setenv("XAI_API_KEY", "xai-test-key")
+    monkeypatch.setenv("XAI_SIP_ALLOWED_ADDRESSES", "54.172.60.0/23, 54.244.51.0/24")
+
+    def fake_post(url, headers=None, json=None, timeout=None):
+        resp = MagicMock()
+        resp.raise_for_status.return_value = None
+        resp.json.return_value = {"signing_secret": "whsec_abc123"}
+        return resp
+
+    monkeypatch.setattr(provisioning.httpx, "post", fake_post)
+
+    register_number_with_xai("+14155550123")
+    # captured via closure re-post
+    calls = {}
+
+    def capture_post(url, headers=None, json=None, timeout=None):
+        calls["json"] = json
+        resp = MagicMock()
+        resp.raise_for_status.return_value = None
+        resp.json.return_value = {"signing_secret": "whsec_abc123"}
+        return resp
+
+    monkeypatch.setattr(provisioning.httpx, "post", capture_post)
+    register_number_with_xai("+14155550123")
+    assert calls["json"]["sip_auth"]["allowed_addresses"] == ["54.172.60.0/23", "54.244.51.0/24"]
+
+
+def test_register_number_with_xai_raises_without_api_key(monkeypatch):
+    monkeypatch.delenv("XAI_API_KEY", raising=False)
+    with pytest.raises(ProvisioningError):
+        register_number_with_xai("+14155550123")
+
+
+def test_register_number_with_xai_raises_when_no_secret_in_response(monkeypatch):
+    monkeypatch.setenv("XAI_API_KEY", "xai-test-key")
+
+    def fake_post(url, headers=None, json=None, timeout=None):
+        resp = MagicMock()
+        resp.raise_for_status.return_value = None
+        resp.json.return_value = {"phone_number": "+14155550123"}  # no secret
+        return resp
+
+    monkeypatch.setattr(provisioning.httpx, "post", fake_post)
+
+    with pytest.raises(ProvisioningError):
         register_number_with_xai("+14155550123")

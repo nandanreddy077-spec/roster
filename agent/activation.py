@@ -17,17 +17,21 @@ def activate_frontdesk(session: Session, client: Client) -> None:
     if not client.inbound_number:
         try:
             purchase = buy_twilio_number()
-            attach_number_to_xai_trunk(purchase["sid"], purchase["phone_number"])
             client.inbound_number = purchase["phone_number"]
             client.twilio_number_sid = purchase["sid"]
+            # Voice is best-effort. Register with xAI first; only route the
+            # Twilio number's voice to xAI once that succeeds, so a failed
+            # registration leaves a fully working SMS-only number rather than
+            # voice calls routed to a number xAI doesn't recognize.
             try:
                 xai_registration = register_number_with_xai(purchase["phone_number"])
+                attach_number_to_xai_trunk(purchase["sid"], purchase["phone_number"])
                 client.xai_phone_number = purchase["phone_number"]
                 client.xai_signing_secret = xai_registration["signing_secret"]
-            except NotImplementedError:
-                pass  # SMS-only for now; voice needs a manual xAI step — see provisioning.py
+            except ProvisioningError:
+                pass  # SMS-only (e.g. no XAI_API_KEY); founder can finish voice from /clients/{id}.
         except ProvisioningError:
-            pass  # No number purchased (e.g. no Twilio creds in dev) — still go live;
+            pass  # No number purchased (e.g. no Twilio creds in dev) — still go live SMS-less;
                   # founder can provision a number later from /clients/{id}.
 
     client.frontdesk_live = True

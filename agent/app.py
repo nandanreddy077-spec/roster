@@ -198,22 +198,24 @@ def provision_number(client_id: int, area_code: str = Form("")):
         client = session.get(Client, client_id)
         try:
             purchase = buy_twilio_number(area_code.strip() or None)
-            attach_number_to_xai_trunk(purchase["sid"], purchase["phone_number"])
             client.inbound_number = purchase["phone_number"]
             client.twilio_number_sid = purchase["sid"]
             session.add(client)
             session.commit()
 
+            # Voice is best-effort: register with xAI first, and only route the
+            # number's voice to xAI once that succeeds (see activation.py).
             try:
                 xai_registration = register_number_with_xai(purchase["phone_number"])
+                attach_number_to_xai_trunk(purchase["sid"], purchase["phone_number"])
                 client.xai_phone_number = purchase["phone_number"]
                 client.xai_signing_secret = xai_registration["signing_secret"]
                 session.add(client)
                 session.commit()
-            except NotImplementedError:
+            except ProvisioningError as e:
                 error = (
                     f"Number {purchase['phone_number']} bought and SMS-ready, but voice "
-                    "registration with xAI needs a manual step for now — see provisioning.py."
+                    f"registration with xAI didn't complete: {e}"
                 )
         except ProvisioningError as e:
             error = str(e)

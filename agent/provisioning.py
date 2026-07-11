@@ -2,31 +2,30 @@
 live voice, so onboarding a new client doesn't require hand-clicking through
 Twilio's console.
 
-Two halves, two different confidence levels:
+Two halves:
 
-1. Twilio (buy number, create/reuse an Elastic SIP Trunk pointed at xAI,
-   attach the number) — this is Twilio's long-stable, fully documented REST
-   API. Implemented for real below.
+1. Twilio (buy number, create/reuse an Elastic SIP Trunk with a per-number
+   origination URI pointed at xAI, attach the number) — Twilio's long-stable,
+   fully documented REST API.
 
-2. Registering that number with xAI's Voice Agent API (what actually turns
-   the SIP trunk on and returns the per-number webhook signing secret) — xAI
-   does not publish this endpoint anywhere in their public docs (confirmed
-   2026-07-07; their SIP guide describes numbers being "registered" and a
-   secret being "returned" but gives no POST URL or request/response shape).
-   `register_number_with_xai()` below is a deliberate stub, not a guess — do
-   not fill it in with an invented endpoint. Get the real one from xAI's
-   dashboard/API reference after signing up (it's likely only shown there,
-   not in the public docs), then implement it for real.
+2. Registering that number with xAI's Voice Agent API (POST /v2/phone-numbers
+   with origin=byo_trunk), which creates the incoming-call webhook route and
+   returns the per-number webhook signing secret once. Implemented below
+   against xAI's now-public SIP docs
+   (docs.x.ai/developers/model-capabilities/audio/voice-agent/sip).
 """
 import os
 from typing import Optional
 
+import httpx
 from twilio.rest import Client as TwilioRestClient
 
 from db_models import Client
 
 XAI_TRUNK_FRIENDLY_NAME = "Roster - xAI Voice"
 DEFAULT_PUBLIC_BASE_URL = "https://rosterhires.com"
+XAI_PHONE_NUMBERS_URL = "https://api.x.ai/v2/phone-numbers"
+XAI_INCOMING_CALL_PATH = "/webhook/xai-incoming-call"
 
 
 class ProvisioningError(Exception):
@@ -96,17 +95,74 @@ def attach_number_to_xai_trunk(phone_number_sid: str, phone_number: str) -> None
     client.trunking.v1.trunks(trunk.sid).phone_numbers.create(phone_number_sid=phone_number_sid)
 
 
+def _extract_signing_secret(payload: dict) -> Optional[str]:
+    """xAI's docs say the response "includes a signing secret" but don't name
+    the field, so check the plausible locations. Fail loud (caller raises) if
+    none are present, rather than silently storing None — a None secret would
+    make every real webhook fail signature verification, invisibly."""
+    if not isinstance(payload, dict):
+        return None
+    for key in ("signing_secret", "webhook_signing_secret", "signing_key", "secret"):
+        if payload.get(key):
+            return payload[key]
+    webhook = payload.get("webhook")
+    if isinstance(webhook, dict):
+        for key in ("signing_secret", "secret", "signing_key"):
+            if webhook.get(key):
+                return webhook[key]
+    return None
+
+
 def register_number_with_xai(phone_number: str) -> dict:
-    """NOT IMPLEMENTED — see module docstring. xAI's number-registration REST
-    endpoint isn't in their public docs, so there's nothing correct to write
-    here yet. Calling this raises rather than silently no-op'ing or hitting a
-    guessed URL that could fail confusingly (or worse, succeed against the
-    wrong endpoint) mid-provisioning."""
-    raise NotImplementedError(
-        "xAI's number-registration API isn't publicly documented. Get the real "
-        "endpoint from your xAI dashboard/API reference after signing up, then "
-        "implement this — see provisioning.py's module docstring."
-    )
+    """Registers a customer-owned (byo_trunk) number with xAI's Voice Agent API
+    so inbound SIP calls to it open a realtime voice session, and points xAI's
+    incoming-call webhook at our /webhook/xai-incoming-call route. Returns
+    {"signing_secret": ..., "xai_phone_number": ...}; the caller persists the
+    secret (used to verify each call webhook — see xai_voice_adapter.py).
+
+    Requires XAI_API_KEY. Optionally reads XAI_SIP_ALLOWED_ADDRESSES (comma-
+    separated CIDRs — Twilio's SIP signaling ranges) for the IP-allowlist auth
+    method; omitted if unset. Raises ProvisioningError on any failure so a
+    caller can fall back to SMS-only rather than half-provisioning."""
+    api_key = os.environ.get("XAI_API_KEY")
+    if not api_key:
+        raise ProvisioningError("XAI_API_KEY must be set to register a number for live voice")
+
+    base_url = os.environ.get("PUBLIC_BASE_URL", DEFAULT_PUBLIC_BASE_URL)
+    body = {
+        "origin": "byo_trunk",
+        "name": f"Roster {phone_number}",
+        "phone_number": phone_number,
+        "webhook": {
+            "name": f"Roster incoming call {phone_number}",
+            "url": f"{base_url}{XAI_INCOMING_CALL_PATH}",
+        },
+    }
+    allowlist = os.environ.get("XAI_SIP_ALLOWED_ADDRESSES", "").strip()
+    if allowlist:
+        body["sip_auth"] = {
+            "allowed_addresses": [a.strip() for a in allowlist.split(",") if a.strip()]
+        }
+
+    try:
+        resp = httpx.post(
+            XAI_PHONE_NUMBERS_URL,
+            headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+            json=body,
+            timeout=30.0,
+        )
+        resp.raise_for_status()
+        payload = resp.json()
+    except httpx.HTTPError as e:
+        raise ProvisioningError(f"xAI number registration failed: {e}") from e
+
+    secret = _extract_signing_secret(payload)
+    if not secret:
+        raise ProvisioningError(
+            "xAI registration returned no signing secret — cannot verify call webhooks. "
+            f"Response keys: {sorted(payload) if isinstance(payload, dict) else type(payload)}"
+        )
+    return {"signing_secret": secret, "xai_phone_number": phone_number}
 
 
 def provision_client_number(client: Client, area_code: Optional[str] = None) -> dict:
