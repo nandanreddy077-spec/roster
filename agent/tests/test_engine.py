@@ -1,4 +1,4 @@
-from engine import LOG_JOB_TOOL, TRANSFER_CALL_TOOL, AgentEngine, build_voice_system_prompt
+from engine import LOG_JOB_TOOL, TRANSFER_CALL_TOOL, AgentEngine, build_system_prompt, build_voice_system_prompt
 from models import ClientConfig
 
 
@@ -154,3 +154,20 @@ def test_voice_prompt_primary_skips_missed_call_language():
     prompt = build_voice_system_prompt(config)
     assert "unanswered" not in prompt
     assert "first point of contact" in prompt
+
+
+def test_voice_prompt_includes_tone():
+    config = make_client_config(tone="upbeat and casual")
+    prompt = build_voice_system_prompt(config)
+    assert "upbeat and casual" in prompt
+
+
+def test_sms_prompt_includes_tone():
+    config = make_client_config(tone="upbeat and casual")
+    prompt = build_system_prompt(config)
+    assert "upbeat and casual" in prompt
+
+
+def test_client_config_tone_defaults_to_professional_and_friendly():
+    config = make_client_config()
+    assert config.tone == "professional and friendly"

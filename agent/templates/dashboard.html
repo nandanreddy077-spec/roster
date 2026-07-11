@@ -27,32 +27,89 @@
 
 <div class="portal-card" style="max-width:560px;">
   <h2>{{ client.business_name }}</h2>
-
-  {% if not has_data %}
-  <p class="lede">{{ role_name }}: Live — waiting for your first call.</p>
-  {% if client.inbound_number %}
-  <a class="btn btn-primary" href="tel:{{ client.inbound_number }}">📞 Call your {{ role_name }}</a>
-  {% endif %}
+  {% if tested %}
+  <p class="lede" style="margin-bottom:0;"><span style="color:var(--proof); font-weight:600;">● {{ role_name }}: Working</span> — you've seen it answer.</p>
   {% else %}
-  <p class="lede">{{ role_name }}: Live</p>
-  <p style="font-size:28px; font-weight:600; margin-bottom:4px;">{{ job_count }}</p>
-  <p style="color:var(--text-dim); margin-bottom:24px;">jobs booked</p>
+  <p class="lede" style="margin-bottom:4px;"><span style="color:var(--accent); font-weight:600;">● {{ role_name }}: Ready</span> — try it before you trust it.</p>
+  <p style="color:var(--text-dim); font-size:14px; margin-bottom:0;">Send it a message like a customer would. Once you see a good reply come back, it's working — not before.</p>
+  {% endif %}
+</div>
+
+<div class="portal-card" style="max-width:560px;">
+  <h2 style="font-size:20px;">{% if tested %}Test your receptionist{% else %}Try your receptionist{% endif %}</h2>
+  <p style="color:var(--text-dim); font-size:14px; margin:8px 0 16px;">Type a question a customer might ask — “Do you do same-day drain cleaning?”, “How much for a diagnostic?” — and see how it answers.</p>
+
+  {% if test_chat %}
+  <div style="border:1px solid var(--border); border-radius:12px; padding:12px; margin-bottom:16px; background:var(--bg);">
+    {% for m in test_chat %}
+    {% if m.role == "user" %}
+    <div style="text-align:right; margin:6px 0;">
+      <span style="display:inline-block; background:var(--accent); color:#fff; padding:8px 12px; border-radius:12px 12px 2px 12px; max-width:80%; text-align:left;">{{ m.text }}</span>
+    </div>
+    {% else %}
+    <div style="text-align:left; margin:6px 0;">
+      <span style="display:inline-block; background:var(--card); border:1px solid var(--border); color:var(--text); padding:8px 12px; border-radius:12px 12px 12px 2px; max-width:80%;">{{ m.text }}</span>
+    </div>
+    {% endif %}
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  <form method="post" action="/dashboard/test" style="display:flex; gap:8px;">
+    <input type="text" name="message" required placeholder="Text your receptionist like a customer…" autocomplete="off" style="flex:1; padding:10px 12px; border:1px solid var(--border); border-radius:10px; background:var(--bg); color:var(--text);">
+    <button type="submit" class="btn btn-primary" style="width:auto; padding:10px 20px;">Send</button>
+  </form>
+</div>
+
+<div class="portal-card" style="max-width:560px;">
+  <h2 style="font-size:20px;">Your number</h2>
+  {% if client.inbound_number %}
+  <p style="font-size:22px; font-weight:600; margin:12px 0 4px;">{{ client.inbound_number }}</p>
+  <p style="color:var(--text-dim); font-size:14px;">This is the number your customers reach. Calls and texts here go to your receptionist.</p>
+  {% else %}
+  <p style="color:var(--text-dim); margin-top:12px;">Connecting your line — we'll text you the moment it's ready with the 2-minute steps to point your customers at it.</p>
+  {% endif %}
+</div>
+
+<div class="portal-card" style="max-width:560px;">
+  <h2 style="font-size:20px;">Activity</h2>
+  {% if real_job_count == 0 and not job_rows %}
+  <p style="color:var(--text-dim); margin-top:12px;">No jobs booked yet. When a real customer books through your receptionist, it'll show up here.</p>
+  {% else %}
+  {% if real_job_count == 0 %}
+  <p style="color:var(--text-dim); font-size:14px; margin:8px 0 12px;">No real customer jobs yet — the entries below came from your own tests.</p>
+  {% endif %}
+  {% for j in job_rows %}
+  <div style="border-top:1px solid var(--border); padding:12px 0;">
+    <p style="font-weight:600;">
+      {{ j.service_type }}
+      {% if j.is_test %}<span style="font-size:12px; font-weight:400; color:var(--text-dim); border:1px solid var(--border); border-radius:6px; padding:1px 6px; margin-left:6px;">test</span>{% endif %}
+    </p>
+    <p style="color:var(--text-dim); font-size:14px;">
+      {{ j.urgency }}{% if j.customer_name %} · {{ j.customer_name }}{% endif %}{% if j.callback_number %} · {{ j.callback_number }}{% endif %}
+    </p>
+  </div>
+  {% endfor %}
   {% endif %}
 </div>
 
 <div class="portal-card" style="max-width:560px;">
   <h2 style="font-size:20px;">Your Roster</h2>
-  <p style="margin:12px 0;">✅ {{ role_name }} — Live</p>
+  <p style="margin:12px 0;">{% if tested %}✅{% else %}○{% endif %} {{ role_name }} — {% if tested %}Working{% else %}Ready{% endif %}</p>
 
   {% if next_role %}
   <div style="border-top:1px solid var(--border); padding-top:16px; margin-top:8px;">
     <p style="color:var(--text-dim); font-size:13px;">Hire next</p>
     <p style="font-weight:600;">{{ next_role }}</p>
     <p style="color:var(--text-dim); margin-bottom:12px;">{{ next_role_description }}</p>
+    {% if next_role == "Retention Manager" %}
+    <a href="/roster/hire/retention-manager" class="btn btn-primary" style="width:auto; padding:10px 20px; display:inline-block;">Hire</a>
+    {% else %}
     <form method="post" action="/roster/hire">
       <input type="hidden" name="role" value="{{ next_role }}">
       <button type="submit" class="btn btn-primary" style="width:auto; padding:10px 20px;">Hire</button>
     </form>
+    {% endif %}
   </div>
   {% endif %}
 
@@ -62,6 +119,36 @@
     <p style="font-weight:600;">{{ coming_later }}</p>
   </div>
   {% endif %}
+</div>
+
+<div class="portal-card" style="max-width:560px;">
+  <h2 style="font-size:20px;">Reviews & Referrals</h2>
+
+  <div style="margin-bottom:20px;">
+    {% if client.review_link %}
+    <p style="color:var(--text-dim); font-size:13px;">Review link</p>
+    <p style="margin-bottom:8px; word-break:break-all;">{{ client.review_link }}</p>
+    {% else %}
+    <p style="color:var(--text-dim); font-size:13px; margin-bottom:8px;">Got a Google or Yelp review link? Customers get asked automatically once a job's marked done.</p>
+    {% endif %}
+    <form method="post" action="/dashboard/review-link" style="display:flex; gap:8px;">
+      <input type="text" name="review_link" value="{{ client.review_link or '' }}" placeholder="https://g.page/r/..." style="flex:1; padding:8px; border:1px solid var(--border); border-radius:8px;">
+      <button type="submit" class="btn btn-secondary" style="width:auto; padding:8px 16px;">Save</button>
+    </form>
+  </div>
+
+  <div style="border-top:1px solid var(--border); padding-top:16px;">
+    {% if client.referral_incentive %}
+    <p style="color:var(--text-dim); font-size:13px;">Referral incentive</p>
+    <p style="margin-bottom:8px;">{{ client.referral_incentive }}</p>
+    {% else %}
+    <p style="color:var(--text-dim); font-size:13px; margin-bottom:8px;">Want to offer an incentive for referrals?</p>
+    {% endif %}
+    <form method="post" action="/dashboard/referral-incentive" style="display:flex; gap:8px;">
+      <input type="text" name="referral_incentive" value="{{ client.referral_incentive or '' }}" placeholder="e.g. $25 off next service" style="flex:1; padding:8px; border:1px solid var(--border); border-radius:8px;">
+      <button type="submit" class="btn btn-secondary" style="width:auto; padding:8px 16px;">Save</button>
+    </form>
+  </div>
 </div>
 </body>
 </html>

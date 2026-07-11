@@ -14,6 +14,13 @@
   <h2>Hire your AI employee</h2>
   <p class="lede">Create your account — we'll ask a couple of quick questions about your business next.</p>
 
+  {% if google_enabled %}
+  <a class="btn btn-google" href="/auth/google/login">
+    <img src="/static/google.svg" alt="" width="18" height="18"> Continue with Google
+  </a>
+  <div class="or-divider"><span>or</span></div>
+  {% endif %}
+
   <form method="post" action="/signup">
     <input type="hidden" name="trade" value="{{ trade }}">
     <div class="field">

@@ -7,7 +7,21 @@ from sqlmodel import Session, select
 import app as app_module
 import db as db_module
 import portal as portal_module
+import service as service_module
+from conftest import StubAgent
 from db_models import Client, Job
+
+
+def _stub_reply(text: str):
+    """A canned agent result shaped like AgentEngine.respond()'s output."""
+    return StubAgent(
+        {
+            "reply": text,
+            "new_messages": [{"role": "assistant", "content": [{"type": "text", "text": text}]}],
+            "jobs": [],
+            "pending_tool_call": None,
+        }
+    )
 
 
 def _fully_onboarded_client(client: TestClient, monkeypatch):
@@ -16,7 +30,13 @@ def _fully_onboarded_client(client: TestClient, monkeypatch):
     client.post("/signup", data={"email": "owner@example.com", "password": "hunter22"})
     client.post(
         "/onboarding/business",
-        data={"business_name": "Ridgeline Plumbing", "trade": "Plumbing", "services": "Drains", "hours": "9-5"},
+        data={
+            "business_name": "Ridgeline Plumbing",
+            "trade": "Plumbing",
+            "services": "Drains",
+            "hours": "9-5",
+            "pricing_faq": "Diagnostic visit: $89.",
+        },
     )
     client.post("/onboarding/receptionist", data={"escalation_phone": "(555) 555-0101"})
 
@@ -31,7 +51,9 @@ def test_dashboard_requires_login(monkeypatch, test_engine):
     assert response.headers["location"] == "/login"
 
 
-def test_dashboard_zero_state_before_any_jobs(monkeypatch, test_engine):
+def test_dashboard_untested_shows_ready_not_live(monkeypatch, test_engine):
+    """A freshly onboarded client has NOT tested — the dashboard must say
+    'Ready', never 'Working'/live, no matter what they typed in onboarding."""
     monkeypatch.setattr(app_module, "engine", test_engine)
     monkeypatch.setattr(db_module, "engine", test_engine)
     monkeypatch.setattr(portal_module, "engine", test_engine)
@@ -40,11 +62,13 @@ def test_dashboard_zero_state_before_any_jobs(monkeypatch, test_engine):
 
     response = client.get("/dashboard")
     assert response.status_code == 200
-    assert "waiting for your first call" in response.text
+    assert "Ready" in response.text
+    assert "try it before you trust it" in response.text
+    assert "Working" not in response.text
     assert "Quote Chaser" in response.text  # hire-next card
 
 
-def test_dashboard_shows_outcomes_once_a_job_exists(monkeypatch, test_engine):
+def test_dashboard_activity_lists_real_jobs(monkeypatch, test_engine):
     monkeypatch.setattr(app_module, "engine", test_engine)
     monkeypatch.setattr(db_module, "engine", test_engine)
     monkeypatch.setattr(portal_module, "engine", test_engine)
@@ -58,7 +82,43 @@ def test_dashboard_shows_outcomes_once_a_job_exists(monkeypatch, test_engine):
 
     response = client.get("/dashboard")
     assert response.status_code == 200
-    assert "waiting for your first call" not in response.text
+    assert "drain cleaning" in response.text
+
+
+def test_dashboard_test_message_earns_working_status(monkeypatch, test_engine):
+    """The honest-status hinge: a test message that gets a real reply is what
+    flips 'Ready' → 'Working'. Form submission alone never does."""
+    monkeypatch.setattr(app_module, "engine", test_engine)
+    monkeypatch.setattr(db_module, "engine", test_engine)
+    monkeypatch.setattr(portal_module, "engine", test_engine)
+    monkeypatch.setattr(service_module, "agent", _stub_reply("Yes — we do same-day drain cleaning!"))
+    client = TestClient(app_module.app)
+    _fully_onboarded_client(client, monkeypatch)
+
+    with Session(test_engine) as session:
+        owner = session.exec(select(Client).where(Client.email == "owner@example.com")).first()
+        assert owner.tested_at is None
+
+    client.post("/dashboard/test", data={"message": "Do you do same-day drain cleaning?"})
+
+    with Session(test_engine) as session:
+        owner = session.exec(select(Client).where(Client.email == "owner@example.com")).first()
+        assert owner.tested_at is not None
+
+    response = client.get("/dashboard")
+    assert "Working" in response.text
+    assert "Do you do same-day drain cleaning?" in response.text  # owner's test message
+    assert "Yes — we do same-day drain cleaning!" in response.text  # the reply, shown in the panel
+
+
+def test_dashboard_test_requires_login(monkeypatch, test_engine):
+    monkeypatch.setattr(app_module, "engine", test_engine)
+    monkeypatch.setattr(db_module, "engine", test_engine)
+    monkeypatch.setattr(portal_module, "engine", test_engine)
+    client = TestClient(app_module.app)
+    response = client.post("/dashboard/test", data={"message": "hi"}, follow_redirects=False)
+    assert response.status_code == 303
+    assert response.headers["location"] == "/login"
 
 
 def test_roster_hire_queues_quote_chaser(monkeypatch, test_engine):
@@ -92,6 +152,84 @@ def test_roster_hire_rejects_out_of_order_role(monkeypatch, test_engine):
     with Session(test_engine) as session:
         owner = session.exec(select(Client).where(Client.email == "owner@example.com")).first()
         assert owner.requested_roster is None
+
+
+def test_retention_manager_hire_form_blocked_before_quote_chaser(monkeypatch, test_engine):
+    monkeypatch.setattr(app_module, "engine", test_engine)
+    monkeypatch.setattr(db_module, "engine", test_engine)
+    monkeypatch.setattr(portal_module, "engine", test_engine)
+    client = TestClient(app_module.app)
+    _fully_onboarded_client(client, monkeypatch)
+
+    response = client.get("/roster/hire/retention-manager", follow_redirects=False)
+    assert response.status_code == 303
+    assert response.headers["location"] == "/dashboard"
+
+
+def test_retention_manager_hire_saves_review_link_and_referral_incentive(monkeypatch, test_engine):
+    monkeypatch.setattr(app_module, "engine", test_engine)
+    monkeypatch.setattr(db_module, "engine", test_engine)
+    monkeypatch.setattr(portal_module, "engine", test_engine)
+    client = TestClient(app_module.app)
+    _fully_onboarded_client(client, monkeypatch)
+    client.post("/roster/hire", data={"role": "Quote Chaser"})
+
+    response = client.get("/roster/hire/retention-manager")
+    assert response.status_code == 200
+    assert "review link" in response.text.lower()
+
+    response = client.post(
+        "/roster/hire/retention-manager",
+        data={"review_link": "https://g.page/r/test", "referral_incentive": "$25 off"},
+        follow_redirects=False,
+    )
+    assert response.status_code == 303
+    assert response.headers["location"] == "/dashboard"
+
+    with Session(test_engine) as session:
+        owner = session.exec(select(Client).where(Client.email == "owner@example.com")).first()
+        assert json.loads(owner.requested_roster) == ["Quote Chaser", "Retention Manager"]
+        assert owner.review_link == "https://g.page/r/test"
+        assert owner.referral_incentive == "$25 off"
+
+
+def test_retention_manager_hire_skippable(monkeypatch, test_engine):
+    monkeypatch.setattr(app_module, "engine", test_engine)
+    monkeypatch.setattr(db_module, "engine", test_engine)
+    monkeypatch.setattr(portal_module, "engine", test_engine)
+    client = TestClient(app_module.app)
+    _fully_onboarded_client(client, monkeypatch)
+    client.post("/roster/hire", data={"role": "Quote Chaser"})
+
+    client.post("/roster/hire/retention-manager", data={})
+
+    with Session(test_engine) as session:
+        owner = session.exec(select(Client).where(Client.email == "owner@example.com")).first()
+        assert json.loads(owner.requested_roster) == ["Quote Chaser", "Retention Manager"]
+        assert owner.review_link is None
+        assert owner.referral_incentive is None
+
+
+def test_dashboard_review_link_and_referral_incentive_editable_anytime(monkeypatch, test_engine):
+    """Not gated on Retention Manager being hired — matches how the sending
+    code actually checks these fields (independent of requested_roster)."""
+    monkeypatch.setattr(app_module, "engine", test_engine)
+    monkeypatch.setattr(db_module, "engine", test_engine)
+    monkeypatch.setattr(portal_module, "engine", test_engine)
+    client = TestClient(app_module.app)
+    _fully_onboarded_client(client, monkeypatch)
+
+    client.post("/dashboard/review-link", data={"review_link": "https://g.page/r/test"})
+    client.post("/dashboard/referral-incentive", data={"referral_incentive": "$25 off"})
+
+    with Session(test_engine) as session:
+        owner = session.exec(select(Client).where(Client.email == "owner@example.com")).first()
+        assert owner.review_link == "https://g.page/r/test"
+        assert owner.referral_incentive == "$25 off"
+
+    response = client.get("/dashboard")
+    assert "https://g.page/r/test" in response.text
+    assert "$25 off" in response.text
 
 
 def test_source_banner_hidden_before_three_days(monkeypatch, test_engine):

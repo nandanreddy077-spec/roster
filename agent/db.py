@@ -47,6 +47,7 @@ def _migrate_add_columns():
         "ALTER TABLE client ADD COLUMN source_prompt_dismissed BOOLEAN DEFAULT 0",
         "ALTER TABLE client ADD COLUMN frontdesk_live BOOLEAN DEFAULT 0",
         "ALTER TABLE client ADD COLUMN activated_at DATETIME",
+        "ALTER TABLE client ADD COLUMN tested_at DATETIME",
         "ALTER TABLE client ADD COLUMN trial_spend_cents INTEGER DEFAULT 0",
         "ALTER TABLE client ADD COLUMN trial_cap_cents INTEGER DEFAULT 2000",
         "ALTER TABLE client ADD COLUMN trial_soft_buffer_cents INTEGER DEFAULT 200",

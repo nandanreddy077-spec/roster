@@ -9,7 +9,13 @@ def _fully_onboarded_client(client: TestClient):
     client.post("/signup", data={"email": "owner@example.com", "password": "hunter22"})
     client.post(
         "/onboarding/business",
-        data={"business_name": "Ridgeline Plumbing", "trade": "Plumbing", "services": "Drains", "hours": "9-5"},
+        data={
+            "business_name": "Ridgeline Plumbing",
+            "trade": "Plumbing",
+            "services": "Drains",
+            "hours": "9-5",
+            "pricing_faq": "Diagnostic visit: $89.",
+        },
     )
     client.post("/onboarding/receptionist", data={"escalation_phone": "(555) 555-0101"})
 

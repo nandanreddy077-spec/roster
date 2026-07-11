@@ -35,6 +35,7 @@ def test_onboarding_business_saves_and_redirects(monkeypatch, test_engine):
             "trade": "Plumbing",
             "services": "Drains, water heaters",
             "hours": "Mon-Sat 7am-7pm",
+            "pricing_faq": "Diagnostic visit: $89, waived if repaired same day.",
         },
         follow_redirects=False,
     )
@@ -47,6 +48,7 @@ def test_onboarding_business_saves_and_redirects(monkeypatch, test_engine):
     assert saved.trade == "Plumbing"
     assert saved.services == ["Drains", "water heaters"]
     assert saved.hours == "Mon-Sat 7am-7pm"
+    assert saved.pricing_faq == "Diagnostic visit: $89, waived if repaired same day."
 
 
 def select_client_by_email(email, session):
@@ -76,7 +78,13 @@ def test_onboarding_receptionist_activates_and_redirects(monkeypatch, test_engin
     _signed_up_client(client)
     client.post(
         "/onboarding/business",
-        data={"business_name": "Ridgeline Plumbing", "trade": "Plumbing", "services": "Drains", "hours": "9-5"},
+        data={
+            "business_name": "Ridgeline Plumbing",
+            "trade": "Plumbing",
+            "services": "Drains",
+            "hours": "9-5",
+            "pricing_faq": "Diagnostic visit: $89.",
+        },
     )
 
     response = client.post(
@@ -89,6 +97,7 @@ def test_onboarding_receptionist_activates_and_redirects(monkeypatch, test_engin
         saved = select_client_by_email("owner@example.com", session)
     assert saved.escalation_phone == "(555) 555-0101"
     assert saved.frontdesk_live is True
+    assert saved.pricing_faq == "Diagnostic visit: $89."
 
 
 def test_onboarding_receptionist_saves_answer_mode_and_business_phone(monkeypatch, test_engine):
@@ -101,7 +110,13 @@ def test_onboarding_receptionist_saves_answer_mode_and_business_phone(monkeypatc
     _signed_up_client(client)
     client.post(
         "/onboarding/business",
-        data={"business_name": "Ridgeline Plumbing", "trade": "Plumbing", "services": "Drains", "hours": "9-5"},
+        data={
+            "business_name": "Ridgeline Plumbing",
+            "trade": "Plumbing",
+            "services": "Drains",
+            "hours": "9-5",
+            "pricing_faq": "Diagnostic visit: $89.",
+        },
     )
 
     client.post(
@@ -129,7 +144,13 @@ def test_onboarding_receptionist_defaults_answer_mode_to_backup_on_bad_value(mon
     _signed_up_client(client)
     client.post(
         "/onboarding/business",
-        data={"business_name": "Ridgeline Plumbing", "trade": "Plumbing", "services": "Drains", "hours": "9-5"},
+        data={
+            "business_name": "Ridgeline Plumbing",
+            "trade": "Plumbing",
+            "services": "Drains",
+            "hours": "9-5",
+            "pricing_faq": "Diagnostic visit: $89.",
+        },
     )
     client.post(
         "/onboarding/receptionist",
@@ -138,3 +159,17 @@ def test_onboarding_receptionist_defaults_answer_mode_to_backup_on_bad_value(mon
     with Session(test_engine) as session:
         saved = select_client_by_email("owner@example.com", session)
     assert saved.answer_mode == "backup"
+
+
+def test_onboarding_business_requires_pricing_faq(monkeypatch, test_engine):
+    monkeypatch.setattr(app_module, "engine", test_engine)
+    monkeypatch.setattr(db_module, "engine", test_engine)
+    monkeypatch.setattr(portal_module, "engine", test_engine)
+    client = TestClient(app_module.app)
+    _signed_up_client(client)
+
+    response = client.post(
+        "/onboarding/business",
+        data={"business_name": "Ridgeline Plumbing", "trade": "Plumbing", "services": "Drains", "hours": "9-5"},
+    )
+    assert response.status_code == 422

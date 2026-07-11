@@ -80,3 +80,31 @@ h1, h2, .logo { font-family: var(--serif); font-weight: 600; color: var(--ink); 
 .err { color: #A8331F; font-size: 14px; margin-top: 12px; min-height: 1.2em; }
 .portal-foot { text-align: center; margin-top: 20px; font-size: 14px; color: var(--text-dim); }
 .portal-foot a { color: var(--accent); }
+
+/* Google sign-in — a neutral card button distinct from the rust primary CTA,
+   so it reads as an alternate door, not the main action. */
+.btn-google {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+  background: var(--card);
+  color: var(--text);
+  border: 1px solid var(--border);
+}
+.btn-google:hover { background: var(--bg-alt); }
+.or-divider {
+  display: flex;
+  align-items: center;
+  text-align: center;
+  color: var(--text-dim);
+  font-size: 13px;
+  margin: 16px 0;
+}
+.or-divider::before, .or-divider::after {
+  content: "";
+  flex: 1;
+  border-bottom: 1px solid var(--border);
+}
+.or-divider span { padding: 0 12px; }

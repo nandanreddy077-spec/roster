@@ -31,6 +31,7 @@ class Client(SQLModel, table=True):
     source_prompt_dismissed: bool = False
     frontdesk_live: bool = False
     activated_at: Optional[datetime] = None
+    tested_at: Optional[datetime] = None  # set the first time an owner's dashboard test message gets a real reply back — this, not form submission, is what earns the honest "Working" status (see portal.py)
     trial_spend_cents: int = 0
     trial_cap_cents: int = 2000  # $20 hard cap
     trial_soft_buffer_cents: int = 200  # $2 grace on top of the hard cap — see trial_cap.py
@@ -51,6 +52,7 @@ class Client(SQLModel, table=True):
             pricing_faq=self.pricing_faq,
             escalation_phone=self.escalation_phone,
             answer_mode=self.answer_mode,
+            tone=self.tone,
         )
 
 

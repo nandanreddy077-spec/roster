@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Hire your Retention Manager — Roster</title>
+<meta name="robots" content="noindex">
+<link rel="stylesheet" href="/static/portal.css">
+</head>
+<body>
+<header class="nav"><a class="logo" href="/">Roster</a></header>
+
+<div class="portal-card">
+  <h2>Hire your Retention Manager</h2>
+  <p class="lede">Two optional details that help them keep customers coming back. Skip either — you can add them later from your dashboard.</p>
+
+  <form method="post" action="/roster/hire/retention-manager">
+    <div class="field">
+      <label for="review_link">Do you have a Google or Yelp review link?</label>
+      <input type="text" id="review_link" name="review_link" placeholder="https://g.page/r/...">
+    </div>
+    <div class="field">
+      <label for="referral_incentive">Want to offer a referral incentive? <span class="hint">— optional</span></label>
+      <input type="text" id="referral_incentive" name="referral_incentive" placeholder="e.g. $25 off next service">
+    </div>
+    <button type="submit" class="btn btn-primary">Hire</button>
+  </form>
+</div>
+</body>
+</html>

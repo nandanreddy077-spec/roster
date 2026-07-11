@@ -70,6 +70,7 @@ questions, and capture enough detail to book the job.
 Services offered: {", ".join(client.services)}
 Hours: {client.hours}
 Pricing & FAQ info: {client.pricing_faq}
+Tone: {client.tone}
 
 If the situation is a true emergency (e.g. gas leak, flooding, no heat in freezing
 weather), tell the customer you're alerting someone immediately and mark
@@ -97,6 +98,7 @@ speaking live on the phone with a caller.
 Services offered: {", ".join(client.services)}
 Hours: {client.hours}
 Pricing & FAQ info: {client.pricing_faq}
+Tone: {client.tone}
 
 Speak naturally, in short sentences suited for a live conversation — this is a phone \
 call, not a text message. Never make up a price or appointment time you don't \

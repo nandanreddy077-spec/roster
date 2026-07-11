@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>You're live — Roster</title>
+<title>You've hired your {{ role_name }} — Roster</title>
 <meta name="robots" content="noindex">
 <link rel="stylesheet" href="/static/portal.css">
 </head>
@@ -11,24 +11,19 @@
 <header class="nav"><a class="logo" href="/">Roster</a></header>
 
 <div class="portal-card">
-  <h2>{{ role_name }} is live 🎉</h2>
-  {% if client.inbound_number %}
-  <p class="lede">Your new number: <strong>{{ client.inbound_number }}</strong></p>
-  {% endif %}
-  <p class="lede">We're now answering calls for {{ client.business_name }}.</p>
+  <h2>You've hired your {{ role_name }} 🎉</h2>
+  <p class="lede" style="margin-bottom:8px;">Your new hire for {{ client.business_name }}.</p>
+  <p class="lede">Now the important part — <strong>test it before you trust it.</strong> Send it a message like a customer would and see how it answers. That's how you'll know it's working, not a form telling you so.</p>
 
-  <p style="font-weight:600; margin-bottom:8px;">What happens now</p>
+  <p style="font-weight:600; margin-bottom:8px;">Once it's answering the way you want, it can</p>
   <ul style="margin-bottom:24px; padding-left:20px;">
     <li>✓ Answer every incoming call.</li>
     <li>✓ Book jobs.</li>
     <li>✓ Text confirmations.</li>
-    <li>✓ Edit anything later.</li>
+    <li>✓ Be tuned anytime from your dashboard.</li>
   </ul>
 
-  {% if client.inbound_number %}
-  <a class="btn btn-primary" href="tel:{{ client.inbound_number }}">📞 Call your {{ role_name }}</a>
-  {% endif %}
-  <a class="btn btn-secondary" href="/dashboard" style="display:block; text-align:center; margin-top:12px;">Go to dashboard</a>
+  <a class="btn btn-primary" href="/dashboard" style="display:block; text-align:center;">Test your {{ role_name }} →</a>
 </div>
 
 <div class="portal-card" style="margin-top:16px;">
