@@ -1,9 +1,9 @@
 """Self-serve activation: goes from a filled-in onboarding profile to a live
 Frontdesk. Mirrors the tolerance app.py's founder-facing
-/clients/{id}/provision-number route already has for xAI's voice
-registration not being implemented yet (see provisioning.py) — SMS-only is
-still a fully working Frontdesk, and a missing Twilio number is something the
-founder can provision later from the admin dashboard.
+/clients/{id}/provision-number route already has for voice provisioning
+failures (e.g. missing XAI_API_KEY, or the xAI call itself failing) — SMS-only
+is still a fully working Frontdesk, and voice can be finished later from the
+admin dashboard.
 """
 from datetime import datetime
 

@@ -176,12 +176,12 @@ def provision_client_number(client: Client, area_code: Optional[str] = None) -> 
     responsible for persisting them (kept pure/no DB writes here so this is
     easy to test and to retry a failed step without re-buying a number).
 
-    Raises ProvisioningError or NotImplementedError (from the xAI step) on
-    failure — a caller should show the error and let the number-buying part's
-    result be reused rather than re-purchasing on retry.
+    Raises ProvisioningError on failure — a caller should show the error and
+    let the number-buying part's result be reused rather than re-purchasing
+    on retry.
     """
     purchase = buy_twilio_number(area_code)
-    attach_number_to_xai_trunk(purchase["sid"])
+    attach_number_to_xai_trunk(purchase["sid"], purchase["phone_number"])
     xai_registration = register_number_with_xai(purchase["phone_number"])
 
     return {

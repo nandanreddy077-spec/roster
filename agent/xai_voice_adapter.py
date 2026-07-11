@@ -10,19 +10,19 @@ Twilio trunk (or an xAI-issued number) points at xAI's SIP endpoint — see
 agent/README.md. SMS agents (Frontdesk text-back, Chaser, Rebooker, Renewals,
 Referrals, Reviews) are unaffected — they still run on Twilio SMS.
 
-Webhook shape confirmed from xAI's docs (2026-07-07 fetch of
-docs.x.ai/.../voice-agent/sip): `realtime.call.incoming` arrives as
-{"type": "realtime.call.incoming", "data": {"call_id": ..., "sip_headers":
-[{"name": "From"/"To", "value": "+1..."}]}}, verified over three headers —
-`webhook-id`, `webhook-timestamp`, `webhook-signature` — which is the Svix
-"standard webhooks" convention (also used by Clerk, OpenAI, etc.), not a
-plain HMAC-of-body. Still unconfirmed: whether the signing secret is
-`whsec_`-prefixed base64 (Svix's usual format) and whether the signature
-header can contain multiple space-separated `v1,<sig>` entries — the Svix
-spec allows for key rotation, but xAI's docs didn't spell this out. Confirm
-against a real webhook delivery before relying on this in production; the
-number-registration API that hands you this secret isn't in xAI's public
-docs at all (see provisioning.py).
+Webhook shape confirmed from xAI's now-public docs
+(docs.x.ai/developers/model-capabilities/audio/voice-agent/sip):
+`realtime.call.incoming` arrives as {"type": "realtime.call.incoming", "data":
+{"call_id": ..., "sip_headers": [{"name": "From"/"To", "value": "+1..."}]}},
+verified over three headers — `webhook-id`, `webhook-timestamp`,
+`webhook-signature` — which is the Svix "standard webhooks" convention (also
+used by Clerk, OpenAI, etc.), not a plain HMAC-of-body. Still unconfirmed:
+whether the signing secret is `whsec_`-prefixed base64 (Svix's usual format)
+and whether the signature header can contain multiple space-separated
+`v1,<sig>` entries — the Svix spec allows for key rotation, but xAI's docs
+didn't spell this out. Confirm against a real webhook delivery before relying
+on this in production. The number-registration call that hands you this
+secret is implemented in provisioning.py's `register_number_with_xai`.
 """
 import base64
 import hashlib

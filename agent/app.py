@@ -187,12 +187,11 @@ def set_referral_incentive(client_id: int, referral_incentive: str = Form(...)):
 
 @app.post("/clients/{client_id}/provision-number")
 def provision_number(client_id: int, area_code: str = Form("")):
-    """Buys a Twilio number and attaches it to the shared xAI-origination
-    trunk in one click. The xAI registration step (which would set
-    xai_phone_number + xai_signing_secret) isn't implemented yet — see
-    provisioning.py — so this saves the Twilio half (enough for SMS agents
-    to work immediately) and reports that voice needs a manual follow-up,
-    rather than losing the purchased number to an unimplemented step."""
+    """Buys a Twilio number, registers it with xAI for voice, and attaches it
+    to the shared xAI-origination trunk in one click. If the xAI half fails
+    (e.g. missing XAI_API_KEY or an xAI-side error), the Twilio half is kept —
+    SMS agents work immediately — and the error is reported so voice can be
+    retried later, rather than losing the purchased number."""
     error = None
     with Session(engine) as session:
         client = session.get(Client, client_id)
