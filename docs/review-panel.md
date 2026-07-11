@@ -55,3 +55,36 @@ for CEO / Architect / UX interactively when you want a live back-and-forth inste
   path. Founder chose live voice as the better product/demo. **Consequence the panel attached to
   the override:** the first work is a *de-risking spike* — prove xAI voice answers a call and holds
   a real conversation against our engine — before any signup/provisioning UI is built around it.
+
+## 2026-07-11 — Founder "Roster Core Platform" PRD: unanimous BLOCKING OBJECTION
+
+All 7 seats independently returned BLOCKING OBJECTION on the founder's request for a
+100-150 page platform spec (universal memory, event bus, knowledge graph, evaluation
+framework before the next AI employee; "Roster Office" rebrand; voice as the gate before
+anything else ships). Convergent findings:
+- CEO/Growth: zero paying customers exist; the spec's opportunity cost delays the actual
+  bottleneck. Not demoable to a real shop.
+- Product: the onboarding auto-research rewrite the PRD asks for is already queued as the
+  next spec (2026-07-10 design doc's own Roadmap section) — re-decided, not new.
+- UX: current onboarding already reaches its aha (live "call your receptionist" number)
+  in well under 60s; the PRD's proposed replacement would delete that aha and fail open
+  for shops without real websites. Fix: layer optional URL pre-fill on top, don't replace.
+- Customer Advocate: "Roster Office" is likely a weaker sell than the existing named-role
+  model (AI Receptionist/Quote Chaser/Retention Manager); unreviewed scraped business info
+  going live on a real phone line is a real reputational risk — direct, unresolved tension
+  with the existing spec's explicit no-founder-gate decision (2026-07-10 design doc,
+  "Explicitly out of scope"). Flagged for founder to decide, not resolved here.
+- Architect: "shared memory across agents" is **already true today** (one Client row +
+  shared Job/Message tables) — the platform-infra ask solves a problem that doesn't exist.
+  ALSO surfaced independently: channels.py's silent ConsoleChannel fallback + prod Twilio
+  creds confirmed unset means the missed-call text-back may have been doing nothing in
+  prod, invisibly.
+- QA: "voice production-ready before anything else ships" cannot be scheduled — blocked on
+  xAI's undocumented registration endpoint (provisioning.py, unchanged since the
+  2026-07-10 override). Gating all other (fully-built, demoable) SMS agents behind it
+  freezes the whole roadmap against a dependency with no ETA. Also found: buy_twilio_number
+  had no idempotency guard, and never configured the purchased number's SMS webhook.
+
+Founder decision: defer the full PRD; fix the two concrete bugs immediately (commit
+9ec03d0 — SMS webhook wiring on number purchase, loud warning on missing Twilio creds in
+prod) and proceed toward a real end-to-end pilot verification instead of writing the spec.
