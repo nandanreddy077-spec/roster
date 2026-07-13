@@ -2,6 +2,7 @@ import json
 from datetime import datetime
 from typing import List, Optional
 
+from sqlalchemy import UniqueConstraint
 from sqlmodel import Field, SQLModel
 
 from models import ClientConfig
@@ -57,6 +58,8 @@ class Business(SQLModel, table=True):
 
 
 class Customer(SQLModel, table=True):
+    __table_args__ = (UniqueConstraint("business_id", "phone", name="uq_customer_business_phone"),)
+
     id: Optional[int] = Field(default=None, primary_key=True)
     business_id: int = Field(foreign_key="business.id", index=True)
     phone: str = Field(index=True)

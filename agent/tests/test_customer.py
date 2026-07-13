@@ -1,3 +1,5 @@
+import pytest
+from sqlalchemy.exc import IntegrityError
 from sqlmodel import select
 from db_models import Business, Customer
 from repositories import get_or_create_customer
@@ -24,3 +26,16 @@ def test_same_phone_distinct_per_business(session):
     a = get_or_create_customer(session, b1.id, "+15550000000")
     b = get_or_create_customer(session, b2.id, "+15550000000")
     assert a.id != b.id
+
+
+def test_schema_enforces_unique_business_phone(session):
+    b = Business(business_name="B", trade="hvac", email="c-uniq@test.io")
+    session.add(b)
+    session.commit()
+    session.refresh(b)
+    session.add(Customer(business_id=b.id, phone="+15559999999"))
+    session.commit()
+    session.add(Customer(business_id=b.id, phone="+15559999999"))
+    with pytest.raises(IntegrityError):
+        session.commit()
+    session.rollback()
