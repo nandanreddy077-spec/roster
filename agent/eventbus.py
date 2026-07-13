@@ -2,6 +2,7 @@ import json
 from collections import defaultdict
 from typing import Callable, Dict, List
 from sqlmodel import Session, select
+from sqlalchemy.exc import IntegrityError
 from db_models import Event
 from events import DomainEvent
 
@@ -24,7 +25,11 @@ class EventBus:
                 payload_json=json.dumps(event.payload), customer_id=event.customer_id,
                 employee_id=event.employee_id, dedup_key=event.dedup_key,
             ))
-            s.commit()
+            try:
+                s.commit()
+            except IntegrityError:
+                s.rollback()
+                return False
         for handler in self._subscribers.get(event.type, []):
             handler(event)  # synchronous, in-process (async/durable deferred behind this seam)
         return True
