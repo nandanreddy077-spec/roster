@@ -36,6 +36,7 @@ from sqlmodel import Session
 
 from db_models import Business, Job, Message
 from engine import LOG_JOB_TOOL, TRANSFER_CALL_TOOL, build_voice_system_prompt
+from notifications import notify_owner_of_booking
 
 REALTIME_URL = "wss://api.x.ai/v1/realtime"
 VOICE_THREAD_PREFIX = "xai-voice:"
@@ -122,6 +123,10 @@ def _persist_job(session: Session, client: Business, thread: str, caller_number:
     )
     session.add(job)
     session.commit()
+    # Same owner-text as the SMS path, for a voice-booked job. Best-effort: the
+    # send is synchronous, but it's a short call on a per-call background task
+    # and notify_owner_of_booking swallows any failure.
+    notify_owner_of_booking(client, job)
     return job
 
 
