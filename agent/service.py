@@ -9,8 +9,9 @@ from typing import Any, Dict, List
 
 from sqlmodel import Session, select
 
-from db_models import Client, Job, Message
+from db_models import Business, Job, Message
 from engine import AgentEngine, merge_consecutive_roles
+from repositories import get_or_create_customer
 from trial_cap import can_respond, record_usage
 
 agent = AgentEngine()
@@ -19,7 +20,7 @@ agent = AgentEngine()
 def _load_history(session: Session, client_id: int, customer_phone: str) -> List[Dict[str, Any]]:
     rows = session.exec(
         select(Message)
-        .where(Message.client_id == client_id, Message.customer_phone == customer_phone)
+        .where(Message.business_id == client_id, Message.customer_phone == customer_phone)
         .order_by(Message.id)
     ).all()
     raw = [{"role": m.role, "content": json.loads(m.content_json)} for m in rows]
@@ -27,7 +28,7 @@ def _load_history(session: Session, client_id: int, customer_phone: str) -> List
 
 
 def handle_customer_message(
-    session: Session, client: Client, customer_phone: str, text: str
+    session: Session, client: Business, customer_phone: str, text: str
 ) -> Dict[str, Any]:
     """Run one customer turn through the agent. Persists messages and any jobs.
 
@@ -42,7 +43,7 @@ def handle_customer_message(
 
     session.add(
         Message(
-            client_id=client.id,
+            business_id=client.id,
             customer_phone=customer_phone,
             role="user",
             content_json=json.dumps(text),
@@ -61,7 +62,7 @@ def handle_customer_message(
     for nm in result["new_messages"]:
         session.add(
             Message(
-                client_id=client.id,
+                business_id=client.id,
                 customer_phone=customer_phone,
                 role=nm["role"],
                 content_json=json.dumps(nm["content"]),
@@ -71,8 +72,10 @@ def handle_customer_message(
     captured: List[Job] = []
     for call in result["jobs"]:
         ji = call["input"]
+        cust = get_or_create_customer(session, client.id, customer_phone, ji.get("customer_name"))
         job = Job(
-            client_id=client.id,
+            business_id=client.id,
+            customer_id=cust.id,
             customer_phone=customer_phone,
             customer_name=ji.get("customer_name"),
             service_type=ji["service_type"],

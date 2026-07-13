@@ -9,7 +9,7 @@ from typing import List, Optional
 from sqlmodel import Session, select
 
 from channels import get_channel
-from db_models import Client, Job, ReferralLead
+from db_models import Business, Job, ReferralLead
 from engine import AgentEngine
 from referral_engine import (
     RECORD_REFERRAL_TOOL,
@@ -41,7 +41,7 @@ def send_due_referral_asks(session: Session) -> List[Job]:
     ).all()
 
     for job in jobs:
-        client = session.get(Client, job.client_id)
+        client = session.get(Business, job.business_id)
         if client is None or not client.referral_incentive or not job.callback_number:
             continue
 
@@ -76,7 +76,7 @@ def find_active_referral_ask(session: Session, client_id: int, customer_phone: s
     jobs = session.exec(
         select(Job)
         .where(
-            Job.client_id == client_id,
+            Job.business_id == client_id,
             Job.callback_number == customer_phone,
             Job.referral_sent_at.is_not(None),
             Job.referral_sent_at >= cutoff,
@@ -93,7 +93,7 @@ def find_active_referral_ask(session: Session, client_id: int, customer_phone: s
     return None
 
 
-def handle_referral_reply(session: Session, client: Client, job: Job, text: str) -> Optional[str]:
+def handle_referral_reply(session: Session, client: Business, job: Job, text: str) -> Optional[str]:
     """Process an inbound reply to a referral ask. Always logs a ReferralLead,
     regardless of whether Claude can extract a clean name/phone from the
     reply — the raw text is never lost just because extraction was messy."""
@@ -103,7 +103,7 @@ def handle_referral_reply(session: Session, client: Client, job: Job, text: str)
     if not can_respond(client):
         session.add(
             ReferralLead(
-                client_id=client.id,
+                business_id=client.id,
                 source_job_id=job.id,
                 asker_phone=job.callback_number,
                 referred_name=None,
@@ -132,7 +132,7 @@ def handle_referral_reply(session: Session, client: Client, job: Job, text: str)
 
     session.add(
         ReferralLead(
-            client_id=client.id,
+            business_id=client.id,
             source_job_id=job.id,
             # job.callback_number is Optional on Job, but never None here: this
             # function only runs for jobs find_active_referral_ask matched via

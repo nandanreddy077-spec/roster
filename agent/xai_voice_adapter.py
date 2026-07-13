@@ -34,7 +34,7 @@ from typing import Any, Dict, List, Optional
 import websockets
 from sqlmodel import Session
 
-from db_models import Client, Job, Message
+from db_models import Business, Job, Message
 from engine import LOG_JOB_TOOL, TRANSFER_CALL_TOOL, build_voice_system_prompt
 
 REALTIME_URL = "wss://api.x.ai/v1/realtime"
@@ -93,7 +93,7 @@ def _translate_tool(tool: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
-def build_session_update(client: Client) -> Dict[str, Any]:
+def build_session_update(client: Business) -> Dict[str, Any]:
     return {
         "type": "session.update",
         "session": {
@@ -109,9 +109,9 @@ def _thread_id(call_id: str) -> str:
     return f"{VOICE_THREAD_PREFIX}{call_id}"
 
 
-def _persist_job(session: Session, client: Client, thread: str, caller_number: str, args: Dict[str, Any]) -> Job:
+def _persist_job(session: Session, client: Business, thread: str, caller_number: str, args: Dict[str, Any]) -> Job:
     job = Job(
-        client_id=client.id,
+        business_id=client.id,
         customer_phone=thread,
         customer_name=args.get("customer_name"),
         service_type=args["service_type"],
@@ -126,7 +126,7 @@ def _persist_job(session: Session, client: Client, thread: str, caller_number: s
 
 
 async def _handle_function_call(
-    ws, session: Session, client: Client, thread: str, caller_number: str, event: Dict[str, Any]
+    ws, session: Session, client: Business, thread: str, caller_number: str, event: Dict[str, Any]
 ) -> None:
     name = event["name"]
     call_id = event["call_id"]
@@ -166,7 +166,7 @@ def _extract_transcript(response_done_event: Dict[str, Any]) -> str:
     return " ".join(parts).strip()
 
 
-async def run_call(call_id: str, client: Client, caller_number: str, session_factory) -> None:
+async def run_call(call_id: str, client: Business, caller_number: str, session_factory) -> None:
     """Owns one live call end-to-end. Runs as a background task kicked off by
     the /webhook/xai-incoming-call handler — must not block that handler's
     response to xAI."""
@@ -184,7 +184,7 @@ async def run_call(call_id: str, client: Client, caller_number: str, session_fac
 
             if etype == "response.function_call_arguments.done":
                 with session_factory() as session:
-                    session_client = session.get(Client, client.id)
+                    session_client = session.get(Business, client.id)
                     await _handle_function_call(ws, session, session_client, thread, caller_number, event)
 
             elif etype == "response.done":
@@ -192,7 +192,7 @@ async def run_call(call_id: str, client: Client, caller_number: str, session_fac
                 if transcript:
                     with session_factory() as session:
                         session.add(Message(
-                            client_id=client.id,
+                            business_id=client.id,
                             customer_phone=thread,
                             role="assistant",
                             content_json=json.dumps([{"type": "text", "text": transcript}]),

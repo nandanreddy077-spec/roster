@@ -3,7 +3,7 @@ import hashlib
 import hmac
 import json
 
-from db_models import Client
+from db_models import Business
 from xai_voice_adapter import (
     _extract_transcript,
     _translate_tool,
@@ -13,8 +13,8 @@ from xai_voice_adapter import (
 )
 
 
-def make_client(session) -> Client:
-    client = Client(
+def make_client(session) -> Business:
+    client = Business(
         business_name="Test Co",
         trade="HVAC",
         services_json=json.dumps(["AC repair"]),

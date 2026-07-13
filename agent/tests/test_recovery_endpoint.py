@@ -6,14 +6,14 @@ from sqlmodel import Session, select
 
 import app as app_module
 from conftest import DASH_AUTH, StubAgent
-from db_models import Client, Job, RecoveryCampaign, RecoveryJob, ReferralLead
+from db_models import Business, Job, RecoveryCampaign, RecoveryJob, ReferralLead
 import recovery_service
 import referral_service
 
 
 def make_client(test_engine) -> int:
     with Session(test_engine) as session:
-        client = Client(
+        client = Business(
             business_name="Test Co", trade="HVAC", services_json=json.dumps(["AC repair"]),
             hours="9-5", pricing_faq="n/a", escalation_phone="+15550000000",
             inbound_number="+15559990000",
@@ -210,7 +210,7 @@ def test_set_review_link_saves_and_shows_on_client_detail(monkeypatch, test_engi
     assert response.status_code == 303
 
     with Session(test_engine) as session:
-        client = session.get(Client, client_id)
+        client = session.get(Business, client_id)
     assert client.review_link == "https://g.page/r/test-review-link"
 
     detail = test_client.get(f"/clients/{client_id}")
@@ -237,7 +237,7 @@ def test_mark_job_done_sends_review_sms_when_link_set(monkeypatch, test_engine):
     test_client.post(f"/clients/{client_id}/review-link", data={"review_link": "https://g.page/r/test"})
 
     with Session(test_engine) as session:
-        job = Job(client_id=client_id, service_type="AC repair", urgency="routine", callback_number="+15551234567")
+        job = Job(business_id=client_id, service_type="AC repair", urgency="routine", callback_number="+15551234567")
         session.add(job)
         session.commit()
         session.refresh(job)
@@ -263,7 +263,7 @@ def test_mark_job_done_twice_only_sends_review_sms_once(monkeypatch, test_engine
     test_client.post(f"/clients/{client_id}/review-link", data={"review_link": "https://g.page/r/test"})
 
     with Session(test_engine) as session:
-        job = Job(client_id=client_id, service_type="AC repair", urgency="routine", callback_number="+15551234567")
+        job = Job(business_id=client_id, service_type="AC repair", urgency="routine", callback_number="+15551234567")
         session.add(job)
         session.commit()
         session.refresh(job)
@@ -285,7 +285,7 @@ def test_mark_job_done_without_review_link_sends_nothing(monkeypatch, test_engin
     test_client = TestClient(app_module.app, headers=DASH_AUTH)
 
     with Session(test_engine) as session:
-        job = Job(client_id=client_id, service_type="AC repair", urgency="routine", callback_number="+15551234567")
+        job = Job(business_id=client_id, service_type="AC repair", urgency="routine", callback_number="+15551234567")
         session.add(job)
         session.commit()
         session.refresh(job)
@@ -310,7 +310,7 @@ def test_mark_job_done_still_completes_when_sms_send_fails(monkeypatch, test_eng
     test_client.post(f"/clients/{client_id}/review-link", data={"review_link": "https://g.page/r/test"})
 
     with Session(test_engine) as session:
-        job = Job(client_id=client_id, service_type="AC repair", urgency="routine", callback_number="+15551234567")
+        job = Job(business_id=client_id, service_type="AC repair", urgency="routine", callback_number="+15551234567")
         session.add(job)
         session.commit()
         session.refresh(job)
@@ -332,7 +332,7 @@ def test_client_detail_shows_mark_done_then_completed_badge(monkeypatch, test_en
     test_client = TestClient(app_module.app, headers=DASH_AUTH)
 
     with Session(test_engine) as session:
-        job = Job(client_id=client_id, service_type="AC repair", urgency="routine", callback_number="+1")
+        job = Job(business_id=client_id, service_type="AC repair", urgency="routine", callback_number="+1")
         session.add(job)
         session.commit()
         session.refresh(job)
@@ -354,7 +354,7 @@ def test_inbound_sms_routes_active_referral_reply(monkeypatch, test_engine):
 
     with Session(test_engine) as session:
         job = Job(
-            client_id=client_id, service_type="AC repair", urgency="routine",
+            business_id=client_id, service_type="AC repair", urgency="routine",
             customer_name="Mike", callback_number="+15551112222",
             completed_at=datetime.utcnow() - timedelta(days=5),
             referral_sent_at=datetime.utcnow(),
@@ -396,7 +396,7 @@ def test_inbound_sms_prioritizes_active_recovery_over_referral(monkeypatch, test
         recovery_job.last_sent_day = 1
         session.add(recovery_job)
         referral_job = Job(
-            client_id=client_id, service_type="AC repair", urgency="routine",
+            business_id=client_id, service_type="AC repair", urgency="routine",
             callback_number="+15551112222",
             completed_at=datetime.utcnow() - timedelta(days=5),
             referral_sent_at=datetime.utcnow(),
@@ -446,12 +446,12 @@ def test_client_detail_shows_captured_referral_leads(monkeypatch, test_engine):
     client_id = make_client(test_engine)
 
     with Session(test_engine) as session:
-        job = Job(client_id=client_id, service_type="AC repair", urgency="routine", callback_number="+1")
+        job = Job(business_id=client_id, service_type="AC repair", urgency="routine", callback_number="+1")
         session.add(job)
         session.commit()
         session.refresh(job)
         session.add(ReferralLead(
-            client_id=client_id, source_job_id=job.id, asker_phone="+1",
+            business_id=client_id, source_job_id=job.id, asker_phone="+1",
             referred_name="Sarah", referred_phone="+15559998888",
             raw_reply_text="my friend Sarah, 555-998-8888",
         ))
@@ -469,12 +469,12 @@ def test_client_detail_falls_back_to_raw_text_when_extraction_failed(monkeypatch
     client_id = make_client(test_engine)
 
     with Session(test_engine) as session:
-        job = Job(client_id=client_id, service_type="AC repair", urgency="routine", callback_number="+1")
+        job = Job(business_id=client_id, service_type="AC repair", urgency="routine", callback_number="+1")
         session.add(job)
         session.commit()
         session.refresh(job)
         session.add(ReferralLead(
-            client_id=client_id, source_job_id=job.id, asker_phone="+1",
+            business_id=client_id, source_job_id=job.id, asker_phone="+1",
             raw_reply_text="no thanks, not right now",
         ))
         session.commit()

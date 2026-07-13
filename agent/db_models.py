@@ -2,12 +2,13 @@ import json
 from datetime import datetime
 from typing import List, Optional
 
+from sqlalchemy import UniqueConstraint
 from sqlmodel import Field, SQLModel
 
 from models import ClientConfig
 
 
-class Client(SQLModel, table=True):
+class Business(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     business_name: str = ""
     trade: str = ""
@@ -56,10 +57,29 @@ class Client(SQLModel, table=True):
         )
 
 
+class Customer(SQLModel, table=True):
+    __table_args__ = (UniqueConstraint("business_id", "phone", name="uq_customer_business_phone"),)
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    business_id: int = Field(foreign_key="business.id", index=True)
+    phone: str = Field(index=True)
+    name: Optional[str] = None
+    source: Optional[str] = None
+    tags_json: str = "[]"
+    first_seen_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
+
+    @property
+    def tags(self) -> List[str]:
+        return json.loads(self.tags_json)
+
+
 class Message(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
-    client_id: int = Field(foreign_key="client.id")
-    customer_phone: str = "dashboard"  # threads a conversation per customer on a client's line
+    business_id: int = Field(foreign_key="business.id")
+    customer_id: Optional[int] = Field(default=None, foreign_key="customer.id", index=True)
+    customer_phone: str = "dashboard"  # threads a conversation per customer on a business's line
     role: str  # "user" or "assistant"
     content_json: str  # JSON-encoded content (str or list of content blocks)
     created_at: datetime = Field(default_factory=datetime.utcnow)
@@ -67,7 +87,8 @@ class Message(SQLModel, table=True):
 
 class Job(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
-    client_id: int = Field(foreign_key="client.id")
+    business_id: int = Field(foreign_key="business.id")
+    customer_id: Optional[int] = Field(default=None, foreign_key="customer.id", index=True)
     customer_phone: str = "dashboard"
     customer_name: Optional[str] = None
     service_type: str
@@ -82,7 +103,7 @@ class Job(SQLModel, table=True):
 
 class RecoveryCampaign(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
-    client_id: int = Field(foreign_key="client.id")
+    business_id: int = Field(foreign_key="business.id")
     face: str  # "quote" or "reactivation"
     name: str
     customer_list_json: str  # JSON list of {phone, name, service_type, estimate_amount, days_since}
@@ -103,7 +124,7 @@ class RecoveryCampaign(SQLModel, table=True):
 class RecoveryJob(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     campaign_id: int = Field(foreign_key="recoverycampaign.id")
-    client_id: int = Field(foreign_key="client.id")
+    business_id: int = Field(foreign_key="business.id")
     customer_phone: str
     customer_name: Optional[str] = None
     service_type: str
@@ -134,10 +155,32 @@ class RecoveryMessageLog(SQLModel, table=True):
 
 class ReferralLead(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
-    client_id: int = Field(foreign_key="client.id")
+    business_id: int = Field(foreign_key="business.id")
     source_job_id: int = Field(foreign_key="job.id")  # which completed job triggered this ask
     asker_phone: str  # the existing customer who was asked
     referred_name: Optional[str] = None  # extracted by Claude, if present
     referred_phone: Optional[str] = None  # extracted by Claude, if present
     raw_reply_text: str  # always stored, regardless of extraction outcome
     created_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class Employee(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    business_id: int = Field(foreign_key="business.id", index=True)
+    role_key: str
+    display_name: str = ""
+    status: str = "active"  # active | paused | fired
+    policy_json: str = "{}"
+    hired_at: datetime = Field(default_factory=datetime.utcnow)
+    fired_at: Optional[datetime] = None
+
+
+class Event(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    business_id: int = Field(foreign_key="business.id", index=True)
+    type: str = Field(index=True)
+    payload_json: str = "{}"
+    customer_id: Optional[int] = Field(default=None, foreign_key="customer.id")
+    employee_id: Optional[int] = Field(default=None, foreign_key="employee.id")
+    dedup_key: Optional[str] = Field(default=None, unique=True, index=True)
+    occurred_at: datetime = Field(default_factory=datetime.utcnow)

@@ -3,13 +3,13 @@ from datetime import datetime, timedelta
 
 from sqlmodel import Session, select
 
-from db_models import Client, Job, RecoveryJob, RecoveryMessageLog
+from db_models import Business, Job, RecoveryJob, RecoveryMessageLog
 import recovery_service
 from conftest import StubAgent
 
 
-def make_client(session: Session) -> Client:
-    client = Client(
+def make_client(session: Session) -> Business:
+    client = Business(
         business_name="Test Co", trade="HVAC", services_json=json.dumps(["AC repair"]),
         hours="9-5", pricing_faq="n/a", escalation_phone="+15550000000",
         inbound_number="+15559990000",

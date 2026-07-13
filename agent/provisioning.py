@@ -20,7 +20,7 @@ from typing import Optional
 import httpx
 from twilio.rest import Client as TwilioRestClient
 
-from db_models import Client
+from db_models import Business
 
 XAI_TRUNK_FRIENDLY_NAME = "Roster - xAI Voice"
 DEFAULT_PUBLIC_BASE_URL = "https://rosterhires.com"
@@ -165,13 +165,13 @@ def register_number_with_xai(phone_number: str) -> dict:
     return {"signing_secret": secret, "xai_phone_number": phone_number}
 
 
-def provision_client_number(client: Client, area_code: Optional[str] = None) -> dict:
+def provision_client_number(client: Business, area_code: Optional[str] = None) -> dict:
     """Full flow: buy a Twilio number, wire it to SMS (just by being the
-    number — /webhook/sms routes by Client.inbound_number, no extra Twilio
+    number — /webhook/sms routes by Business.inbound_number, no extra Twilio
     config needed for that part), attach it to the xAI-origination trunk for
     voice, and register it with xAI.
 
-    Returns the fields to save on the Client: inbound_number,
+    Returns the fields to save on the Business: inbound_number,
     twilio_number_sid, xai_phone_number, xai_signing_secret. Caller is
     responsible for persisting them (kept pure/no DB writes here so this is
     easy to test and to retry a failed step without re-buying a number).

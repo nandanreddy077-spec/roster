@@ -9,11 +9,11 @@ from datetime import datetime
 
 from sqlmodel import Session
 
-from db_models import Client
+from db_models import Business
 from provisioning import ProvisioningError, attach_number_to_xai_trunk, buy_twilio_number, register_number_with_xai
 
 
-def activate_frontdesk(session: Session, client: Client) -> None:
+def activate_frontdesk(session: Session, client: Business) -> None:
     if not client.inbound_number:
         try:
             purchase = buy_twilio_number()

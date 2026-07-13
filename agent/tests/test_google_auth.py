@@ -5,7 +5,7 @@ import app as app_module
 import db as db_module
 import google_auth
 import portal as portal_module
-from db_models import Client
+from db_models import Business
 
 
 class _FakeRequest:
@@ -47,7 +47,7 @@ def test_new_email_creates_passwordless_client_into_onboarding(monkeypatch, test
         assert resp.headers["location"] == "/onboarding/business"
 
     with Session(test_engine) as session:
-        created = session.exec(select(Client).where(Client.email == "new.owner@example.com")).first()
+        created = session.exec(select(Business).where(Business.email == "new.owner@example.com")).first()
     assert created is not None
     assert created.password_hash is None  # Google is their sign-in
     assert request.session["client_id"] == created.id
@@ -56,7 +56,7 @@ def test_new_email_creates_passwordless_client_into_onboarding(monkeypatch, test
 def test_existing_live_client_goes_to_dashboard(monkeypatch, test_engine):
     _wire(monkeypatch, test_engine)
     with Session(test_engine) as session:
-        session.add(Client(email="live@example.com", frontdesk_live=True))
+        session.add(Business(email="live@example.com", frontdesk_live=True))
         session.commit()
 
     request = _FakeRequest()
@@ -68,7 +68,7 @@ def test_existing_live_client_goes_to_dashboard(monkeypatch, test_engine):
 def test_existing_unfinished_client_resumes_onboarding(monkeypatch, test_engine):
     _wire(monkeypatch, test_engine)
     with Session(test_engine) as session:
-        session.add(Client(email="wip@example.com", frontdesk_live=False))
+        session.add(Business(email="wip@example.com", frontdesk_live=False))
         session.commit()
 
     request = _FakeRequest()
@@ -82,14 +82,14 @@ def test_google_login_matches_existing_password_account_by_email(monkeypatch, te
     the SAME account — one account per email, never a duplicate."""
     _wire(monkeypatch, test_engine)
     with Session(test_engine) as session:
-        session.add(Client(email="both@example.com", password_hash="bcrypt-hash-here"))
+        session.add(Business(email="both@example.com", password_hash="bcrypt-hash-here"))
         session.commit()
-        original_id = session.exec(select(Client).where(Client.email == "both@example.com")).first().id
+        original_id = session.exec(select(Business).where(Business.email == "both@example.com")).first().id
 
     request = _FakeRequest()
     with Session(test_engine) as session:
         portal_module._login_or_create_by_email(request, session, "both@example.com")
-        count = len(session.exec(select(Client).where(Client.email == "both@example.com")).all())
+        count = len(session.exec(select(Business).where(Business.email == "both@example.com")).all())
     assert count == 1
     assert request.session["client_id"] == original_id
 

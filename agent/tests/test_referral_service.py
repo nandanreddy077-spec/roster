@@ -3,13 +3,13 @@ from datetime import datetime, timedelta
 
 from sqlmodel import Session, select
 
-from db_models import Client, Job, ReferralLead
+from db_models import Business, Job, ReferralLead
 from conftest import StubAgent
 import referral_service
 
 
-def make_client(session: Session, referral_incentive=None) -> Client:
-    client = Client(
+def make_client(session: Session, referral_incentive=None) -> Business:
+    client = Business(
         business_name="Test Co", trade="HVAC", services_json=json.dumps(["AC repair"]),
         hours="9-5", pricing_faq="n/a", escalation_phone="+15550000000",
         inbound_number="+15559990000", referral_incentive=referral_incentive,
@@ -34,7 +34,7 @@ def test_send_due_referral_asks_sends_to_eligible_job(session, monkeypatch):
 
     client = make_client(session, referral_incentive="$25 off your next service")
     job = Job(
-        client_id=client.id, service_type="AC repair", urgency="routine",
+        business_id=client.id, service_type="AC repair", urgency="routine",
         customer_name="Mike", callback_number="+15551234567",
         completed_at=datetime.utcnow() - timedelta(days=5),
     )
@@ -57,7 +57,7 @@ def test_send_due_referral_asks_skips_job_completed_too_recently(session, monkey
 
     client = make_client(session, referral_incentive="$25 off")
     job = Job(
-        client_id=client.id, service_type="AC repair", urgency="routine",
+        business_id=client.id, service_type="AC repair", urgency="routine",
         callback_number="+1", completed_at=datetime.utcnow() - timedelta(days=1),
     )
     session.add(job)
@@ -75,7 +75,7 @@ def test_send_due_referral_asks_skips_client_without_incentive(session, monkeypa
 
     client = make_client(session, referral_incentive=None)
     job = Job(
-        client_id=client.id, service_type="AC repair", urgency="routine",
+        business_id=client.id, service_type="AC repair", urgency="routine",
         callback_number="+1", completed_at=datetime.utcnow() - timedelta(days=5),
     )
     session.add(job)
@@ -92,7 +92,7 @@ def test_send_due_referral_asks_does_not_resend(session, monkeypatch):
 
     client = make_client(session, referral_incentive="$25 off")
     job = Job(
-        client_id=client.id, service_type="AC repair", urgency="routine",
+        business_id=client.id, service_type="AC repair", urgency="routine",
         callback_number="+1", completed_at=datetime.utcnow() - timedelta(days=5),
     )
     session.add(job)
@@ -125,11 +125,11 @@ def test_send_due_referral_asks_isolates_per_job_failure(session, monkeypatch):
 
     client = make_client(session, referral_incentive="$25 off")
     bad_job = Job(
-        client_id=client.id, service_type="AC repair", urgency="routine",
+        business_id=client.id, service_type="AC repair", urgency="routine",
         callback_number="+1", completed_at=datetime.utcnow() - timedelta(days=5),
     )
     good_job = Job(
-        client_id=client.id, service_type="Furnace repair", urgency="routine",
+        business_id=client.id, service_type="Furnace repair", urgency="routine",
         callback_number="+2", completed_at=datetime.utcnow() - timedelta(days=5),
     )
     session.add(bad_job)
@@ -149,7 +149,7 @@ def test_send_due_referral_asks_isolates_per_job_failure(session, monkeypatch):
 def test_find_active_referral_ask_matches_within_window(session):
     client = make_client(session, referral_incentive="$25 off")
     job = Job(
-        client_id=client.id, service_type="AC repair", urgency="routine",
+        business_id=client.id, service_type="AC repair", urgency="routine",
         callback_number="+1", completed_at=datetime.utcnow() - timedelta(days=5),
         referral_sent_at=datetime.utcnow() - timedelta(days=1),
     )
@@ -165,7 +165,7 @@ def test_find_active_referral_ask_matches_within_window(session):
 def test_find_active_referral_ask_ignores_expired_window(session):
     client = make_client(session, referral_incentive="$25 off")
     job = Job(
-        client_id=client.id, service_type="AC repair", urgency="routine",
+        business_id=client.id, service_type="AC repair", urgency="routine",
         callback_number="+1", completed_at=datetime.utcnow() - timedelta(days=10),
         referral_sent_at=datetime.utcnow() - timedelta(days=5),  # outside the 3-day window
     )
@@ -178,7 +178,7 @@ def test_find_active_referral_ask_ignores_expired_window(session):
 def test_find_active_referral_ask_ignores_already_captured(session):
     client = make_client(session, referral_incentive="$25 off")
     job = Job(
-        client_id=client.id, service_type="AC repair", urgency="routine",
+        business_id=client.id, service_type="AC repair", urgency="routine",
         callback_number="+1", completed_at=datetime.utcnow() - timedelta(days=5),
         referral_sent_at=datetime.utcnow(),
     )
@@ -186,7 +186,7 @@ def test_find_active_referral_ask_ignores_already_captured(session):
     session.commit()
     session.refresh(job)
     session.add(ReferralLead(
-        client_id=client.id, source_job_id=job.id, asker_phone="+1", raw_reply_text="already replied",
+        business_id=client.id, source_job_id=job.id, asker_phone="+1", raw_reply_text="already replied",
     ))
     session.commit()
 
@@ -196,7 +196,7 @@ def test_find_active_referral_ask_ignores_already_captured(session):
 def test_handle_referral_reply_extracts_structured_info(session, monkeypatch):
     client = make_client(session, referral_incentive="$25 off")
     job = Job(
-        client_id=client.id, service_type="AC repair", urgency="routine",
+        business_id=client.id, service_type="AC repair", urgency="routine",
         customer_name="Mike", callback_number="+1",
         completed_at=datetime.utcnow() - timedelta(days=5),
         referral_sent_at=datetime.utcnow(),
@@ -234,7 +234,7 @@ def test_handle_referral_reply_extracts_structured_info(session, monkeypatch):
 def test_handle_referral_reply_falls_back_to_raw_text_when_extraction_fails(session, monkeypatch):
     client = make_client(session, referral_incentive="$25 off")
     job = Job(
-        client_id=client.id, service_type="AC repair", urgency="routine",
+        business_id=client.id, service_type="AC repair", urgency="routine",
         customer_name="Mike", callback_number="+1",
         completed_at=datetime.utcnow() - timedelta(days=5),
         referral_sent_at=datetime.utcnow(),

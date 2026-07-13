@@ -16,7 +16,7 @@ from starlette.middleware.sessions import SessionMiddleware
 
 from channels import get_channel
 from db import engine, init_db
-from db_models import Client, Job, Message, RecoveryCampaign, RecoveryJob, ReferralLead
+from db_models import Business, Job, Message, RecoveryCampaign, RecoveryJob, ReferralLead
 from portal import router as portal_router
 from provisioning import ProvisioningError, attach_number_to_xai_trunk, buy_twilio_number, register_number_with_xai
 from recovery_engine import FACE_DISPLAY_NAMES
@@ -29,20 +29,30 @@ from xai_voice_adapter import (
     verify_webhook_signature as verify_xai_signature,
 )
 
+
+def resolve_session_secret(environ) -> str:
+    secret = environ.get("SESSION_SECRET_KEY")
+    if secret:
+        return secret
+    if environ.get("ROSTER_ENV") == "production":
+        raise RuntimeError(
+            "SESSION_SECRET_KEY must be set in production — refusing to start with the dev fallback."
+        )
+    return "dev-only-insecure-secret-change-in-production"
+
+
 BASE_DIR = Path(__file__).parent
 LANDING_DIR = BASE_DIR / "landing"
 DASHBOARD_THREAD = "dashboard"
 
 app = FastAPI(title="Roster")
 # Customer-portal session cookie — separate from the founder's HTTP-Basic
-# admin auth above. SESSION_SECRET_KEY signs the cookie; a dev fallback keeps
-# local runs working without extra setup (unlike ADMIN_PASSWORD, a leaked
-# portal session cookie only exposes one customer's own dashboard, not every
-# client's data, so this doesn't need to fail closed).
-app.add_middleware(
-    SessionMiddleware,
-    secret_key=os.environ.get("SESSION_SECRET_KEY", "dev-only-insecure-secret-change-in-production"),
-)
+# admin auth above. SESSION_SECRET_KEY signs the cookie. In production
+# (ROSTER_ENV=production) the app fails closed if it's unset — like
+# ADMIN_PASSWORD — so a deploy never silently runs on the shared dev secret.
+# In dev it falls back to an insecure default so local runs need no setup
+# (see resolve_session_secret above).
+app.add_middleware(SessionMiddleware, secret_key=resolve_session_secret(os.environ))
 app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="static")
 templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
 sms_channel = get_channel()
@@ -129,10 +139,10 @@ def landing_styles():
 @app.get("/clients")
 def list_clients(request: Request):
     with Session(engine) as session:
-        clients = session.exec(select(Client).order_by(Client.created_at.desc())).all()
+        clients = session.exec(select(Business).order_by(Business.created_at.desc())).all()
         count_rows = session.exec(
-            select(RecoveryCampaign.client_id, func.count(RecoveryCampaign.id)).group_by(
-                RecoveryCampaign.client_id
+            select(RecoveryCampaign.business_id, func.count(RecoveryCampaign.id)).group_by(
+                RecoveryCampaign.business_id
             )
         ).all()
         recovery_counts = {client_id: count for client_id, count in count_rows}
@@ -158,7 +168,7 @@ def create_client(
     inbound_number: str = Form(""),
 ):
     service_list = [s.strip() for s in services.split(",") if s.strip()]
-    client = Client(
+    client = Business(
         business_name=business_name,
         trade=trade,
         services_json=json.dumps(service_list),
@@ -178,7 +188,7 @@ def create_client(
 @app.post("/clients/{client_id}/referral-incentive")
 def set_referral_incentive(client_id: int, referral_incentive: str = Form(...)):
     with Session(engine) as session:
-        client = session.get(Client, client_id)
+        client = session.get(Business, client_id)
         client.referral_incentive = referral_incentive.strip() or None
         session.add(client)
         session.commit()
@@ -194,7 +204,7 @@ def provision_number(client_id: int, area_code: str = Form("")):
     retried later, rather than losing the purchased number."""
     error = None
     with Session(engine) as session:
-        client = session.get(Client, client_id)
+        client = session.get(Business, client_id)
         try:
             purchase = buy_twilio_number(area_code.strip() or None)
             client.inbound_number = purchase["phone_number"]
@@ -230,7 +240,7 @@ def provision_number(client_id: int, area_code: str = Form("")):
 @app.post("/clients/{client_id}/review-link")
 def set_review_link(client_id: int, review_link: str = Form(...)):
     with Session(engine) as session:
-        client = session.get(Client, client_id)
+        client = session.get(Business, client_id)
         client.review_link = review_link.strip() or None
         session.add(client)
         session.commit()
@@ -243,7 +253,7 @@ def complete_job(client_id: int, job_id: int):
     send never blocks completion — a failed or skipped send still marks the job
     done, since the review text is a bonus, not the point of this action."""
     with Session(engine) as session:
-        client = session.get(Client, client_id)
+        client = session.get(Business, client_id)
         job = session.get(Job, job_id)
         already_completed = job.completed_at is not None
         job.completed_at = job.completed_at or datetime.utcnow()
@@ -264,7 +274,7 @@ def complete_job(client_id: int, job_id: int):
 @app.get("/clients/{client_id}/recovery/new")
 def new_recovery_campaign_form(request: Request, client_id: int):
     with Session(engine) as session:
-        client = session.get(Client, client_id)
+        client = session.get(Business, client_id)
     preselect_face = request.query_params.get("face", "quote")
     return templates.TemplateResponse(
         request, "recovery_new.html", {"client": client, "preselect_face": preselect_face}
@@ -304,7 +314,7 @@ def create_recovery_campaign(
         customers.append(entry)
 
     with Session(engine) as session:
-        client = session.get(Client, client_id)
+        client = session.get(Business, client_id)
         campaign = create_campaign(session, client, face, name, customers)
         campaign_id = campaign.id
     return RedirectResponse(f"/clients/{client_id}/recovery/{campaign_id}", status_code=303)
@@ -313,7 +323,7 @@ def create_recovery_campaign(
 @app.get("/clients/{client_id}/recovery/{campaign_id}")
 def recovery_campaign_detail(request: Request, client_id: int, campaign_id: int):
     with Session(engine) as session:
-        client = session.get(Client, client_id)
+        client = session.get(Business, client_id)
         campaign = session.get(RecoveryCampaign, campaign_id)
         jobs = session.exec(
             select(RecoveryJob).where(RecoveryJob.campaign_id == campaign_id).order_by(RecoveryJob.id)
@@ -333,20 +343,20 @@ def recovery_campaign_detail(request: Request, client_id: int, campaign_id: int)
 @app.get("/clients/{client_id}")
 def client_detail(request: Request, client_id: int):
     with Session(engine) as session:
-        client = session.get(Client, client_id)
+        client = session.get(Business, client_id)
         messages = session.exec(
             select(Message)
-            .where(Message.client_id == client_id, Message.customer_phone == DASHBOARD_THREAD)
+            .where(Message.business_id == client_id, Message.customer_phone == DASHBOARD_THREAD)
             .order_by(Message.id)
         ).all()
         jobs = session.exec(
-            select(Job).where(Job.client_id == client_id).order_by(Job.created_at.desc())
+            select(Job).where(Job.business_id == client_id).order_by(Job.created_at.desc())
         ).all()
         campaigns = session.exec(
-            select(RecoveryCampaign).where(RecoveryCampaign.client_id == client_id).order_by(RecoveryCampaign.created_at.desc())
+            select(RecoveryCampaign).where(RecoveryCampaign.business_id == client_id).order_by(RecoveryCampaign.created_at.desc())
         ).all()
         referral_leads = session.exec(
-            select(ReferralLead).where(ReferralLead.client_id == client_id).order_by(ReferralLead.created_at.desc())
+            select(ReferralLead).where(ReferralLead.business_id == client_id).order_by(ReferralLead.created_at.desc())
         ).all()
 
     chat = [
@@ -377,17 +387,17 @@ def client_detail(request: Request, client_id: int):
 @app.post("/clients/{client_id}/chat")
 def send_message(client_id: int, message: str = Form(...)):
     with Session(engine) as session:
-        client = session.get(Client, client_id)
+        client = session.get(Business, client_id)
         handle_customer_message(session, client, DASHBOARD_THREAD, message)
     return RedirectResponse(f"/clients/{client_id}", status_code=303)
 
 
-def _find_client_by_inbound(session: Session, to_number: str) -> Client | None:
-    return session.exec(select(Client).where(Client.inbound_number == to_number)).first()
+def _find_client_by_inbound(session: Session, to_number: str) -> Business | None:
+    return session.exec(select(Business).where(Business.inbound_number == to_number)).first()
 
 
-def _find_client_by_xai_number(session: Session, to_number: str) -> Client | None:
-    return session.exec(select(Client).where(Client.xai_phone_number == to_number)).first()
+def _find_client_by_xai_number(session: Session, to_number: str) -> Business | None:
+    return session.exec(select(Business).where(Business.xai_phone_number == to_number)).first()
 
 
 @app.post("/webhook/sms")
@@ -442,7 +452,7 @@ async def missed_call(From: str = Form(...), To: str = Form(...), CallStatus: st
         sms_channel.send(from_number=To, to_number=From, body=opener)
         session.add(
             Message(
-                client_id=client.id,
+                business_id=client.id,
                 customer_phone=From,
                 role="assistant",
                 content_json=json.dumps([{"type": "text", "text": opener}]),
