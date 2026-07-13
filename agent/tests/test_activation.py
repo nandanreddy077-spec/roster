@@ -3,7 +3,7 @@ from datetime import datetime
 from sqlmodel import Session
 
 from activation import activate_frontdesk
-from db_models import Client
+from db_models import Business
 
 
 def test_activate_frontdesk_marks_live_even_without_twilio_creds(test_engine, monkeypatch):
@@ -15,7 +15,7 @@ def test_activate_frontdesk_marks_live_even_without_twilio_creds(test_engine, mo
     monkeypatch.delenv("TWILIO_AUTH_TOKEN", raising=False)
 
     with Session(test_engine) as session:
-        client = Client(email="owner@example.com", password_hash="x", business_name="Ridgeline")
+        client = Business(email="owner@example.com", password_hash="x", business_name="Ridgeline")
         session.add(client)
         session.commit()
         session.refresh(client)
@@ -29,7 +29,7 @@ def test_activate_frontdesk_marks_live_even_without_twilio_creds(test_engine, mo
 
 def test_activate_frontdesk_skips_provisioning_if_number_already_set(test_engine):
     with Session(test_engine) as session:
-        client = Client(
+        client = Business(
             email="owner@example.com", password_hash="x", business_name="Ridgeline",
             inbound_number="+15550001111",
         )

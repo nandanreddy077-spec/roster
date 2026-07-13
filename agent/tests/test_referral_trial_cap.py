@@ -1,21 +1,21 @@
 from sqlmodel import Session, select
 
 from conftest import StubAgent
-from db_models import Client, Job, ReferralLead
+from db_models import Business, Job, ReferralLead
 import referral_service
 
 
 def test_referral_reply_skips_paid_call_but_logs_raw_when_capped(test_engine, monkeypatch):
     monkeypatch.setattr(referral_service, "agent", StubAgent({"reply": "should not be used", "pending_tool_call": None}))
     with Session(test_engine) as session:
-        client = Client(
+        client = Business(
             business_name="Ridgeline", trade="Plumbing", services_json="[]", hours="9-5",
             escalation_phone="+1555", trial_spend_cents=2200, trial_cap_cents=2000, trial_soft_buffer_cents=200,
         )
         session.add(client)
         session.commit()
         session.refresh(client)
-        job = Job(client_id=client.id, customer_phone="+15551112222", service_type="AC", urgency="routine", callback_number="+15551112222")
+        job = Job(business_id=client.id, customer_phone="+15551112222", service_type="AC", urgency="routine", callback_number="+15551112222")
         session.add(job)
         session.commit()
         session.refresh(job)
@@ -32,14 +32,14 @@ def test_referral_reply_skips_paid_call_but_logs_raw_when_capped(test_engine, mo
 def test_referral_reply_records_usage_when_under_cap(test_engine, monkeypatch):
     monkeypatch.setattr(referral_service, "agent", StubAgent({"reply": "Thanks!", "pending_tool_call": None}))
     with Session(test_engine) as session:
-        client = Client(
+        client = Business(
             business_name="Ridgeline", trade="Plumbing", services_json="[]", hours="9-5",
             escalation_phone="+1555",
         )
         session.add(client)
         session.commit()
         session.refresh(client)
-        job = Job(client_id=client.id, customer_phone="+15551112222", service_type="AC", urgency="routine", callback_number="+15551112222")
+        job = Job(business_id=client.id, customer_phone="+15551112222", service_type="AC", urgency="routine", callback_number="+15551112222")
         session.add(job)
         session.commit()
         session.refresh(job)

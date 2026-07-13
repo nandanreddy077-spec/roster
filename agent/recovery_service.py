@@ -11,7 +11,7 @@ from sqlmodel import Session, select
 
 from calendar_provider import get_calendar_provider
 from channels import get_channel
-from db_models import Client, Job, RecoveryCampaign, RecoveryJob, RecoveryMessageLog
+from db_models import Business, Job, RecoveryCampaign, RecoveryJob, RecoveryMessageLog
 from engine import AgentEngine
 from recovery_engine import (
     CONFIRM_SLOT_TOOL,
@@ -32,7 +32,7 @@ ACTIVE_STATUSES = ("pending", "awaiting_slot")
 
 def create_campaign(
     session: Session,
-    client: Client,
+    client: Business,
     face: str,
     name: str,
     customers: List[Dict[str, Any]],
@@ -41,7 +41,7 @@ def create_campaign(
     """`customers` is a list of dicts with keys: phone, name (optional),
     service_type, estimate_amount (optional), days_since (optional)."""
     campaign = RecoveryCampaign(
-        client_id=client.id,
+        business_id=client.id,
         face=face,
         name=name,
         customer_list_json=json.dumps(customers),
@@ -55,7 +55,7 @@ def create_campaign(
         session.add(
             RecoveryJob(
                 campaign_id=campaign.id,
-                client_id=client.id,
+                business_id=client.id,
                 customer_phone=c["phone"],
                 customer_name=c.get("name"),
                 service_type=c["service_type"],
@@ -71,7 +71,7 @@ def create_campaign(
 def find_active_recovery_job(session: Session, client_id: int, customer_phone: str) -> Optional[RecoveryJob]:
     return session.exec(
         select(RecoveryJob).where(
-            RecoveryJob.client_id == client_id,
+            RecoveryJob.business_id == client_id,
             RecoveryJob.customer_phone == customer_phone,
             RecoveryJob.current_status.in_(ACTIVE_STATUSES),
             RecoveryJob.last_sent_day.is_not(None),
@@ -132,7 +132,7 @@ def tick(session: Session) -> List[RecoveryJob]:
             continue
 
         try:
-            client = session.get(Client, job.client_id)
+            client = session.get(Business, job.business_id)
             template = campaign.template_overrides.get(str(due_day)) or TEMPLATES[campaign.face][due_day]
             text = render_template(
                 template,
@@ -161,7 +161,7 @@ def tick(session: Session) -> List[RecoveryJob]:
 STOP_KEYWORDS = {"stop", "stopall", "unsubscribe", "cancel", "end", "quit"}
 
 
-def handle_recovery_reply(session: Session, client: Client, job: RecoveryJob, text: str) -> Optional[str]:
+def handle_recovery_reply(session: Session, client: Business, job: RecoveryJob, text: str) -> Optional[str]:
     """Process an inbound reply to an active Recovery sequence. Returns the text
     to send back to the customer (caller sends it — TwiML for SMS)."""
     log = session.exec(
@@ -207,7 +207,7 @@ def handle_recovery_reply(session: Session, client: Client, job: RecoveryJob, te
             if isinstance(idx, int) and 0 <= idx < len(slots):
                 chosen = slots[idx]
                 new_job = Job(
-                    client_id=client.id,
+                    business_id=client.id,
                     customer_phone=job.customer_phone,
                     customer_name=job.customer_name,
                     service_type=job.service_type,

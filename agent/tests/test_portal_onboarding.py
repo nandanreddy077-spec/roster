@@ -4,7 +4,7 @@ from sqlmodel import Session
 import app as app_module
 import db as db_module
 import portal as portal_module
-from db_models import Client
+from db_models import Business
 
 
 def _signed_up_client(client: TestClient):
@@ -53,7 +53,7 @@ def test_onboarding_business_saves_and_redirects(monkeypatch, test_engine):
 
 def select_client_by_email(email, session):
     from sqlmodel import select
-    return session.exec(select(Client).where(Client.email == email)).first()
+    return session.exec(select(Business).where(Business.email == email)).first()
 
 
 def test_onboarding_receptionist_redirects_to_business_if_not_done(monkeypatch, test_engine):

@@ -1,10 +1,10 @@
 import json
 
-from db_models import Client
+from db_models import Business
 
 
 def test_client_to_config_includes_answer_mode(session):
-    client = Client(
+    client = Business(
         business_name="Test Co",
         trade="HVAC",
         services_json=json.dumps(["AC repair"]),
@@ -23,7 +23,7 @@ def test_client_to_config_includes_answer_mode(session):
 
 
 def test_client_answer_mode_defaults_to_backup(session):
-    client = Client(
+    client = Business(
         business_name="Test Co",
         trade="HVAC",
         services_json=json.dumps(["AC repair"]),
@@ -39,7 +39,7 @@ def test_client_answer_mode_defaults_to_backup(session):
 
 
 def test_client_to_config_includes_tone(session):
-    client = Client(
+    client = Business(
         business_name="Test Co",
         trade="HVAC",
         services_json=json.dumps(["AC repair"]),

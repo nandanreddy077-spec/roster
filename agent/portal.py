@@ -18,7 +18,7 @@ from authlib.integrations.starlette_client import OAuthError
 from activation import activate_frontdesk
 from auth import hash_password, verify_password
 from db import engine
-from db_models import Client, Job, Message
+from db_models import Business, Job, Message
 from google_auth import callback_url, get_oauth, google_enabled
 from roles import ROSTER_DESCRIPTIONS, coming_later_after, next_hire, receptionist_display_name
 from service import handle_customer_message
@@ -49,11 +49,11 @@ def _display_text(content) -> str:
     return " ".join(b["text"] for b in content if b.get("type") == "text").strip()
 
 
-def _current_client(request: Request, session: Session) -> Optional[Client]:
+def _current_client(request: Request, session: Session) -> Optional[Business]:
     client_id = request.session.get("client_id")
     if client_id is None:
         return None
-    return session.get(Client, client_id)
+    return session.get(Business, client_id)
 
 
 @router.get("/signup")
@@ -68,7 +68,7 @@ def signup_form(request: Request):
 def signup_submit(request: Request, email: str = Form(...), password: str = Form(...), trade: str = Form("")):
     email = email.strip().lower()
     with Session(engine) as session:
-        existing = session.exec(select(Client).where(Client.email == email)).first()
+        existing = session.exec(select(Business).where(Business.email == email)).first()
         if existing:
             return templates.TemplateResponse(
                 request,
@@ -76,7 +76,7 @@ def signup_submit(request: Request, email: str = Form(...), password: str = Form
                 {"error": "That email's already registered — try logging in instead.", "email": email, "trade": trade},
                 status_code=400,
             )
-        client = Client(email=email, password_hash=hash_password(password))
+        client = Business(email=email, password_hash=hash_password(password))
         session.add(client)
         session.commit()
         session.refresh(client)
@@ -97,7 +97,7 @@ def login_form(request: Request):
 def login_submit(request: Request, email: str = Form(...), password: str = Form(...)):
     email = email.strip().lower()
     with Session(engine) as session:
-        client = session.exec(select(Client).where(Client.email == email)).first()
+        client = session.exec(select(Business).where(Business.email == email)).first()
         if client is None or not client.password_hash or not verify_password(password, client.password_hash):
             return templates.TemplateResponse(
                 request,
@@ -116,14 +116,14 @@ def logout(request: Request):
 
 
 def _login_or_create_by_email(request: Request, session: Session, email: str) -> RedirectResponse:
-    """Log a verified email in — creating a passwordless Client on first sight —
+    """Log a verified email in — creating a passwordless Business on first sight —
     and route by the same rules as password login: live shops to the dashboard,
     everyone else into (or back into) onboarding. Testable without any OAuth
     network round-trip; the Google callback just feeds it a verified email."""
     email = email.strip().lower()
-    client = session.exec(select(Client).where(Client.email == email)).first()
+    client = session.exec(select(Business).where(Business.email == email)).first()
     if client is None:
-        client = Client(email=email)  # no password_hash — Google is their sign-in
+        client = Business(email=email)  # no password_hash — Google is their sign-in
         session.add(client)
         session.commit()
         session.refresh(client)
@@ -267,7 +267,7 @@ def dashboard(request: Request):
         # The owner's test conversation — the proof-of-working panel.
         test_messages = session.exec(
             select(Message)
-            .where(Message.client_id == client.id, Message.customer_phone == PORTAL_TEST_THREAD)
+            .where(Message.business_id == client.id, Message.customer_phone == PORTAL_TEST_THREAD)
             .order_by(Message.id)
         ).all()
         test_chat = [
@@ -279,7 +279,7 @@ def dashboard(request: Request):
         # Real activity: every job booked, newest first. Jobs captured during a
         # test are tagged so the log never passes a test off as real work.
         jobs = session.exec(
-            select(Job).where(Job.client_id == client.id).order_by(Job.created_at.desc())
+            select(Job).where(Job.business_id == client.id).order_by(Job.created_at.desc())
         ).all()
         job_rows = [
             {

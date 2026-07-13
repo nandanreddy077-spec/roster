@@ -7,7 +7,7 @@ from sqlmodel import Field, SQLModel
 from models import ClientConfig
 
 
-class Client(SQLModel, table=True):
+class Business(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     business_name: str = ""
     trade: str = ""
@@ -58,8 +58,8 @@ class Client(SQLModel, table=True):
 
 class Message(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
-    client_id: int = Field(foreign_key="client.id")
-    customer_phone: str = "dashboard"  # threads a conversation per customer on a client's line
+    business_id: int = Field(foreign_key="business.id")
+    customer_phone: str = "dashboard"  # threads a conversation per customer on a business's line
     role: str  # "user" or "assistant"
     content_json: str  # JSON-encoded content (str or list of content blocks)
     created_at: datetime = Field(default_factory=datetime.utcnow)
@@ -67,7 +67,7 @@ class Message(SQLModel, table=True):
 
 class Job(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
-    client_id: int = Field(foreign_key="client.id")
+    business_id: int = Field(foreign_key="business.id")
     customer_phone: str = "dashboard"
     customer_name: Optional[str] = None
     service_type: str
@@ -82,7 +82,7 @@ class Job(SQLModel, table=True):
 
 class RecoveryCampaign(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
-    client_id: int = Field(foreign_key="client.id")
+    business_id: int = Field(foreign_key="business.id")
     face: str  # "quote" or "reactivation"
     name: str
     customer_list_json: str  # JSON list of {phone, name, service_type, estimate_amount, days_since}
@@ -103,7 +103,7 @@ class RecoveryCampaign(SQLModel, table=True):
 class RecoveryJob(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     campaign_id: int = Field(foreign_key="recoverycampaign.id")
-    client_id: int = Field(foreign_key="client.id")
+    business_id: int = Field(foreign_key="business.id")
     customer_phone: str
     customer_name: Optional[str] = None
     service_type: str
@@ -134,7 +134,7 @@ class RecoveryMessageLog(SQLModel, table=True):
 
 class ReferralLead(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
-    client_id: int = Field(foreign_key="client.id")
+    business_id: int = Field(foreign_key="business.id")
     source_job_id: int = Field(foreign_key="job.id")  # which completed job triggered this ask
     asker_phone: str  # the existing customer who was asked
     referred_name: Optional[str] = None  # extracted by Claude, if present

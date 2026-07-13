@@ -1,14 +1,14 @@
 from sqlmodel import Session
 
 import trial_cap
-from db_models import Client
+from db_models import Business
 from trial_cap import TRIAL_TURN_COST_CENTS, can_respond, record_usage
 
 
 def _client(**overrides):
     defaults = dict(email="owner@example.com", password_hash="x", business_name="Ridgeline")
     defaults.update(overrides)
-    return Client(**defaults)
+    return Business(**defaults)
 
 
 def test_can_respond_true_when_under_cap():

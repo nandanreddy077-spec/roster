@@ -10,7 +10,7 @@ import os
 from sqlmodel import Session
 
 from channels import get_channel
-from db_models import Client
+from db_models import Business
 
 # Flat per-turn estimate, not real per-token billing — matches the founder's
 # own ~$0.30-0.60-per-call all-in cost research (Twilio + orchestration +
@@ -23,11 +23,11 @@ TRIAL_TURN_COST_CENTS = 50
 sms_channel = get_channel()
 
 
-def can_respond(client: Client) -> bool:
+def can_respond(client: Business) -> bool:
     return client.trial_spend_cents < (client.trial_cap_cents + client.trial_soft_buffer_cents)
 
 
-def record_usage(session: Session, client: Client, cost_cents: int = TRIAL_TURN_COST_CENTS) -> None:
+def record_usage(session: Session, client: Business, cost_cents: int = TRIAL_TURN_COST_CENTS) -> None:
     client.trial_spend_cents += cost_cents
     # Fire the founder alert only on the first turn that reaches the hard cap.
     crossed_cap = not client.trial_cap_notified and client.trial_spend_cents >= client.trial_cap_cents
@@ -39,7 +39,7 @@ def record_usage(session: Session, client: Client, cost_cents: int = TRIAL_TURN_
         _notify_founder_cap_reached(client)
 
 
-def _notify_founder_cap_reached(client: Client) -> None:
+def _notify_founder_cap_reached(client: Business) -> None:
     """Best-effort founder alert. Never raises — a failed alert must not break
     the customer's turn (same best-effort posture as the Reviews SMS in
     app.py). If FOUNDER_ALERT_PHONE isn't set, we simply don't alert."""

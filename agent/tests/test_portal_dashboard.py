@@ -9,7 +9,7 @@ import db as db_module
 import portal as portal_module
 import service as service_module
 from conftest import StubAgent
-from db_models import Client, Job
+from db_models import Business, Job
 
 
 def _stub_reply(text: str):
@@ -76,8 +76,8 @@ def test_dashboard_activity_lists_real_jobs(monkeypatch, test_engine):
     _fully_onboarded_client(client, monkeypatch)
 
     with Session(test_engine) as session:
-        owner = session.exec(select(Client).where(Client.email == "owner@example.com")).first()
-        session.add(Job(client_id=owner.id, service_type="drain cleaning", urgency="routine"))
+        owner = session.exec(select(Business).where(Business.email == "owner@example.com")).first()
+        session.add(Job(business_id=owner.id, service_type="drain cleaning", urgency="routine"))
         session.commit()
 
     response = client.get("/dashboard")
@@ -96,13 +96,13 @@ def test_dashboard_test_message_earns_working_status(monkeypatch, test_engine):
     _fully_onboarded_client(client, monkeypatch)
 
     with Session(test_engine) as session:
-        owner = session.exec(select(Client).where(Client.email == "owner@example.com")).first()
+        owner = session.exec(select(Business).where(Business.email == "owner@example.com")).first()
         assert owner.tested_at is None
 
     client.post("/dashboard/test", data={"message": "Do you do same-day drain cleaning?"})
 
     with Session(test_engine) as session:
-        owner = session.exec(select(Client).where(Client.email == "owner@example.com")).first()
+        owner = session.exec(select(Business).where(Business.email == "owner@example.com")).first()
         assert owner.tested_at is not None
 
     response = client.get("/dashboard")
@@ -132,7 +132,7 @@ def test_roster_hire_queues_quote_chaser(monkeypatch, test_engine):
     assert response.status_code == 303
 
     with Session(test_engine) as session:
-        owner = session.exec(select(Client).where(Client.email == "owner@example.com")).first()
+        owner = session.exec(select(Business).where(Business.email == "owner@example.com")).first()
         assert json.loads(owner.requested_roster) == ["Quote Chaser"]
 
     response = client.get("/dashboard")
@@ -150,7 +150,7 @@ def test_roster_hire_rejects_out_of_order_role(monkeypatch, test_engine):
     client.post("/roster/hire", data={"role": "Retention Manager"})
 
     with Session(test_engine) as session:
-        owner = session.exec(select(Client).where(Client.email == "owner@example.com")).first()
+        owner = session.exec(select(Business).where(Business.email == "owner@example.com")).first()
         assert owner.requested_roster is None
 
 
@@ -187,7 +187,7 @@ def test_retention_manager_hire_saves_review_link_and_referral_incentive(monkeyp
     assert response.headers["location"] == "/dashboard"
 
     with Session(test_engine) as session:
-        owner = session.exec(select(Client).where(Client.email == "owner@example.com")).first()
+        owner = session.exec(select(Business).where(Business.email == "owner@example.com")).first()
         assert json.loads(owner.requested_roster) == ["Quote Chaser", "Retention Manager"]
         assert owner.review_link == "https://g.page/r/test"
         assert owner.referral_incentive == "$25 off"
@@ -204,7 +204,7 @@ def test_retention_manager_hire_skippable(monkeypatch, test_engine):
     client.post("/roster/hire/retention-manager", data={})
 
     with Session(test_engine) as session:
-        owner = session.exec(select(Client).where(Client.email == "owner@example.com")).first()
+        owner = session.exec(select(Business).where(Business.email == "owner@example.com")).first()
         assert json.loads(owner.requested_roster) == ["Quote Chaser", "Retention Manager"]
         assert owner.review_link is None
         assert owner.referral_incentive is None
@@ -223,7 +223,7 @@ def test_dashboard_review_link_and_referral_incentive_editable_anytime(monkeypat
     client.post("/dashboard/referral-incentive", data={"referral_incentive": "$25 off"})
 
     with Session(test_engine) as session:
-        owner = session.exec(select(Client).where(Client.email == "owner@example.com")).first()
+        owner = session.exec(select(Business).where(Business.email == "owner@example.com")).first()
         assert owner.review_link == "https://g.page/r/test"
         assert owner.referral_incentive == "$25 off"
 
@@ -251,7 +251,7 @@ def test_source_banner_shown_after_three_days(monkeypatch, test_engine):
     _fully_onboarded_client(client, monkeypatch)
 
     with Session(test_engine) as session:
-        owner = session.exec(select(Client).where(Client.email == "owner@example.com")).first()
+        owner = session.exec(select(Business).where(Business.email == "owner@example.com")).first()
         owner.activated_at = datetime.utcnow() - timedelta(days=4)
         session.add(owner)
         session.commit()
@@ -268,7 +268,7 @@ def test_dismissing_source_banner_hides_it_going_forward(monkeypatch, test_engin
     _fully_onboarded_client(client, monkeypatch)
 
     with Session(test_engine) as session:
-        owner = session.exec(select(Client).where(Client.email == "owner@example.com")).first()
+        owner = session.exec(select(Business).where(Business.email == "owner@example.com")).first()
         owner.activated_at = datetime.utcnow() - timedelta(days=4)
         session.add(owner)
         session.commit()
@@ -276,7 +276,7 @@ def test_dismissing_source_banner_hides_it_going_forward(monkeypatch, test_engin
     client.post("/dashboard/source", data={"source": "A friend recommended us"})
 
     with Session(test_engine) as session:
-        owner = session.exec(select(Client).where(Client.email == "owner@example.com")).first()
+        owner = session.exec(select(Business).where(Business.email == "owner@example.com")).first()
         assert owner.source == "A friend recommended us"
         assert owner.source_prompt_dismissed is True
 

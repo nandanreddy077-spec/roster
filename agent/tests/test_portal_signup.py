@@ -4,7 +4,7 @@ from sqlmodel import Session, select
 import app as app_module
 import db as db_module
 import portal as portal_module
-from db_models import Client
+from db_models import Business
 
 
 def test_signup_form_renders(monkeypatch):
@@ -28,7 +28,7 @@ def test_signup_creates_client_and_starts_session(monkeypatch, test_engine):
     assert response.headers["location"] == "/onboarding/business"
 
     with Session(test_engine) as session:
-        created = session.exec(select(Client).where(Client.email == "owner@example.com")).first()
+        created = session.exec(select(Business).where(Business.email == "owner@example.com")).first()
         assert created is not None
         assert created.password_hash != "hunter22"
 

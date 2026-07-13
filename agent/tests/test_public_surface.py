@@ -121,11 +121,11 @@ def test_sms_webhook_stays_silent_once_trial_cap_exhausted(monkeypatch, test_eng
     monkeypatch.setattr(app_module, "engine", test_engine)
     from sqlmodel import Session
 
-    from db_models import Client
+    from db_models import Business
 
     with Session(test_engine) as session:
         session.add(
-            Client(
+            Business(
                 email="owner@example.com", password_hash="x", business_name="Ridgeline",
                 trade="Plumbing", services_json="[]", hours="9-5", escalation_phone="555",
                 inbound_number="+15559998888",

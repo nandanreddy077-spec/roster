@@ -9,7 +9,7 @@ import json
 from sqlmodel import Session, delete, select
 
 from db import engine, init_db
-from db_models import Client, Job, Message
+from db_models import Business, Job, Message
 
 DEMO_NAME = "Lou's Heating & Cooling"
 THREAD = "dashboard"  # the dashboard chat view reads this thread
@@ -33,14 +33,14 @@ CONVO = [
 def run():
     init_db()
     with Session(engine) as s:
-        prior = s.exec(select(Client).where(Client.business_name == DEMO_NAME)).all()
+        prior = s.exec(select(Business).where(Business.business_name == DEMO_NAME)).all()
         for c in prior:
-            s.exec(delete(Message).where(Message.client_id == c.id))
-            s.exec(delete(Job).where(Job.client_id == c.id))
+            s.exec(delete(Message).where(Message.business_id == c.id))
+            s.exec(delete(Job).where(Job.business_id == c.id))
             s.delete(c)
         s.commit()
 
-        client = Client(
+        client = Business(
             business_name=DEMO_NAME,
             trade="HVAC",
             services_json=json.dumps(
@@ -58,10 +58,10 @@ def run():
         s.refresh(client)
 
         for role, text in CONVO:
-            s.add(Message(client_id=client.id, customer_phone=THREAD, role=role,
+            s.add(Message(business_id=client.id, customer_phone=THREAD, role=role,
                           content_json=json.dumps(text)))
         s.add(Job(
-            client_id=client.id, customer_phone=THREAD, customer_name="Mike",
+            business_id=client.id, customer_phone=THREAD, customer_name="Mike",
             service_type="AC not cooling — blowing warm air", urgency="same_day",
             address="1420 Pearl St, Denver", callback_number="(720) 555-0148",
             notes="Started last night, house at 85°. Quick-fix likely.",
