@@ -78,6 +78,7 @@ class Customer(SQLModel, table=True):
 class Message(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     business_id: int = Field(foreign_key="business.id")
+    customer_id: Optional[int] = Field(default=None, foreign_key="customer.id", index=True)
     customer_phone: str = "dashboard"  # threads a conversation per customer on a business's line
     role: str  # "user" or "assistant"
     content_json: str  # JSON-encoded content (str or list of content blocks)
@@ -87,6 +88,7 @@ class Message(SQLModel, table=True):
 class Job(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     business_id: int = Field(foreign_key="business.id")
+    customer_id: Optional[int] = Field(default=None, foreign_key="customer.id", index=True)
     customer_phone: str = "dashboard"
     customer_name: Optional[str] = None
     service_type: str

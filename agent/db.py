@@ -86,6 +86,8 @@ def _migrate_add_columns():
         "ALTER TABLE business ADD COLUMN trial_cap_notified BOOLEAN DEFAULT 0",
         "ALTER TABLE business ADD COLUMN answer_mode VARCHAR DEFAULT 'backup'",
         "ALTER TABLE business ADD COLUMN business_phone VARCHAR DEFAULT ''",
+        "ALTER TABLE job ADD COLUMN customer_id INTEGER",
+        "ALTER TABLE message ADD COLUMN customer_id INTEGER",
     )
     with engine.connect() as conn:
         for ddl in statements:
