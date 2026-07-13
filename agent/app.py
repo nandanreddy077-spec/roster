@@ -47,10 +47,11 @@ DASHBOARD_THREAD = "dashboard"
 
 app = FastAPI(title="Roster")
 # Customer-portal session cookie — separate from the founder's HTTP-Basic
-# admin auth above. SESSION_SECRET_KEY signs the cookie; a dev fallback keeps
-# local runs working without extra setup (unlike ADMIN_PASSWORD, a leaked
-# portal session cookie only exposes one customer's own dashboard, not every
-# client's data, so this doesn't need to fail closed).
+# admin auth above. SESSION_SECRET_KEY signs the cookie. In production
+# (ROSTER_ENV=production) the app fails closed if it's unset — like
+# ADMIN_PASSWORD — so a deploy never silently runs on the shared dev secret.
+# In dev it falls back to an insecure default so local runs need no setup
+# (see resolve_session_secret above).
 app.add_middleware(SessionMiddleware, secret_key=resolve_session_secret(os.environ))
 app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="static")
 templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
