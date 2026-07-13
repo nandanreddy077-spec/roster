@@ -52,8 +52,11 @@ def _migrate_rename_client_to_business():
     tables = set(insp.get_table_names())
     with engine.connect() as conn:
         if "client" in tables and "business" not in tables:
-            conn.execute(text("ALTER TABLE client RENAME TO business"))
-            conn.commit()
+            try:
+                conn.execute(text("ALTER TABLE client RENAME TO business"))
+                conn.commit()
+            except Exception:
+                conn.rollback()
         for tbl in ("job", "message", "recoverycampaign", "recoveryjob", "referrallead"):
             cols = {c["name"] for c in inspect(engine).get_columns(tbl)} if tbl in inspect(engine).get_table_names() else set()
             if "client_id" in cols and "business_id" not in cols:
@@ -137,8 +140,14 @@ def _backfill_employees(engine=None):
                 have.add("frontdesk")
             requested = getattr(b, "requested_roster", None)
             if requested:
+                ROLE_KEYS = {
+                    "frontdesk": "frontdesk", "receptionist": "frontdesk",
+                    "quote chaser": "quote_chaser", "retention manager": "retention",
+                    "reviews": "reviews",
+                }
                 for role in _json.loads(requested):
-                    key = role.strip().lower().replace(" ", "_")
+                    name = role.strip().lower()
+                    key = ROLE_KEYS.get(name, name.replace(" ", "_"))
                     if key and key not in have:
                         s.add(Employee(business_id=b.id, role_key=key, display_name=role))
                         have.add(key)
