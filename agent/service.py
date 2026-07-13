@@ -11,6 +11,7 @@ from sqlmodel import Session, select
 
 from db_models import Business, Job, Message
 from engine import AgentEngine, merge_consecutive_roles
+from repositories import get_or_create_customer
 from trial_cap import can_respond, record_usage
 
 agent = AgentEngine()
@@ -71,8 +72,10 @@ def handle_customer_message(
     captured: List[Job] = []
     for call in result["jobs"]:
         ji = call["input"]
+        cust = get_or_create_customer(session, client.id, customer_phone, ji.get("customer_name"))
         job = Job(
             business_id=client.id,
+            customer_id=cust.id,
             customer_phone=customer_phone,
             customer_name=ji.get("customer_name"),
             service_type=ji["service_type"],
