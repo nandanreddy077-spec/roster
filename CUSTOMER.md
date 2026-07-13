@@ -16,6 +16,30 @@ this file. Repeated pain here > any internal idea.
   SMS in review (PR #2).
 - **Revenue:** $0
 
+### Deploy / ops state (operational handoff — verify before relying on it)
+- **Hosting:** Railway, service `roster`, root dir `agent/`, domain rosterhires.com.
+- **Env vars SET in Railway:** `ANTHROPIC_API_KEY`, `TWILIO_ACCOUNT_SID`,
+  `TWILIO_AUTH_TOKEN`, `XAI_API_KEY` (confirmed real), `GOOGLE_CLIENT_ID`,
+  `GOOGLE_CLIENT_SECRET`, `OAUTH_REDIRECT_BASE_URL`, `SESSION_SECRET_KEY`.
+- **⚠️ MISSING — data-loss risk:** `ROSTER_DATA_DIR=/data` is **not set**, and a
+  persistent volume must be attached at `/data` (Railway → service → Settings →
+  Volumes). Without both, **every redeploy wipes the SQLite DB** (all signups/
+  jobs/conversations). `main` now auto-deploys the Phase-1 migration, so fix this
+  *before* real customer data exists.
+- **MISSING — minor:** `ADMIN_PASSWORD` (the founder `/clients` view 503s until
+  set; public site + signup work regardless).
+- **`ROSTER_ENV` not set** → the session fail-closed guard is inert (harmless;
+  the app boots on `SESSION_SECRET_KEY`). Set `ROSTER_ENV=production` only after
+  confirming `SESSION_SECRET_KEY` is set (it is).
+- **Git:** PR #1 (foundation) merged to `main`. PR #2 (Owner SMS + operating
+  docs) open, not merged.
+
+### THE next action (not code)
+Run the live Frontdesk test — sign up as a test business, confirm a real number
+provisioned, then **call and text it**. Does it *answer*, *book*, and *notify the
+owner*? That result closes or escalates Open Risk #1 and is the gate for all M2+
+work (see `ROADMAP.md` build freeze).
+
 ## Open risks / blockers (ranked — from the internal persona review, to be
 ## replaced by *real* customer evidence as it comes in)
 
