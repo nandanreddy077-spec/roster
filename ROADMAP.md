@@ -1,77 +1,80 @@
 # Roster Roadmap
 
-**Phase:** Product Validation (architecture is complete and frozen — see
-`docs/superpowers/specs/2026-07-13-roster-platform-architecture-prd.md`).
+**Mission:** make a home-service business owner believe they **hired an office
+employee**, not installed software. Every feature, screen, notification,
+onboarding step, and workflow reinforces that.
 
-**Mission:** maximize the probability that a home-service business *pays* for
-Roster. Not to make the architecture better. Not feature parity with Avoca.
-
-**Every feature must strengthen at least one of:**
+**The filter — build only if it clearly improves one of:**
 1. **Trust** — the owner believes it's working.
-2. **Revenue** — it books or recovers jobs (real dollars).
-3. **Employee mental model** — it feels like they *hired staff*, not installed software.
+2. **Revenue** — it books or recovers real jobs (dollars).
+3. **Employee experience** — it feels like managing staff, not configuring software.
 
-**The gate:** before building anything, answer *"is this required before our
-first 20 paying customers?"* If no → it lives here in the roadmap, not in the
-codebase. **We do not build enterprise features because Avoca has them. We
-build customer value.**
+**The gate:** if a proposed feature doesn't clearly improve one of the three,
+it goes in the "Deferred" table below, not the codebase. **Assume Avoca can
+match any feature within a year — so we never justify a build by "a competitor
+has it," only by "it helps a customer adopt, trust, or expand Roster."**
+
+Grounding docs: [`SALES.md`](SALES.md) (does it close deals?),
+[`CUSTOMER.md`](CUSTOMER.md) (what real customers actually said),
+architecture PRD in `docs/superpowers/specs/`.
 
 ---
 
-## Now — Phase 2 milestones (build in order, one at a time, then stop and sell)
+## Phases as business milestones
 
-### M1 — Owner SMS  *(building)*
-When Frontdesk books a job, the owner gets a text within seconds.
-- **Why required before 20:** the ICP owner won't open a dashboard. A text in
-  their pocket is the only proof-of-work that reaches them → **trust**. And
-  *"Frontdesk booked AC Repair"* makes the **employee model** physical.
-- **Done when:** a booked job (SMS or voice) texts `escalation_phone` within
-  seconds, containing customer, service, urgency, callback number, and the
-  employee name.
+### Phase A — Foundation ✅ *(done)*
+Business · Customer · Employee models · shared Memory · EventBus · 217 tests ·
+merged to `main` (PR #1). The architecture is frozen — no more platform work
+without a real customer forcing it.
 
-### M2 — AI Office dashboard
-Reframe the dashboard from a list of features to an **office of employees**
-(🏢 AI Office → Employees → ✓ Frontdesk, ✓ Quote Chaser, …). Not a redesign —
-just make the staffing metaphor obvious. **Employee model.** Uses existing
-DESIGN.md tokens only.
+### Phase B — Trust *(current)*
+Goal: an owner watches it work and believes it. Nothing here adds new revenue
+mechanics — it makes the existing product *trustable* and *feel like employees*.
+- **M1 — Owner SMS** *(in review, PR #2)* — booked job → owner gets a text in seconds.
+- **M2 — AI Office dashboard** — reframe from a feature list to an office of
+  named employees showing today's activity ("👩 Frontdesk — 19 calls, 7 booked, Working").
+- **M3 — Employee cards** — per-employee business metrics (jobs, $ booked/recovered); never AI metrics.
+- **M4 — Better onboarding & activation** — cross the call-forwarding cliff; "teach your hire," don't configure software. Hire / Pause / Fire (the `Employee.status` field already exists).
+- **Then: stop and sell.** First 20 via concierge onboarding calls; friction logged in `CUSTOMER.md` decides what to automate.
 
-### M3 — Employee scorecards
-Per-employee card in **business metrics only** — calls, jobs, **$ booked** /
-**$ recovered**. Never AI metrics (tokens, latency, accuracy). **Trust +
-revenue + employee model.** Built *after* a pilot books real jobs, so it shows
-real numbers, not zeros.
+### Phase C — Revenue *(agents already built — this phase turns them on)*
+The recovery employees already exist in code (Quote Chaser, Rebooker, Renewals,
+Reviews). Phase C is **activating them per real customer** and making the money
+visible — not building them from scratch. Comes *after* trust: an owner who
+doesn't yet trust Frontdesk won't handoff their customer list to Quote Chaser.
+- Turn each recovery agent on for pilots who have the data it needs.
+- Surface **$ recovered** on the employee cards (M3) so the ROI is undeniable.
 
-### M4 — Hire / Pause / Fire
-Owner can pause or fire an employee from the dashboard. The `Employee.status`
-field (active/paused/fired) already exists from the foundation; this is the UI +
-the Runner honoring it. **Employee model** — you manage staff, you don't
-configure software.
+### Phase D — Integrations *(only when a paying customer asks)*
+When a pilot says *"can this connect to Jobber / Housecall Pro / my calendar?"* —
+build **that one**. Never before. Owner-SMS (M1) is the cheap interim "the job
+lands where I look." The `Integration` port is defined; zero adapters until demand.
 
-**Then: STOP building. Go sell.** The first 20 come from concierge onboarding
-calls (self-serve signup + a 15-min founder call per pilot), and the friction
-logged on those calls decides what gets automated next — not a guess made here.
+### Phase E — Scale *(upmarket, later)*
+Enterprise: permissions, multi-seat, multi-location rollup, SLAs, marketplace.
+Only once the SMB motion is proven and a real upmarket customer pulls us there.
+The foundation supports it; we do not build it now.
 
 ---
 
 ## Deferred — not required for the first 20 (do NOT build until a real customer forces it)
 
-| Item | Why it waits |
-|---|---|
-| **CRM/calendar integrations** (ServiceTitan, Housecall Pro, Jobber, Google Cal) | Build the *first one* only when a paying pilot names the tool they actually use. Owner-SMS (M1) is the cheap interim "job lands where they look." Never guess integrations. |
-| **Real scheduling / capacity awareness** | Books "someone will come" today; a real slot-picker matters only once owners ask. M1 + a callback covers the gap. |
-| **Web chat widget** | A different channel; live voice is the wedge, not website chat. |
-| **Coach / call QA / scoring** | Enterprise-tail — a solo/5-truck shop has no CSRs to coach. Avoca's customer, not ours. |
-| **Deep analytics / marketing ROAS / multi-location rollup** | Enterprise-tail. M3 scorecards give owners the only numbers they think in. |
-| **SOC 2 / security certifications** | Trust for enterprise buyers; earned over time, irrelevant to the first 20. |
-| **Email / WhatsApp channels** | SMS + voice is enough for the wedge. |
-| **EventBus producer/subscriber wiring + the Runner** | Platform work. The seam is built + tested; wire it only when a single event needs *multiple* subscribers. M1 uses a direct call, not the bus, on purpose. |
-| **`message` → `interaction` rename (+ channel/direction)** | Platform cleanup; do it only when those fields are actually used. |
-| **Auto-research onboarding pre-fill** (scrape site/GBP) | A nice "it already knows my business" moment, but not required to get paid. |
+| Item | Phase | Why it waits |
+|---|---|---|
+| CRM/calendar integrations (Jobber, Housecall Pro, ServiceTitan, Google Cal) | D | Build the first only when a paying pilot names their tool. |
+| Real scheduling / capacity awareness | D | "Someone will come" + a callback covers it until owners ask. |
+| Web chat widget | C/D | Live voice is the wedge, not website chat. |
+| Coach / call QA / scoring | E | Enterprise-tail — the ICP has no CSRs to coach. |
+| Deep analytics / marketing ROAS / multi-location | E | Enterprise-tail. Employee cards (M3) give owners the only numbers they think in. |
+| SOC 2 / security certs | E | Enterprise trust, earned over time. |
+| Email / WhatsApp channels | D | SMS + voice is enough for the wedge. |
+| EventBus producer/subscriber wiring + Runner | — | Platform. The seam is built; wire it only when one event needs *multiple* subscribers. |
+| `message`→`interaction` rename (+ channel/direction) | — | Platform cleanup; only when those fields are used. |
+| Auto-research onboarding pre-fill | B/D | Nice "it already knows my business" moment; not required to get paid. |
 
 ---
 
 ## Guardrail
-
-If a proposed feature isn't on the "Now" list above, the default answer is
-**"add it here, don't build it"** — unless a real pilot or paying customer
-forces it. Competitor parity is never a reason on its own.
+If it isn't on the current phase's list, the default answer is **"add it to this
+table, don't build it"** — unless a real pilot or paying customer forces it.
+Competitor parity is never a reason on its own.
