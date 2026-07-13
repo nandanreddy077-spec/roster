@@ -173,3 +173,14 @@ class Employee(SQLModel, table=True):
     policy_json: str = "{}"
     hired_at: datetime = Field(default_factory=datetime.utcnow)
     fired_at: Optional[datetime] = None
+
+
+class Event(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    business_id: int = Field(foreign_key="business.id", index=True)
+    type: str = Field(index=True)
+    payload_json: str = "{}"
+    customer_id: Optional[int] = Field(default=None, foreign_key="customer.id")
+    employee_id: Optional[int] = Field(default=None, foreign_key="employee.id")
+    dedup_key: Optional[str] = Field(default=None, unique=True, index=True)
+    occurred_at: datetime = Field(default_factory=datetime.utcnow)
