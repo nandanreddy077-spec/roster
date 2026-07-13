@@ -34,6 +34,7 @@ def init_db():
     _migrate_rename_client_to_business()
     SQLModel.metadata.create_all(engine)
     _migrate_add_columns()
+    _backfill_customers()
 
 
 def _migrate_rename_client_to_business():
@@ -96,6 +97,30 @@ def _migrate_add_columns():
                 conn.commit()
             except Exception:
                 conn.rollback()
+
+
+def _backfill_customers(engine=None):
+    """Backfill Customer records from existing Job and Message rows with
+    customer_phone values, and link those rows to their customers by ID.
+    Idempotent: skips rows that already have customer_id set."""
+    from sqlmodel import Session, select
+    from db_models import Customer, Job, Message
+
+    eng = engine if engine is not None else globals()["engine"]
+    with Session(eng) as s:
+        for model in (Job, Message):
+            for r in s.exec(select(model)).all():
+                phone = getattr(r, "customer_phone", None)
+                if not phone or r.customer_id is not None:
+                    continue
+                existing = s.exec(
+                    select(Customer).where(Customer.business_id == r.business_id, Customer.phone == phone)
+                ).first()
+                if not existing:
+                    existing = Customer(business_id=r.business_id, phone=phone)
+                    s.add(existing); s.commit(); s.refresh(existing)
+                r.customer_id = existing.id; s.add(r)
+        s.commit()
 
 
 def get_session():
