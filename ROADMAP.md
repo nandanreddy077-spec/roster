@@ -30,8 +30,20 @@ without a real customer forcing it.
 ### Phase B — Trust *(current)*
 Goal: an owner watches it work and believes it. Nothing here adds new revenue
 mechanics — it makes the existing product *trustable* and *feel like employees*.
-- **M1 — Owner SMS** *(in review, PR #2)* — booked job → owner gets a text in seconds.
-- **M2 — AI Office dashboard** — reframe from a feature list to an office of
+- **M1 — Owner SMS** *(complete, PR #2)* — booked job → owner gets a text in seconds.
+
+> ## ⛔ BUILD FREEZE after M1 (founder directive, 2026-07-13)
+> **Do NOT start M2 or anything below it until BOTH gates clear:**
+> 1. **Frontdesk is proven end-to-end** — a real call/text is *answered*,
+>    *books* a job, and *notifies* the owner. (Currently NOT met — no real
+>    call has been verified. See `CUSTOMER.md` Open Risk #1.)
+> 2. **≥3 real customer demos observed AND founder gives explicit approval** to proceed.
+>
+> If gate 1 fails, the only work is fixing Frontdesk — not new features. A fresh
+> session must honor this freeze and confirm both gates with the founder before
+> writing any M2+ code.
+
+- **M2 — AI Office dashboard** *(frozen — see gate above)* — reframe from a feature list to an office of
   named employees showing today's activity ("👩 Frontdesk — 19 calls, 7 booked, Working").
 - **M3 — Employee cards** — per-employee business metrics (jobs, $ booked/recovered); never AI metrics.
 - **M4 — Better onboarding & activation** — cross the call-forwarding cliff; "teach your hire," don't configure software. Hire / Pause / Fire (the `Employee.status` field already exists).
