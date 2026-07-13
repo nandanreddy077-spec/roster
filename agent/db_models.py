@@ -56,6 +56,22 @@ class Business(SQLModel, table=True):
         )
 
 
+class Customer(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    business_id: int = Field(foreign_key="business.id", index=True)
+    phone: str = Field(index=True)
+    name: Optional[str] = None
+    source: Optional[str] = None
+    tags_json: str = "[]"
+    first_seen_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
+
+    @property
+    def tags(self) -> List[str]:
+        return json.loads(self.tags_json)
+
+
 class Message(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     business_id: int = Field(foreign_key="business.id")
