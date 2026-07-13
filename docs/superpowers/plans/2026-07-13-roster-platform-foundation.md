@@ -26,6 +26,29 @@
 
 ---
 
+## Test Isolation & Engine DI (overrides the literal `Session(engine)`/`init_db()` shown in every task below)
+
+The existing suite isolates via conftest's in-memory `test_engine`/`session` fixtures (`agent/conftest.py`). New tests MUST do the same — **never touch the real `db.engine`/`roster.db`**, or the suite becomes non-idempotent and pollutes the dev DB (this bit Task 2; the fix is commit `e219feb`). These rules are binding and supersede any task code below that shows `Session(engine)`, `init_db()`, or a DB component constructed without an engine:
+
+1. **Tests that persist or read rows** take the `session` fixture (a `Session` on the in-memory `test_engine`) and use it directly. Do NOT call `init_db()` and do NOT `from db import engine` in a test. `test_engine` already ran `SQLModel.metadata.create_all`, so every table — including the new ones — exists.
+2. **Tests that only inspect a model/dataclass** (columns, constants, dataclass defaults) need no DB and no fixture.
+3. **Components that open their own DB sessions — `EventBus` (Task 9), `BusinessMemory` (Task 10) — take an `engine=None` constructor param defaulting to the real engine**, so tests inject `test_engine`:
+   ```python
+   class EventBus:
+       def __init__(self, engine=None):
+           from db import engine as _default
+           self._engine = engine or _default
+           self._subscribers = defaultdict(list)
+       def publish(self, event):
+           with Session(self._engine) as s: ...
+   bus = EventBus()  # module singleton uses the real engine
+   ```
+   `BusinessMemory(business_id, engine=None)` likewise stores `self._engine = engine or _default` and every method does `with Session(self._engine)`. Tests: `EventBus(test_engine)`, `BusinessMemory(b.id, test_engine)`.
+4. **Backfill helpers — `_backfill_customers` (Task 5), `_backfill_employees` (Task 6) — take an `engine=None` param** defaulting to the module engine: `def _backfill_customers(engine=None): eng = engine if engine is not None else globals()["engine"]; ...`. `init_db()` calls them with no arg; tests pass `test_engine`.
+5. **Event-wiring test (Task 11):** the singleton `bus` uses the real engine, so in the test `monkeypatch.setattr(eventbus.bus, "_engine", test_engine)` and pass the same `session` (on `test_engine`) into `handle_customer_message` — job/message writes and the published event then all land in the one in-memory DB (StaticPool shares the connection).
+
+---
+
 ## File Structure
 
 **Foundation A — modify:**
