@@ -1,13 +1,18 @@
-from sqlmodel import Session, select
-from db import engine, init_db
+from sqlmodel import select
 from db_models import Business, Job
 
-def test_business_persists():
-    init_db()
-    with Session(engine) as s:
-        b = Business(business_name="Test Plumbing", trade="plumbing", email="rename@test.io")
-        s.add(b); s.commit(); s.refresh(b)
-        assert s.exec(select(Business).where(Business.email == "rename@test.io")).first().business_name == "Test Plumbing"
+
+def test_business_persists(session):
+    # Uses conftest's isolated in-memory `session` fixture — never the real
+    # roster.db — so the suite stays idempotent across repeated local runs.
+    b = Business(business_name="Test Plumbing", trade="plumbing", email="rename@test.io")
+    session.add(b)
+    session.commit()
+    session.refresh(b)
+    assert session.exec(
+        select(Business).where(Business.email == "rename@test.io")
+    ).first().business_name == "Test Plumbing"
+
 
 def test_no_client_symbol_remains():
     import db_models
