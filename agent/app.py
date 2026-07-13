@@ -29,6 +29,18 @@ from xai_voice_adapter import (
     verify_webhook_signature as verify_xai_signature,
 )
 
+
+def resolve_session_secret(environ) -> str:
+    secret = environ.get("SESSION_SECRET_KEY")
+    if secret:
+        return secret
+    if environ.get("ROSTER_ENV") == "production":
+        raise RuntimeError(
+            "SESSION_SECRET_KEY must be set in production — refusing to start with the dev fallback."
+        )
+    return "dev-only-insecure-secret-change-in-production"
+
+
 BASE_DIR = Path(__file__).parent
 LANDING_DIR = BASE_DIR / "landing"
 DASHBOARD_THREAD = "dashboard"
@@ -39,10 +51,7 @@ app = FastAPI(title="Roster")
 # local runs working without extra setup (unlike ADMIN_PASSWORD, a leaked
 # portal session cookie only exposes one customer's own dashboard, not every
 # client's data, so this doesn't need to fail closed).
-app.add_middleware(
-    SessionMiddleware,
-    secret_key=os.environ.get("SESSION_SECRET_KEY", "dev-only-insecure-secret-change-in-production"),
-)
+app.add_middleware(SessionMiddleware, secret_key=resolve_session_secret(os.environ))
 app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="static")
 templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
 sms_channel = get_channel()
