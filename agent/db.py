@@ -35,6 +35,7 @@ def init_db():
     SQLModel.metadata.create_all(engine)
     _migrate_add_columns()
     _backfill_customers()
+    _backfill_employees()
 
 
 def _migrate_rename_client_to_business():
@@ -120,6 +121,27 @@ def _backfill_customers(engine=None):
                     existing = Customer(business_id=r.business_id, phone=phone)
                     s.add(existing); s.commit(); s.refresh(existing)
                 r.customer_id = existing.id; s.add(r)
+        s.commit()
+
+
+def _backfill_employees(engine=None):
+    import json as _json
+    from sqlmodel import Session, select
+    from db_models import Business, Employee
+    eng = engine if engine is not None else globals()["engine"]
+    with Session(eng) as s:
+        for b in s.exec(select(Business)).all():
+            have = {e.role_key for e in s.exec(select(Employee).where(Employee.business_id == b.id)).all()}
+            if b.frontdesk_live and "frontdesk" not in have:
+                s.add(Employee(business_id=b.id, role_key="frontdesk", display_name="Receptionist"))
+                have.add("frontdesk")
+            requested = getattr(b, "requested_roster", None)
+            if requested:
+                for role in _json.loads(requested):
+                    key = role.strip().lower().replace(" ", "_")
+                    if key and key not in have:
+                        s.add(Employee(business_id=b.id, role_key=key, display_name=role))
+                        have.add(key)
         s.commit()
 
 

@@ -162,3 +162,14 @@ class ReferralLead(SQLModel, table=True):
     referred_phone: Optional[str] = None  # extracted by Claude, if present
     raw_reply_text: str  # always stored, regardless of extraction outcome
     created_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class Employee(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    business_id: int = Field(foreign_key="business.id", index=True)
+    role_key: str
+    display_name: str = ""
+    status: str = "active"  # active | paused | fired
+    policy_json: str = "{}"
+    hired_at: datetime = Field(default_factory=datetime.utcnow)
+    fired_at: Optional[datetime] = None
