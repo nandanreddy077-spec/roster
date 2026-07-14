@@ -11,6 +11,7 @@ from sqlmodel import Session, select
 
 from db_models import Business, Job, Message
 from engine import AgentEngine, merge_consecutive_roles
+from notifications import notify_owner_of_booking
 from repositories import get_or_create_customer
 from trial_cap import can_respond, record_usage
 
@@ -88,4 +89,11 @@ def handle_customer_message(
         captured.append(job)
 
     session.commit()
+
+    # Text the owner about each real booking — the proof-of-work that reaches
+    # an owner who never opens the dashboard. Best-effort; a failed text can't
+    # affect the reply or the already-committed job (see notifications.py).
+    for job in captured:
+        notify_owner_of_booking(client, job)
+
     return {"reply": result["reply"], "jobs": captured}
