@@ -1,3 +1,4 @@
+import fcntl
 import os
 from pathlib import Path
 
@@ -26,6 +27,24 @@ def _enable_wal(dbapi_connection, _):
 
 
 def init_db():
+    # uvicorn runs multiple worker processes (--workers 4), each importing
+    # app.py and calling init_db() → create_all() on the SAME SQLite file at
+    # once. That races: worker A creates `customer`, then worker B's create_all
+    # (whose existence-check already returned "missing") fails with
+    # "table customer already exists" and the worker crashes on boot. Serialize
+    # the whole schema init behind a cross-process file lock so exactly one
+    # worker does the work and the rest find it already done — create_all, the
+    # migrations, and the backfills are all idempotent, so they no-op.
+    lock_path = DATA_DIR / ".init.lock"
+    with open(lock_path, "w") as lock_file:
+        fcntl.flock(lock_file, fcntl.LOCK_EX)
+        try:
+            _init_db_locked()
+        finally:
+            fcntl.flock(lock_file, fcntl.LOCK_UN)
+
+
+def _init_db_locked():
     # Must run before create_all(): create_all() would otherwise create a
     # fresh *empty* `business` table first (since one doesn't exist under
     # that name yet), which flips this migration's "business" not in tables"
