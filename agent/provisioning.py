@@ -49,17 +49,25 @@ def buy_twilio_number(area_code: Optional[str] = None) -> dict:
     none are available for the given area code (try a nearby one, or omit
     area_code to let Twilio pick anywhere)."""
     client = _twilio_client()
-    available = client.available_phone_numbers("US").local.list(area_code=area_code, limit=1)
-    if not available:
-        raise ProvisioningError(
-            f"No numbers available for area_code={area_code!r} — try a different area code"
+    try:
+        available = client.available_phone_numbers("US").local.list(area_code=area_code, limit=1)
+        if not available:
+            raise ProvisioningError(
+                f"No numbers available for area_code={area_code!r} — try a different area code"
+            )
+        base_url = os.environ.get("PUBLIC_BASE_URL", DEFAULT_PUBLIC_BASE_URL)
+        purchased = client.incoming_phone_numbers.create(
+            phone_number=available[0].phone_number,
+            sms_url=f"{base_url}/webhook/sms",
+            sms_method="POST",
         )
-    base_url = os.environ.get("PUBLIC_BASE_URL", DEFAULT_PUBLIC_BASE_URL)
-    purchased = client.incoming_phone_numbers.create(
-        phone_number=available[0].phone_number,
-        sms_url=f"{base_url}/webhook/sms",
-        sms_method="POST",
-    )
+    except ProvisioningError:
+        raise
+    except Exception as e:
+        # Twilio REST errors (trial account can't buy numbers, no funds, geo-
+        # permissions, etc.) are NOT ProvisioningError — wrap them so callers
+        # get one exception type to degrade on, with the real reason attached.
+        raise ProvisioningError(f"Twilio number purchase failed: {e}") from e
     return {"phone_number": purchased.phone_number, "sid": purchased.sid}
 
 
@@ -84,15 +92,20 @@ def attach_number_to_xai_trunk(phone_number_sid: str, phone_number: str) -> None
     docs.x.ai/.../voice-agent/sip's Twilio section), so inbound calls to it
     route to xAI instead of ringing nowhere."""
     client = _twilio_client()
-    trunk = _get_or_create_xai_trunk(client)
-    client.trunking.v1.trunks(trunk.sid).origination_urls.create(
-        friendly_name=f"xAI Voice Agent API - {phone_number}",
-        sip_url=f"sip:{phone_number}@sip.voice.x.ai;transport=tls",
-        weight=1,
-        priority=1,
-        enabled=True,
-    )
-    client.trunking.v1.trunks(trunk.sid).phone_numbers.create(phone_number_sid=phone_number_sid)
+    try:
+        trunk = _get_or_create_xai_trunk(client)
+        client.trunking.v1.trunks(trunk.sid).origination_urls.create(
+            friendly_name=f"xAI Voice Agent API - {phone_number}",
+            sip_url=f"sip:{phone_number}@sip.voice.x.ai;transport=tls",
+            weight=1,
+            priority=1,
+            enabled=True,
+        )
+        client.trunking.v1.trunks(trunk.sid).phone_numbers.create(phone_number_sid=phone_number_sid)
+    except ProvisioningError:
+        raise
+    except Exception as e:
+        raise ProvisioningError(f"attaching number to xAI trunk failed: {e}") from e
 
 
 def _extract_signing_secret(payload: dict) -> Optional[str]:

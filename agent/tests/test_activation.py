@@ -27,6 +27,30 @@ def test_activate_frontdesk_marks_live_even_without_twilio_creds(test_engine, mo
         assert client.inbound_number is None  # no creds → nothing purchased, but still live
 
 
+def test_activate_frontdesk_survives_twilio_api_error(test_engine, monkeypatch):
+    """The bug that 500'd real onboarding: with valid Twilio creds present, the
+    number purchase can raise a Twilio REST error (trial account can't buy
+    numbers, no funds, geo-permissions) — which is NOT a ProvisioningError.
+    Activation must still complete SMS-less, never crash the onboarding request."""
+    import activation
+
+    def _boom(*args, **kwargs):
+        raise RuntimeError("HTTP 400: Twilio trial accounts cannot purchase phone numbers")
+
+    monkeypatch.setattr(activation, "buy_twilio_number", _boom)
+
+    with Session(test_engine) as session:
+        client = Business(email="boom@example.com", password_hash="x", business_name="Ridgeline")
+        session.add(client)
+        session.commit()
+        session.refresh(client)
+
+        activate_frontdesk(session, client)  # must NOT raise
+
+        assert client.frontdesk_live is True
+        assert client.inbound_number is None
+
+
 def test_activate_frontdesk_skips_provisioning_if_number_already_set(test_engine):
     with Session(test_engine) as session:
         client = Business(
