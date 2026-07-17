@@ -504,3 +504,46 @@ def test_tick_quote_face_unaffected_by_membership_branch(session, monkeypatch):
     job = session.exec(select(RecoveryJob).where(RecoveryJob.campaign_id == campaign.id)).first()
     assert job.last_sent_day == 1
     assert job.anchor_date is None
+
+
+class ReentrantTickChannel:
+    """Simulates a second recovery tick running concurrently at the exact
+    moment the first tick is mid-send — the classic overlapping-cron race."""
+
+    def __init__(self, engine):
+        self.engine = engine
+        self.sent = []
+        self._reentered = False
+
+    def send(self, from_number, to_number, body):
+        self.sent.append({"to": to_number, "body": body})
+        if not self._reentered:
+            self._reentered = True
+            from sqlmodel import Session as _S
+            with _S(self.engine) as inner:
+                recovery_service.tick(inner)
+
+
+def test_overlapping_ticks_cannot_double_text_a_customer(test_engine, monkeypatch):
+    from sqlmodel import Session as _S
+
+    channel = ReentrantTickChannel(test_engine)
+    monkeypatch.setattr(recovery_service, "sms_channel", channel)
+
+    with _S(test_engine) as session:
+        client = make_client(session)
+        campaign = recovery_service.create_campaign(
+            session, client, "quote", "June quotes",
+            [{"phone": "+15550001111", "name": "Pat", "service_type": "AC install"}],
+        )
+        campaign.started_at = datetime.utcnow() - timedelta(days=1)
+        session.add(campaign)
+        session.commit()
+
+    with _S(test_engine) as session:
+        recovery_service.tick(session)
+
+    texts_to_customer = [s for s in channel.sent if s["to"] == "+15550001111"]
+    assert len(texts_to_customer) == 1, (
+        f"customer must get day-1 message exactly once, got {len(texts_to_customer)}"
+    )

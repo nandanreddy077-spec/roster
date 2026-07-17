@@ -31,6 +31,12 @@
         <input type="text" name="area_code" placeholder="Area code (optional)" maxlength="3">
         <button class="btn btn-primary btn-small" type="submit">Buy &amp; wire up number</button>
       </form>
+      <p class="agent-tile-desc" style="margin-top:12px;">Or attach an xAI voice number (no Twilio): create the number in the xAI console, point its webhook at <code>/webhook/xai-incoming-call</code>, and paste it + its signing secret here.</p>
+      <form method="post" action="/clients/{{ client.id }}/attach-xai-number" class="review-link-form">
+        <input type="text" name="xai_phone_number" placeholder="xAI number, e.g. +15125550123" required>
+        <input type="text" name="xai_signing_secret" placeholder="Webhook signing secret" required>
+        <button class="btn btn-primary btn-small" type="submit">Attach xAI number</button>
+      </form>
       {% endif %}
       {% if provision_error %}
       <p class="job-notes">{{ provision_error }}</p>

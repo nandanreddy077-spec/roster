@@ -51,7 +51,7 @@ def test_build_session_update_includes_both_tools_and_instructions(session):
 
     assert update["type"] == "session.update"
     tool_names = {t["name"] for t in update["session"]["tools"]}
-    assert tool_names == {"log_job", "transfer_call"}
+    assert tool_names == {"log_job", "alert_owner"}
     assert "Test Co" in update["session"]["instructions"]
 
 

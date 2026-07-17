@@ -7,6 +7,7 @@ docs/superpowers/specs/2026-07-10-self-serve-signup-dashboard-design.md.
 """
 import os
 
+from sqlalchemy import update as sa_update
 from sqlmodel import Session
 
 from channels import get_channel
@@ -28,14 +29,29 @@ def can_respond(client: Business) -> bool:
 
 
 def record_usage(session: Session, client: Business, cost_cents: int = TRIAL_TURN_COST_CENTS) -> None:
-    client.trial_spend_cents += cost_cents
-    # Fire the founder alert only on the first turn that reaches the hard cap.
-    crossed_cap = not client.trial_cap_notified and client.trial_spend_cents >= client.trial_cap_cents
-    if crossed_cap:
-        client.trial_cap_notified = True
-    session.add(client)
+    # Atomic in-database increment: concurrent turns each add their cost even
+    # when both loaded the same stale Business row (a read-modify-write here
+    # silently loses updates under concurrency).
+    session.execute(
+        sa_update(Business)
+        .where(Business.id == client.id)
+        .values(trial_spend_cents=Business.trial_spend_cents + cost_cents)
+    )
+    # Claim the one-time founder alert in the same atomic style: only the turn
+    # whose conditional UPDATE actually flips trial_cap_notified sends it, so
+    # two racing turns can never double-alert (and none can miss it).
+    claimed = session.execute(
+        sa_update(Business)
+        .where(
+            Business.id == client.id,
+            Business.trial_cap_notified == False,  # noqa: E712 — SQL expression
+            Business.trial_spend_cents >= Business.trial_cap_cents,
+        )
+        .values(trial_cap_notified=True)
+    )
     session.commit()
-    if crossed_cap:
+    session.refresh(client)
+    if claimed.rowcount == 1:
         _notify_founder_cap_reached(client)
 
 

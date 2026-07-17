@@ -26,13 +26,33 @@
 {% endif %}
 
 <div class="portal-card" style="max-width:560px;">
-  <h2>{{ client.business_name }}</h2>
+  <div style="display:flex; align-items:baseline; gap:10px; flex-wrap:wrap;">
+    <h2 style="margin:0;">{{ role_name }}</h2>
+    <span style="font-size:11px; letter-spacing:.06em; text-transform:uppercase; font-weight:600; color:var(--accent); background:var(--accent-dim); border-radius:6px; padding:3px 8px;">Employee No.1</span>
+  </div>
+  <p style="color:var(--text-dim); font-size:14px; margin:2px 0 12px;">{{ client.business_name }}</p>
+
   {% if tested %}
-  <p class="lede" style="margin-bottom:0;"><span style="color:var(--proof); font-weight:600;">● {{ role_name }}: Working</span> — you've seen it answer.</p>
+  <p style="margin:0;"><span style="color:var(--proof); font-weight:600;">● Working</span> — you've seen {{ role_name|lower }} answer.</p>
   {% else %}
-  <p class="lede" style="margin-bottom:4px;"><span style="color:var(--accent); font-weight:600;">● {{ role_name }}: Ready</span> — try it before you trust it.</p>
-  <p style="color:var(--text-dim); font-size:14px; margin-bottom:0;">Send it a message like a customer would. Once you see a good reply come back, it's working — not before.</p>
+  <p style="margin:0 0 4px;"><span style="color:var(--accent); font-weight:600;">● Ready</span> — try your {{ role_name|lower }} before you trust it.</p>
+  <p style="color:var(--text-dim); font-size:14px; margin:0;">Send a message like a customer would. Once you see a good reply come back, it's working — not before.</p>
   {% endif %}
+
+  {% if real_job_count > 0 %}
+  <p style="margin:12px 0 0; font-size:15px;"><strong>{{ real_job_count }}</strong> {{ 'job' if real_job_count == 1 else 'jobs' }} booked so far.</p>
+  {% endif %}
+
+  <div style="border-top:1px solid var(--border); margin-top:16px; padding-top:14px;">
+    <p style="font-size:12px; letter-spacing:.08em; text-transform:uppercase; color:var(--text-dim); margin:0 0 10px;">What {{ role_name|lower }} has learned about your shop</p>
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:7px 20px;">
+      {% if client.hours %}<div style="font-size:13px;"><span style="color:var(--proof); font-weight:700;">✓</span> Your hours — {{ client.hours }}</div>{% endif %}
+      {% if client.services %}<div style="font-size:13px;"><span style="color:var(--proof); font-weight:700;">✓</span> Your {{ client.services|length }} service{{ '' if client.services|length == 1 else 's' }}</div>{% endif %}
+      {% if client.pricing_faq %}<div style="font-size:13px;"><span style="color:var(--proof); font-weight:700;">✓</span> Your pricing rules</div>{% endif %}
+      {% if client.tone %}<div style="font-size:13px;"><span style="color:var(--proof); font-weight:700;">✓</span> How you sound — {{ client.tone }}</div>{% endif %}
+      {% if client.escalation_phone %}<div style="font-size:13px;"><span style="color:var(--proof); font-weight:700;">✓</span> When to reach your cell</div>{% endif %}
+    </div>
+  </div>
 </div>
 
 <div class="portal-card" style="max-width:560px;">
@@ -94,31 +114,49 @@
 </div>
 
 <div class="portal-card" style="max-width:560px;">
-  <h2 style="font-size:20px;">Your Roster</h2>
-  <p style="margin:12px 0;">{% if tested %}✅{% else %}○{% endif %} {{ role_name }} — {% if tested %}Working{% else %}Ready{% endif %}</p>
+  <h2 style="font-size:20px;">Your office</h2>
+  <p style="color:var(--text-dim); font-size:14px; margin:4px 0 18px;">You staff up one hire at a time — same as you would with people.</p>
 
-  {% if next_role %}
-  <div style="border-top:1px solid var(--border); padding-top:16px; margin-top:8px;">
-    <p style="color:var(--text-dim); font-size:13px;">Hire next</p>
-    <p style="font-weight:600;">{{ next_role }}</p>
-    <p style="color:var(--text-dim); margin-bottom:12px;">{{ next_role_description }}</p>
-    {% if next_role == "Retention Manager" %}
-    <a href="/roster/hire/retention-manager" class="btn btn-primary" style="width:auto; padding:10px 20px; display:inline-block;">Hire</a>
+  <p style="font-size:12px; letter-spacing:.08em; text-transform:uppercase; color:var(--text-dim); margin:0 0 6px;">{% if tested %}Working{% else %}On the payroll{% endif %}</p>
+  <div style="display:flex; align-items:center; gap:12px;">
+    <div style="flex:1;">
+      <p style="font-weight:600; margin:0;">{{ role_name }}</p>
+      <p style="color:var(--text-dim); font-size:13px; margin:2px 0 0;">Answers every call, books the job.</p>
+    </div>
+    <span style="font-size:12px; font-weight:600; {% if tested %}color:var(--proof); background:#E7EFE9;{% else %}color:var(--accent); background:var(--accent-dim);{% endif %} border-radius:20px; padding:3px 10px; white-space:nowrap;">{% if tested %}Working{% else %}Ready{% endif %}</span>
+  </div>
+
+  <div style="border-top:1px solid var(--border); margin:16px 0;"></div>
+  <p style="font-size:12px; letter-spacing:.08em; text-transform:uppercase; color:var(--text-dim); margin:0 0 8px;">{% if 'Quote Chaser' in requested %}On the roster{% else %}Ready to hire{% endif %}</p>
+  <div style="display:flex; align-items:flex-start; gap:12px;">
+    <div style="flex:1;">
+      <p style="font-weight:600; margin:0;">Quote Chaser</p>
+      <p style="color:var(--text-dim); font-size:13px; margin:2px 0 0;">Follows up on every estimate, so the jobs {{ role_name|lower }} books don't go cold.</p>
+      {% if 'Quote Chaser' not in requested and real_job_count > 0 %}
+      <p style="font-size:12px; color:var(--accent); margin:7px 0 0;">› Recommended because you've already booked {{ real_job_count }} {{ 'job' if real_job_count == 1 else 'jobs' }} — the estimates are piling up.</p>
+      {% endif %}
+    </div>
+    {% if 'Quote Chaser' in requested %}
+    <span style="font-size:12px; font-weight:600; color:var(--text-dim); background:var(--bg-alt); border-radius:20px; padding:3px 10px; white-space:nowrap;">Setting up</span>
     {% else %}
     <form method="post" action="/roster/hire">
-      <input type="hidden" name="role" value="{{ next_role }}">
-      <button type="submit" class="btn btn-primary" style="width:auto; padding:10px 20px;">Hire</button>
+      <input type="hidden" name="role" value="Quote Chaser">
+      <button type="submit" class="btn btn-primary" style="width:auto; padding:8px 16px;">Hire</button>
     </form>
     {% endif %}
   </div>
-  {% endif %}
 
-  {% if coming_later %}
-  <div style="border-top:1px solid var(--border); padding-top:16px; margin-top:16px; opacity:0.55;">
-    <p style="color:var(--text-dim); font-size:13px;">Coming later</p>
-    <p style="font-weight:600;">{{ coming_later }}</p>
+  <div style="border-top:1px solid var(--border); margin:16px 0;"></div>
+  <p style="font-size:12px; letter-spacing:.08em; text-transform:uppercase; color:var(--text-dim); margin:0 0 8px;">{% if 'Retention Manager' in requested %}On the roster{% else %}Ready when you've got customer history{% endif %}</p>
+  <div style="display:flex; align-items:flex-start; gap:12px;{% if 'Retention Manager' not in requested %} opacity:.7;{% endif %}">
+    <div style="flex:1;">
+      <p style="font-weight:600; margin:0;">Retention Manager</p>
+      <p style="color:var(--text-dim); font-size:13px; margin:2px 0 0;">Rebooking, renewals, and review asks — ready to go once you've built up customer history worth keeping warm.</p>
+    </div>
+    {% if 'Retention Manager' in requested %}
+    <span style="font-size:12px; font-weight:600; color:var(--text-dim); background:var(--bg-alt); border-radius:20px; padding:3px 10px; white-space:nowrap;">Setting up</span>
+    {% endif %}
   </div>
-  {% endif %}
 </div>
 
 <div class="portal-card" style="max-width:560px;">

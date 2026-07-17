@@ -3,6 +3,7 @@ import base64
 import json
 import os
 import secrets
+import sys
 from datetime import datetime
 from pathlib import Path
 
@@ -10,13 +11,16 @@ from fastapi import FastAPI, Form, HTTPException, Request
 from fastapi.responses import FileResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, func, select
 from starlette.concurrency import run_in_threadpool
 from starlette.middleware.sessions import SessionMiddleware
 
+from call_trace import CallTrace
 from channels import get_channel
-from db import engine, init_db
-from db_models import Business, Job, Message, RecoveryCampaign, RecoveryJob, ReferralLead
+from db import DATA_DIR, engine, init_db
+from locks import conversation_lock
+from db_models import Business, Job, Message, RecoveryCampaign, RecoveryJob, ReferralLead, WebhookDelivery
 from portal import router as portal_router
 from provisioning import ProvisioningError, attach_number_to_xai_trunk, buy_twilio_number, register_number_with_xai
 from recovery_engine import FACE_DISPLAY_NAMES
@@ -30,6 +34,29 @@ from xai_voice_adapter import (
 )
 
 
+# Credentials whose absence silently degrades a money path (no AI replies, no
+# SMS sends, no voice, data on ephemeral SQLite). SESSION_SECRET_KEY and
+# ADMIN_PASSWORD already fail closed elsewhere; these warn loudly instead of
+# crashing so a deliberate partial deploy (e.g. pre-KYC, no Twilio yet) still
+# boots — but never silently.
+_PRODUCTION_CRITICAL_ENV = (
+    "ANTHROPIC_API_KEY",   # no agent replies at all
+    "DATABASE_URL",        # falls back to local SQLite: single-writer + dies with the container
+    "TWILIO_ACCOUNT_SID",  # outbound SMS prints to console instead of sending
+    "TWILIO_AUTH_TOKEN",
+    "XAI_API_KEY",         # live-voice calls die at connect
+    "PUBLIC_BASE_URL",     # webhooks register against the wrong host
+)
+
+
+def warn_missing_production_env(environ) -> list:
+    """Names every critical env var missing in production (empty list in dev).
+    Caller prints them; kept pure for testability."""
+    if environ.get("ROSTER_ENV") != "production":
+        return []
+    return [v for v in _PRODUCTION_CRITICAL_ENV if not environ.get(v)]
+
+
 def resolve_session_secret(environ) -> str:
     secret = environ.get("SESSION_SECRET_KEY")
     if secret:
@@ -41,9 +68,24 @@ def resolve_session_secret(environ) -> str:
     return "dev-only-insecure-secret-change-in-production"
 
 
+def session_cookie_kwargs(environ) -> dict:
+    """Cookie-security flags for the portal session cookie. SameSite=Lax keeps
+    the cookie off cross-site POSTs (CSRF defense for the dashboard's
+    state-changing forms). Secure (https_only) is enabled in production so the
+    session cookie can never ride over plaintext HTTP, and left off in dev so
+    http://localhost sign-in still works."""
+    return {
+        "same_site": "lax",
+        "https_only": environ.get("ROSTER_ENV") == "production",
+    }
+
+
 BASE_DIR = Path(__file__).parent
 LANDING_DIR = BASE_DIR / "landing"
 DASHBOARD_THREAD = "dashboard"
+# Every inbound voice webhook + its whole event stream is captured here as
+# {call_id}.jsonl, so the first real calls leave a replayable ground-truth log.
+VOICE_CAPTURE_DIR = DATA_DIR / "call_captures"
 
 app = FastAPI(title="Roster")
 # Customer-portal session cookie — separate from the founder's HTTP-Basic
@@ -51,14 +93,23 @@ app = FastAPI(title="Roster")
 # (ROSTER_ENV=production) the app fails closed if it's unset — like
 # ADMIN_PASSWORD — so a deploy never silently runs on the shared dev secret.
 # In dev it falls back to an insecure default so local runs need no setup
-# (see resolve_session_secret above).
-app.add_middleware(SessionMiddleware, secret_key=resolve_session_secret(os.environ))
+# (see resolve_session_secret above). Cookie flags (SameSite=Lax, Secure in
+# production) come from session_cookie_kwargs.
+app.add_middleware(
+    SessionMiddleware,
+    secret_key=resolve_session_secret(os.environ),
+    **session_cookie_kwargs(os.environ),
+)
 app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="static")
 templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
 sms_channel = get_channel()
 app.include_router(portal_router)
 
 init_db()
+
+for _missing in warn_missing_production_env(os.environ):
+    print(f"[PRODUCTION WARNING] {_missing} is not set — see app.py:_PRODUCTION_CRITICAL_ENV "
+          "for what silently breaks without it.", file=sys.stderr)
 
 
 # ---- Dashboard auth --------------------------------------------------------
@@ -237,6 +288,38 @@ def provision_number(client_id: int, area_code: str = Form("")):
     return RedirectResponse(redirect_url, status_code=303)
 
 
+@app.post("/clients/{client_id}/attach-xai-number")
+def attach_xai_number(
+    client_id: int,
+    xai_phone_number: str = Form(...),
+    xai_signing_secret: str = Form(...),
+):
+    """Attach an xAI voice number to a shop. xAI provisions numbers in its
+    console (not via API — see the SIP docs), so there's nothing to automate:
+    the founder pastes the number and the per-number webhook signing secret
+    shown in the console, and this wires them so an inbound call to that number
+    routes to this business (`_find_client_by_xai_number`) and its webhook
+    verifies (`xai_signing_secret`). This is the no-Twilio path to the first
+    real call — point the number's webhook at /webhook/xai-incoming-call in the
+    xAI console, attach it here, and dial."""
+    number = xai_phone_number.strip()
+    secret = xai_signing_secret.strip()
+    with Session(engine) as session:
+        client = session.get(Business, client_id)
+        if client is None:
+            raise HTTPException(status_code=404, detail="No such client")
+        if number and secret:
+            client.xai_phone_number = number
+            client.xai_signing_secret = secret
+            # Default the display/SMS line to this number too, but never
+            # overwrite a real Twilio inbound number already set.
+            if not client.inbound_number:
+                client.inbound_number = number
+            session.add(client)
+            session.commit()
+    return RedirectResponse(f"/clients/{client_id}", status_code=303)
+
+
 @app.post("/clients/{client_id}/review-link")
 def set_review_link(client_id: int, review_link: str = Form(...)):
     with Session(engine) as session:
@@ -396,12 +479,47 @@ def _find_client_by_inbound(session: Session, to_number: str) -> Business | None
     return session.exec(select(Business).where(Business.inbound_number == to_number)).first()
 
 
+def _twilio_signature_ok(request: Request, form) -> bool:
+    """Verify a webhook really came from Twilio (X-Twilio-Signature = HMAC of
+    the exact URL + params, keyed by the account Auth Token). Only enforced
+    when TWILIO_AUTH_TOKEN is set: in dev/console mode there's no real Twilio
+    traffic to forge, so the endpoints stay open. The URL is rebuilt from
+    PUBLIC_BASE_URL (the host Twilio was configured to call) rather than
+    request.url, which behind Railway's TLS proxy is the internal http host
+    and would never match Twilio's signature."""
+    token = os.environ.get("TWILIO_AUTH_TOKEN")
+    if not token:
+        return True
+    from twilio.request_validator import RequestValidator
+
+    base = os.environ.get("PUBLIC_BASE_URL", "https://rosterhires.com").rstrip("/")
+    url = f"{base}{request.url.path}"
+    signature = request.headers.get("X-Twilio-Signature", "")
+    return RequestValidator(token).validate(url, dict(form), signature)
+
+
 def _find_client_by_xai_number(session: Session, to_number: str) -> Business | None:
     return session.exec(select(Business).where(Business.xai_phone_number == to_number)).first()
 
 
+# Svix-convention webhooks include a unix-seconds timestamp; anything outside
+# this window is treated as a replay of a captured delivery and rejected.
+WEBHOOK_TIMESTAMP_TOLERANCE_SECONDS = 300
+
+
+def _webhook_timestamp_fresh(timestamp_header: str | None) -> bool:
+    if not timestamp_header:
+        return False
+    try:
+        ts = int(timestamp_header)
+    except ValueError:
+        return False
+    import time as _time
+    return abs(_time.time() - ts) <= WEBHOOK_TIMESTAMP_TOLERANCE_SECONDS
+
+
 @app.post("/webhook/sms")
-async def inbound_sms(From: str = Form(...), To: str = Form(...), Body: str = Form(...)):
+async def inbound_sms(request: Request):
     """Twilio inbound SMS. Routes by the business line texted (To) and replies via
     TwiML — so the AI's response is sent with no outbound credentials required.
     An active Revenue Recovery conversation for this customer takes priority over
@@ -409,14 +527,62 @@ async def inbound_sms(From: str = Form(...), To: str = Form(...), Body: str = Fo
     declined, or no_response) future texts fall through to Frontdesk as before.
     An active referral ask (sent within the last few days, not yet replied to)
     is checked next — a one-shot capture with nothing time-sensitive about it,
-    so it comes after Recovery's active negotiation but still ahead of Frontdesk."""
-    reply = await run_in_threadpool(_process_inbound_sms, From, To, Body)
-    if reply is None:
-        return twiml_empty()
-    return twiml_reply(reply)
+    so it comes after Recovery's active negotiation but still ahead of Frontdesk.
+
+    Twilio delivery is at-least-once: each MessageSid is claimed in
+    WebhookDelivery, and a retry REPLAYS the cached TwiML instead of running a
+    second agent turn — so the customer gets the original answer, never a
+    duplicate reply or a duplicate booking.
+
+    Authenticity: when TWILIO_AUTH_TOKEN is set, a valid X-Twilio-Signature is
+    required (see _twilio_signature_ok) so a spoofed request can't drive the AI
+    or trigger outbound SMS."""
+    form = await request.form()
+    if not _twilio_signature_ok(request, form):
+        return Response(status_code=403)
+    From = form.get("From", "")
+    To = form.get("To", "")
+    Body = form.get("Body", "")
+    MessageSid = form.get("MessageSid", "")
+
+    dedup_key = f"twilio-sms:{MessageSid}" if MessageSid else None
+    if dedup_key:
+        with Session(engine) as session:
+            seen = session.exec(
+                select(WebhookDelivery).where(WebhookDelivery.dedup_key == dedup_key)
+            ).first()
+            if seen is not None and seen.response_text is not None:
+                return Response(content=seen.response_text, media_type="application/xml")
+            if seen is None:
+                session.add(WebhookDelivery(provider="twilio-sms", dedup_key=dedup_key))
+                try:
+                    session.commit()
+                except IntegrityError:
+                    # Another worker holds this delivery right now; stay silent —
+                    # Twilio's retry will replay the cached reply once it's stored.
+                    session.rollback()
+                    return twiml_empty()
+            # seen-with-no-response falls through: a previous attempt died
+            # mid-turn, and reprocessing is safe (message insert is deduped by
+            # external_id, bookings by book_job's upsert).
+
+    reply = await run_in_threadpool(_process_inbound_sms, From, To, Body, MessageSid or None)
+    response = twiml_empty() if reply is None else twiml_reply(reply)
+
+    if dedup_key:
+        with Session(engine) as session:
+            row = session.exec(
+                select(WebhookDelivery).where(WebhookDelivery.dedup_key == dedup_key)
+            ).first()
+            if row is not None:
+                row.response_text = bytes(response.body).decode()
+                session.add(row)
+                session.commit()
+    return response
 
 
-def _process_inbound_sms(from_number: str, to_number: str, body: str) -> str | None:
+def _process_inbound_sms(from_number: str, to_number: str, body: str,
+                         message_sid: str | None = None) -> str | None:
     """The actual (blocking) work for an inbound SMS turn — runs in a worker
     thread so one slow Claude call doesn't stall every other concurrent call/text
     this process is handling (see run_in_threadpool call above)."""
@@ -424,21 +590,32 @@ def _process_inbound_sms(from_number: str, to_number: str, body: str) -> str | N
         client = _find_client_by_inbound(session, to_number)
         if client is None:
             return "Sorry, this number isn't set up to receive messages."
-        recovery_job = find_active_recovery_job(session, client.id, from_number)
-        if recovery_job is not None:
-            return handle_recovery_reply(session, client, recovery_job, body)
-        referral_job = find_active_referral_ask(session, client.id, from_number)
-        if referral_job is not None:
-            return handle_referral_reply(session, client, referral_job, body)
-        result = handle_customer_message(session, client, from_number, body)
-        return result["reply"]
+        # Serialize per conversation: a rapid double-text from one customer
+        # must not run two interleaved agent turns (corrupts history ordering).
+        with conversation_lock(client.id, from_number):
+            recovery_job = find_active_recovery_job(session, client.id, from_number)
+            if recovery_job is not None:
+                return handle_recovery_reply(session, client, recovery_job, body)
+            referral_job = find_active_referral_ask(session, client.id, from_number)
+            if referral_job is not None:
+                return handle_referral_reply(session, client, referral_job, body)
+            result = handle_customer_message(session, client, from_number, body,
+                                             external_id=message_sid)
+            return result["reply"]
 
 
 @app.post("/webhook/voice-status")
-async def missed_call(From: str = Form(...), To: str = Form(...), CallStatus: str = Form(...)):
+async def missed_call(request: Request):
     """Twilio voice status callback. When a call goes unanswered, Roster texts the
     caller first — the missed-call text-back. Needs outbound credentials (or prints
-    to console in dev)."""
+    to console in dev). Signature-verified like /webhook/sms — this endpoint
+    triggers an outbound SMS, so an unverified caller must never reach it."""
+    form = await request.form()
+    if not _twilio_signature_ok(request, form):
+        return Response(status_code=403)
+    From = form.get("From", "")
+    To = form.get("To", "")
+    CallStatus = form.get("CallStatus", "")
     if CallStatus not in ("no-answer", "busy", "failed"):
         return Response(status_code=204)
     with Session(engine) as session:
@@ -475,28 +652,103 @@ async def xai_incoming_call(request: Request):
     (no secret to check against) and is dropped either way.
     """
     raw_body = await request.body()
-    parsed = parse_xai_incoming_call(json.loads(raw_body))
+    try:
+        payload = json.loads(raw_body)
+    except ValueError:
+        payload = {}
+    parsed = parse_xai_incoming_call(payload)
+
+    # Capture the raw headers + body for EVERY inbound webhook — including
+    # malformed, unknown, or unsigned ones — to a single fixed quarantine file.
+    # That raw capture is what turns the first real call into a full protocol
+    # confirmation instead of a blind debug session. The filename is a constant
+    # (never the caller-supplied call_id), so an unauthenticated request can't
+    # steer this pre-auth write's path (CWE-22/CWE-73); the per-call
+    # {call_id}.jsonl log is only opened once the signature verifies below.
+    CallTrace.capture_unverified(VOICE_CAPTURE_DIR, dict(request.headers), raw_body)
+
+    # Create the trace at receipt so every latency offset is measured from
+    # "call received". It records to memory + stderr only (no capture_dir) until
+    # the webhook is authenticated — enable_capture() turns on disk persistence.
+    trace = CallTrace(parsed["call_id"] if parsed else "unparsed")
+    trace.webhook(dict(request.headers), raw_body)
+    trace.stage("webhook_received")
+
     if parsed is None:
+        trace.stage("dropped", reason="unparseable_or_wrong_type")
         return Response(status_code=204)
 
     with Session(engine) as session:
         client = _find_client_by_xai_number(session, parsed["to"])
         if client is None:
+            trace.stage("dropped", reason="unknown_number", to=parsed["to"])
             return Response(status_code=204)
 
-        if client.xai_signing_secret:
-            if not verify_xai_signature(
-                request.headers.get("webhook-id"),
-                request.headers.get("webhook-timestamp"),
-                raw_body,
-                request.headers.get("webhook-signature"),
-                client.xai_signing_secret,
-            ):
-                return Response(status_code=401)
+        # Fail closed: a voice-enabled number with no stored secret can't be
+        # verified, so it must never trigger an unauthenticated live call.
+        if not client.xai_signing_secret:
+            trace.stage("dropped", reason="no_signing_secret")
+            return Response(status_code=401)
+
+        # Replay window: a correctly-signed webhook with an old timestamp is a
+        # capture being replayed, not a live call — reject it.
+        if not _webhook_timestamp_fresh(request.headers.get("webhook-timestamp")):
+            trace.stage("dropped", reason="stale_timestamp")
+            return Response(status_code=401)
+
+        if not verify_xai_signature(
+            request.headers.get("webhook-id"),
+            request.headers.get("webhook-timestamp"),
+            raw_body,
+            request.headers.get("webhook-signature"),
+            client.xai_signing_secret,
+        ):
+            trace.stage("dropped", reason="signature_failed")
+            return Response(status_code=401)
+        trace.stage("signature_verified")
+        # Authenticated: now it's safe to persist the per-call ground-truth log.
+        # call_id was constrained to a filename-safe token at parse time, and
+        # enable_capture re-checks path containment before opening the file.
+        trace.enable_capture(VOICE_CAPTURE_DIR)
+
+    # Svix delivery is at-least-once: claim this call_id atomically so a
+    # webhook retry (or a concurrent duplicate across workers) can never spawn
+    # a second live session for the same call.
+    with Session(engine) as session:
+        session.add(WebhookDelivery(provider="xai-call", dedup_key=f"xai-call:{parsed['call_id']}"))
+        try:
+            session.commit()
+        except IntegrityError:
+            session.rollback()
+            trace.stage("dropped", reason="duplicate_call_id")
+            return Response(status_code=200)
 
     # Must not block this webhook response on the call itself — the call
     # lives for minutes, xAI just wants a fast ack that we're handling it.
-    asyncio.create_task(
-        run_xai_call(parsed["call_id"], client, parsed["from"], lambda: Session(engine))
+    task = asyncio.create_task(
+        run_xai_call(parsed["call_id"], client, parsed["from"], lambda: Session(engine), trace=trace)
     )
+    supervise_call_task(task, parsed["call_id"])
     return Response(status_code=200)
+
+
+# Strong references to in-flight call tasks: a bare create_task result that
+# nobody holds can be garbage-collected mid-call, killing a live phone
+# conversation silently. The done-callback also surfaces any exception —
+# an un-awaited task's exception is otherwise swallowed forever.
+_active_call_tasks: set = set()
+
+
+def supervise_call_task(task: "asyncio.Task", call_id: str) -> None:
+    _active_call_tasks.add(task)
+
+    def _done(t: "asyncio.Task") -> None:
+        _active_call_tasks.discard(t)
+        if t.cancelled():
+            print(f"[voice] call {call_id} task was cancelled", file=sys.stderr)
+            return
+        exc = t.exception()
+        if exc is not None:
+            print(f"[voice] call {call_id} task crashed: {exc!r}", file=sys.stderr)
+
+    task.add_done_callback(_done)

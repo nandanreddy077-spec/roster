@@ -74,3 +74,56 @@ def test_record_usage_no_alert_when_founder_phone_unset(test_engine, monkeypatch
 
         assert client.trial_spend_cents == 2010
         assert client.trial_cap_notified is True  # flag still set (notify-once, even if no channel)
+
+
+# ---- Concurrency: spend accounting must survive stale reads -----------------
+
+def test_record_usage_is_atomic_against_stale_reads(test_engine):
+    """Two concurrent turns load the same Business, then both record usage.
+    A read-modify-write implementation loses one increment; the atomic
+    UPDATE must count both."""
+    from sqlmodel import Session
+    from db_models import Business
+    import trial_cap
+
+    with Session(test_engine) as seed:
+        b = Business(business_name="X", trial_spend_cents=0)
+        seed.add(b); seed.commit(); seed.refresh(b)
+        bid = b.id
+
+    with Session(test_engine) as s1, Session(test_engine) as s2:
+        c1 = s1.get(Business, bid)
+        c2 = s2.get(Business, bid)      # stale copy: loaded before c1's update
+        trial_cap.record_usage(s1, c1)
+        trial_cap.record_usage(s2, c2)
+
+    with Session(test_engine) as check:
+        assert check.get(Business, bid).trial_spend_cents == 2 * trial_cap.TRIAL_TURN_COST_CENTS
+
+
+def test_cap_alert_fires_exactly_once_even_with_stale_clients(test_engine, monkeypatch):
+    from sqlmodel import Session
+    from db_models import Business
+    import trial_cap
+
+    monkeypatch.setenv("FOUNDER_ALERT_PHONE", "+15550009999")
+    sent = []
+
+    class Rec:
+        def send(self, from_number, to_number, body): sent.append(body)
+
+    monkeypatch.setattr(trial_cap, "sms_channel", Rec())
+
+    with Session(test_engine) as seed:
+        b = Business(business_name="X", trial_spend_cents=0,
+                     trial_cap_cents=trial_cap.TRIAL_TURN_COST_CENTS)  # first turn crosses
+        seed.add(b); seed.commit(); seed.refresh(b)
+        bid = b.id
+
+    with Session(test_engine) as s1, Session(test_engine) as s2:
+        c1 = s1.get(Business, bid)
+        c2 = s2.get(Business, bid)      # stale: still shows not-notified
+        trial_cap.record_usage(s1, c1)
+        trial_cap.record_usage(s2, c2)
+
+    assert len(sent) == 1, f"founder must be alerted exactly once, got {len(sent)}"

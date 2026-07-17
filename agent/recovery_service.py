@@ -7,6 +7,7 @@ import json
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
+from sqlalchemy import update as sa_update
 from sqlmodel import Session, select
 
 from calendar_provider import get_calendar_provider
@@ -131,6 +132,25 @@ def tick(session: Session) -> List[RecoveryJob]:
                 session.commit()
             continue
 
+        # CLAIM the day before sending: a conditional UPDATE that only wins if
+        # last_sent_day is still what we read. Two overlapping ticks (cron
+        # firing twice, a manual run during the cron) both reach here, but only
+        # one claim succeeds — the customer can never be double-texted.
+        prior_day = job.last_sent_day
+        claim_condition = (
+            RecoveryJob.last_sent_day.is_(None) if prior_day is None
+            else RecoveryJob.last_sent_day == prior_day
+        )
+        claimed = session.execute(
+            sa_update(RecoveryJob)
+            .where(RecoveryJob.id == job.id, claim_condition)
+            .values(last_sent_day=due_day, updated_at=datetime.utcnow())
+        )
+        session.commit()
+        if claimed.rowcount != 1:
+            continue  # another tick got here first
+        session.refresh(job)
+
         try:
             client = session.get(Business, job.business_id)
             template = campaign.template_overrides.get(str(due_day)) or TEMPLATES[campaign.face][due_day]
@@ -142,17 +162,22 @@ def tick(session: Session) -> List[RecoveryJob]:
                 days_since=job.days_since or "",
                 renewal_date=job.anchor_date or "",
             )
-
             sms_channel.send(from_number=client.inbound_number or "", to_number=job.customer_phone, body=text)
             session.add(RecoveryMessageLog(recovery_job_id=job.id, message_day=due_day, message_text=text))
-            job.last_sent_day = due_day
-            job.updated_at = datetime.utcnow()
-            session.add(job)
             session.commit()
             sent.append(job)
         except Exception as e:
+            # Send failed: release the claim so the next tick can retry this
+            # day. The claim window means a concurrent tick skipped it this
+            # round — a skipped retry is recoverable, a double-text is not.
             print(f"Recovery tick: failed to send to job {job.id}: {e}")
             session.rollback()
+            session.execute(
+                sa_update(RecoveryJob)
+                .where(RecoveryJob.id == job.id, RecoveryJob.last_sent_day == due_day)
+                .values(last_sent_day=prior_day, updated_at=datetime.utcnow())
+            )
+            session.commit()
             continue
 
     return sent

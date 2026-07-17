@@ -82,6 +82,20 @@ class Message(SQLModel, table=True):
     customer_phone: str = "dashboard"  # threads a conversation per customer on a business's line
     role: str  # "user" or "assistant"
     content_json: str  # JSON-encoded content (str or list of content blocks)
+    external_id: Optional[str] = Field(default=None, index=True)  # provider message id (e.g. Twilio MessageSid) — lets a retried webhook skip re-inserting the same inbound message
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class WebhookDelivery(SQLModel, table=True):
+    """Inbound-webhook dedup ledger. One row per unique provider delivery
+    (Twilio MessageSid, xAI call_id). The unique dedup_key makes 'claim' an
+    atomic insert — a concurrent or retried delivery loses the race and is
+    either replayed (response_text cached) or dropped, never reprocessed
+    into duplicate side effects."""
+    id: Optional[int] = Field(default=None, primary_key=True)
+    provider: str
+    dedup_key: str = Field(unique=True, index=True)
+    response_text: Optional[str] = None  # cached response body (TwiML) to replay on retry
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
 

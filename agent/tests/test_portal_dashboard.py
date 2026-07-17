@@ -63,9 +63,9 @@ def test_dashboard_untested_shows_ready_not_live(monkeypatch, test_engine):
     response = client.get("/dashboard")
     assert response.status_code == 200
     assert "Ready" in response.text
-    assert "try it before you trust it" in response.text
+    assert "before you trust it" in response.text
     assert "Working" not in response.text
-    assert "Quote Chaser" in response.text  # hire-next card
+    assert "Quote Chaser" in response.text  # ready-to-hire card
 
 
 def test_dashboard_activity_lists_real_jobs(monkeypatch, test_engine):

@@ -36,27 +36,27 @@ LOG_JOB_TOOL = {
     },
 }
 
+# Honest capability: we cannot redirect a live call today, so the tool's name
+# and description promise exactly what happens — an urgent SMS to the owner.
+# (Python identifier kept for compatibility; the model only sees `name`.)
 TRANSFER_CALL_TOOL = {
-    "name": "transfer_call",
+    "name": "alert_owner",
     "description": (
-        "Transfer the live phone call to the business owner. Call this when the "
-        "caller is upset, has a complaint, or needs something you can't confidently "
-        "handle yourself. Always pass the exact destination number given to you in "
-        "the system prompt."
+        "Immediately send the business owner an urgent text about this call — "
+        "with the caller's number and your reason — so the owner can call them "
+        "back right away. Use for true emergencies, upset callers, complaints, "
+        "or anything you can't confidently handle. This does NOT redirect or "
+        "connect the call; it alerts the owner by text."
     ),
     "input_schema": {
         "type": "object",
         "properties": {
-            "destination": {
-                "type": "string",
-                "description": "The phone number to transfer to, exactly as given in the system prompt.",
-            },
             "reason": {
                 "type": "string",
-                "description": "One short phrase for why the call is being transferred.",
+                "description": "One short phrase for why the owner is being alerted.",
             },
         },
-        "required": ["destination"],
+        "required": ["reason"],
     },
 }
 
@@ -105,12 +105,17 @@ call, not a text message. Never make up a price or appointment time you don't \
 actually know.
 
 If the situation is a true emergency (e.g. gas leak, flooding, no heat in freezing \
-weather), tell the caller you're getting someone right now and call transfer_call \
-with destination "{client.escalation_phone}".
+weather): if anyone may be in danger, first tell the caller to hang up and dial 911. \
+Then call alert_owner with a short reason — that sends the owner an urgent text with \
+the caller's number right away. Be honest about what's happening: you cannot connect \
+or redirect this call. Say the owner has been texted and give the caller the owner's \
+direct number, {client.escalation_phone}, so they can call right now. If alert_owner \
+reports the text failed, say so plainly and give them {client.escalation_phone} to \
+call themselves — never claim help is coming when it isn't.
 
 If the caller is upset, has a complaint, or asks for something you can't confidently \
-handle, call transfer_call with destination "{client.escalation_phone}" rather than \
-guessing.
+handle, call alert_owner and give the caller the owner's direct number \
+{client.escalation_phone} rather than guessing.
 
 Once you have a service type and contact info, call log_job to capture the lead \
 before ending the call."""

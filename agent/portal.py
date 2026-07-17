@@ -20,6 +20,7 @@ from auth import hash_password, verify_password
 from db import engine
 from db_models import Business, Job, Message
 from google_auth import callback_url, get_oauth, google_enabled
+from locks import conversation_lock
 from roles import ROSTER_DESCRIPTIONS, coming_later_after, next_hire, receptionist_display_name
 from service import handle_customer_message
 
@@ -318,6 +319,7 @@ def dashboard(request: Request):
                 "next_role": next_role,
                 "next_role_description": ROSTER_DESCRIPTIONS.get(next_role, ""),
                 "coming_later": coming_later,
+                "requested": requested,
                 "show_source_banner": show_source_banner,
             },
         )
@@ -333,7 +335,8 @@ def dashboard_test(request: Request, message: str = Form(...)):
             return RedirectResponse("/onboarding/business", status_code=303)
         text = message.strip()
         if text:
-            result = handle_customer_message(session, client, PORTAL_TEST_THREAD, text)
+            with conversation_lock(client.id, PORTAL_TEST_THREAD):
+                result = handle_customer_message(session, client, PORTAL_TEST_THREAD, text)
             # A real reply back is what earns the honest "Working" status —
             # never form submission. Set once, on the first successful test.
             if result["reply"] is not None and client.tested_at is None:

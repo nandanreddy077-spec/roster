@@ -3,6 +3,13 @@ builder = "NIXPACKS"
 buildCommand = "pip install -r requirements.txt"
 
 [deploy]
-startCommand = "uvicorn app:app --host 0.0.0.0 --port $PORT --workers 4 --proxy-headers --forwarded-allow-ips='*'"
+# ONE worker while on SQLite. Two reasons, both correctness (not scale):
+#   1. SQLite is single-writer — 4 processes writing one file on the volume
+#      throw "database is locked" under concurrent calls/texts.
+#   2. The per-conversation lock (locks.py) is a process-local threading lock
+#      on SQLite, so it only actually serializes turns within ONE process.
+# Move to Postgres (set DATABASE_URL) to safely raise this — Postgres handles
+# concurrent writers and the lock becomes a cross-process pg_advisory_lock.
+startCommand = "uvicorn app:app --host 0.0.0.0 --port $PORT --workers 1 --proxy-headers --forwarded-allow-ips='*'"
 restartPolicyType = "ON_FAILURE"
 restartPolicyMaxRetries = 3
