@@ -595,9 +595,11 @@ a.trade-card:hover { border-color: var(--accent); box-shadow: 0 6px 18px rgba(31
   margin-bottom: 12px;
 }
 .trade-live .trade-badge { background: var(--proof-dim); color: var(--proof); }
-.trade-ready { background: transparent; box-shadow: none; }
-.trade-ready .trade-badge { background: rgba(163, 158, 143, 0.16); color: var(--soon); }
-.trade-ready h3 { color: var(--text-dim); }
+/* Waitlist trades: lighter than the two live cards so "Staffing now" still leads,
+   but clickable (they text the founder line) — not a dead greyed-out card. */
+.trade-soon { background: var(--bg-alt); }
+.trade-soon .trade-badge { background: var(--accent-dim); color: var(--accent); }
+.trade-soon p { color: var(--accent); font-weight: 600; }
 
 /* ---- Founding roster ---- */
 .founding-section {
