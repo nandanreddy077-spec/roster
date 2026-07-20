@@ -189,6 +189,19 @@ class Employee(SQLModel, table=True):
     fired_at: Optional[datetime] = None
 
 
+class AccessRequest(SQLModel, table=True):
+    """A home-service owner who filled the landing's "Request early access"
+    form. The only inbound conversion path while Twilio KYC is pending — the
+    founder follows up from the /clients dashboard and hand-onboards the first
+    few shops."""
+    id: Optional[int] = Field(default=None, primary_key=True)
+    name: str = ""
+    business_name: str = ""
+    phone: str = ""
+    trade: str = ""
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+
+
 class Event(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     business_id: int = Field(foreign_key="business.id", index=True)

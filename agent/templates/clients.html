@@ -1,6 +1,22 @@
 {% extends "base.html" %}
 {% block title %}Clients — Roster{% endblock %}
 {% block content %}
+{% if access_requests %}
+<section style="margin-bottom:32px;">
+  <h1>Access requests <span style="font-size:14px; font-weight:400; color:var(--text-dim);">— {{ access_requests|length }} to follow up</span></h1>
+  <div class="client-list">
+    {% for r in access_requests %}
+    <div class="client-card" style="cursor:default;">
+      <h3>{{ r.business_name or r.name }}</h3>
+      <span class="trade-tag">{{ r.trade or "—" }}</span>
+      <p style="margin:8px 0 0; font-size:14px;">{{ r.name }} · <a href="tel:{{ r.phone }}">{{ r.phone }}</a></p>
+      <p style="margin:4px 0 0; font-size:12px; color:var(--text-dim);">{{ r.created_at.strftime('%b %d, %I:%M %p') }}</p>
+    </div>
+    {% endfor %}
+  </div>
+</section>
+{% endif %}
+
 <h1>Clients</h1>
 {% if clients %}
 <div class="client-list">

@@ -20,7 +20,7 @@ from call_trace import CallTrace
 from channels import get_channel
 from db import DATA_DIR, engine, init_db
 from locks import conversation_lock
-from db_models import Business, Job, Message, RecoveryCampaign, RecoveryJob, ReferralLead, WebhookDelivery
+from db_models import AccessRequest, Business, Job, Message, RecoveryCampaign, RecoveryJob, ReferralLead, WebhookDelivery
 from portal import router as portal_router
 from provisioning import ProvisioningError, attach_number_to_xai_trunk, buy_twilio_number, register_number_with_xai
 from recovery_engine import FACE_DISPLAY_NAMES
@@ -197,9 +197,40 @@ def list_clients(request: Request):
             )
         ).all()
         recovery_counts = {client_id: count for client_id, count in count_rows}
+        access_requests = session.exec(
+            select(AccessRequest).order_by(AccessRequest.created_at.desc())
+        ).all()
     return templates.TemplateResponse(
-        request, "clients.html", {"clients": clients, "recovery_counts": recovery_counts}
+        request,
+        "clients.html",
+        {"clients": clients, "recovery_counts": recovery_counts, "access_requests": access_requests},
     )
+
+
+# ---- Request early access (public landing conversion) ----------------------
+# The landing's only inbound path while Twilio KYC is pending: an owner fills
+# this, we store the lead, and the founder follows up from /clients. Public
+# (no auth) — it's on the marketing site. Replaces self-serve signup + the
+# phone-number CTAs for now.
+@app.post("/request-access")
+def request_access(
+    name: str = Form(...),
+    phone: str = Form(...),
+    trade: str = Form(""),
+    business_name: str = Form(""),
+):
+    with Session(engine) as session:
+        session.add(AccessRequest(
+            name=name.strip(), phone=phone.strip(),
+            trade=trade.strip(), business_name=business_name.strip(),
+        ))
+        session.commit()
+    return RedirectResponse("/thanks", status_code=303)
+
+
+@app.get("/thanks")
+def request_access_thanks(request: Request):
+    return templates.TemplateResponse(request, "request_thanks.html", {})
 
 
 @app.get("/clients/new")
