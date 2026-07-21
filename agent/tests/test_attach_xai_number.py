@@ -74,3 +74,18 @@ def test_attach_requires_admin_auth(test_engine, monkeypatch):
                     data={"xai_phone_number": "+15125550123", "xai_signing_secret": "s"},
                     follow_redirects=False)
     assert r.status_code == 401
+
+
+def test_client_detail_offers_retry_when_number_bought_but_voice_incomplete(test_engine, monkeypatch):
+    """Twilio number bought (inbound_number set) but xAI registration failed
+    (xai_phone_number still None) must not be a dead end — the founder needs
+    the manual attach-xai-number form to retry, not just an error message."""
+    client, bid = _client(test_engine, monkeypatch)
+    with Session(test_engine) as s:
+        b = s.get(Business, bid); b.inbound_number = "+15125550199"; s.add(b); s.commit()
+
+    r = client.get(f"/clients/{bid}", headers=DASH_AUTH)
+
+    assert r.status_code == 200
+    assert "didn't complete" in r.text
+    assert f'action="/clients/{bid}/attach-xai-number"' in r.text

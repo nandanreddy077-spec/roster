@@ -25,6 +25,12 @@
       <p class="agent-tile-desc">Live — voice + SMS both wired up. Have the client forward their real number to {{ client.inbound_number }}.</p>
       {% elif client.inbound_number %}
       <p class="agent-tile-desc">Number bought and SMS-ready ({{ client.inbound_number }}), but voice registration with xAI didn't complete — see server logs.</p>
+      <p class="agent-tile-desc" style="margin-top:12px;">Retry: create the number in the xAI console, point its webhook at <code>/webhook/xai-incoming-call</code>, and paste it + its signing secret here.</p>
+      <form method="post" action="/clients/{{ client.id }}/attach-xai-number" class="review-link-form">
+        <input type="text" name="xai_phone_number" placeholder="xAI number, e.g. +15125550123" required>
+        <input type="text" name="xai_signing_secret" placeholder="Webhook signing secret" required>
+        <button class="btn btn-primary btn-small" type="submit">Attach xAI number</button>
+      </form>
       {% else %}
       <p class="agent-tile-desc">No number yet — buy one to enable SMS and voice for this client.</p>
       <form method="post" action="/clients/{{ client.id }}/provision-number" class="review-link-form">
