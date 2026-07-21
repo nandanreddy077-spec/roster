@@ -12,7 +12,7 @@ from fastapi.responses import FileResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.exc import IntegrityError
-from sqlmodel import Session, func, select
+from sqlmodel import Session, delete, func, select
 from starlette.concurrency import run_in_threadpool
 from starlette.middleware.sessions import SessionMiddleware
 
@@ -20,7 +20,10 @@ from call_trace import CallTrace
 from channels import get_channel
 from db import DATA_DIR, engine, init_db
 from locks import conversation_lock
-from db_models import AccessRequest, Business, Job, Message, RecoveryCampaign, RecoveryJob, ReferralLead, WebhookDelivery
+from db_models import (
+    AccessRequest, Business, Customer, Employee, Event, Job, Message,
+    RecoveryCampaign, RecoveryJob, RecoveryMessageLog, ReferralLead, WebhookDelivery,
+)
 from portal import router as portal_router
 from provisioning import ProvisioningError, attach_number_to_xai_trunk, buy_twilio_number, register_number_with_xai
 from recovery_engine import FACE_DISPLAY_NAMES
@@ -441,6 +444,40 @@ def deploy_employee(client_id: int, role_key: str = Form(...)):
     return RedirectResponse(f"/clients/{client_id}", status_code=303)
 
 
+@app.post("/clients/{client_id}/delete")
+def delete_client(client_id: int, confirm_name: str = Form(...)):
+    """Founder-admin, permanent delete of a business and everything under it
+    (customers, jobs, messages, recovery/referral history, employees, events).
+    Requires typing the business's exact name to confirm -- irreversible, no
+    undo, so a typo'd client_id can't silently wipe the wrong business.
+
+    SQLite doesn't enforce foreign keys here (no PRAGMA foreign_keys=ON in
+    db.py), so a bare Business delete wouldn't error -- it would just leave
+    orphaned rows in every child table. Delete children first, in dependency
+    order, so nothing orphans regardless."""
+    with Session(engine) as session:
+        client = session.get(Business, client_id)
+        if client is None:
+            raise HTTPException(status_code=404, detail="No such client")
+        if confirm_name.strip() != client.business_name:
+            raise HTTPException(status_code=400, detail="Business name confirmation did not match")
+
+        recovery_job_ids = select(RecoveryJob.id).where(RecoveryJob.business_id == client_id)
+        session.exec(delete(RecoveryMessageLog).where(RecoveryMessageLog.recovery_job_id.in_(recovery_job_ids)))
+        session.exec(delete(Event).where(Event.business_id == client_id))
+        session.exec(delete(ReferralLead).where(ReferralLead.business_id == client_id))
+        session.exec(delete(RecoveryJob).where(RecoveryJob.business_id == client_id))
+        session.exec(delete(RecoveryCampaign).where(RecoveryCampaign.business_id == client_id))
+        session.exec(delete(Job).where(Job.business_id == client_id))
+        session.exec(delete(Message).where(Message.business_id == client_id))
+        session.exec(delete(Employee).where(Employee.business_id == client_id))
+        session.exec(delete(Customer).where(Customer.business_id == client_id))
+        session.delete(client)
+        session.commit()
+
+    return RedirectResponse("/clients", status_code=303)
+
+
 @app.get("/clients/{client_id}/recovery/new")
 def new_recovery_campaign_form(request: Request, client_id: int):
     with Session(engine) as session:
@@ -514,6 +551,8 @@ def recovery_campaign_detail(request: Request, client_id: int, campaign_id: int)
 def client_detail(request: Request, client_id: int):
     with Session(engine) as session:
         client = session.get(Business, client_id)
+        if client is None:
+            raise HTTPException(status_code=404, detail="No such client")
         messages = session.exec(
             select(Message)
             .where(Message.business_id == client_id, Message.customer_phone == DASHBOARD_THREAD)

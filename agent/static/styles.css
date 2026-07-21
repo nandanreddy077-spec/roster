@@ -127,6 +127,8 @@ a { color: var(--accent); text-decoration: none; }
 }
 .btn-primary { background: var(--accent); color: #fff; }
 .btn-primary:hover { opacity: 0.88; }
+.btn-danger { background: var(--bad); color: #fff; }
+.btn-danger:hover { opacity: 0.88; }
 
 /* Detail layout */
 .detail-grid {

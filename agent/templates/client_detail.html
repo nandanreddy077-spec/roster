@@ -152,4 +152,16 @@
     {% if not jobs %}<p class="empty">No jobs captured yet.</p>{% endif %}
   </aside>
 </div>
+
+<section class="agent-tile" style="margin-top:32px; max-width:480px;">
+  <div class="agent-tile-head">
+    <span class="agent-badge" style="background:transparent;color:var(--bad);border:1px solid var(--bad);">Danger zone</span>
+  </div>
+  <p class="agent-tile-desc">Permanently deletes this business and everything under it — customers, jobs, messages, campaigns, employees. No undo.</p>
+  <form method="post" action="/clients/{{ client.id }}/delete" class="review-link-form"
+        onsubmit="return confirm('Permanently delete {{ client.business_name }}? This cannot be undone.');">
+    <input type="text" name="confirm_name" placeholder="Type &quot;{{ client.business_name }}&quot; to confirm" required>
+    <button class="btn btn-danger btn-small" type="submit">Delete client</button>
+  </form>
+</section>
 {% endblock %}
