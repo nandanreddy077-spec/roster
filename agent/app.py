@@ -26,6 +26,7 @@ from provisioning import ProvisioningError, attach_number_to_xai_trunk, buy_twil
 from recovery_engine import FACE_DISPLAY_NAMES
 from recovery_service import create_campaign, find_active_recovery_job, handle_recovery_reply
 from referral_service import find_active_referral_ask, handle_referral_reply
+from runner import dispatch_job_completed
 from service import handle_customer_message
 from xai_voice_adapter import (
     parse_incoming_call_webhook as parse_xai_incoming_call,
@@ -369,6 +370,8 @@ def complete_job(client_id: int, job_id: int):
     with Session(engine) as session:
         client = session.get(Business, client_id)
         job = session.get(Job, job_id)
+        if client is None or job is None or job.business_id != client_id:
+            raise HTTPException(status_code=404, detail="No such job")
         already_completed = job.completed_at is not None
         job.completed_at = job.completed_at or datetime.utcnow()
         session.add(job)
@@ -382,6 +385,30 @@ def complete_job(client_id: int, job_id: int):
                 )
             except Exception as e:
                 print(f"Reviews: failed to send review request for job {job_id}: {e}")
+        if not already_completed:
+            try:
+                dispatch_job_completed(session, client, job)
+            except Exception as e:
+                print(f"Runner: dispatch_job_completed failed for job {job_id}: {e}")
+    return RedirectResponse(f"/clients/{client_id}", status_code=303)
+
+
+@app.post("/clients/{client_id}/employees/deploy")
+def deploy_employee(client_id: int, role_key: str = Form(...)):
+    """Founder-admin action: the only place an employee gets deployed for a
+    business (platform PRD §11a — Founder Admin configures, Customer Portal
+    only reflects). Reuses the existing requested_roster JSON list — the
+    same mechanism the customer-facing 'Discuss Your Next AI Hire' prompt
+    queues into — so a role deployed here is immediately what runner.is_active
+    checks against. No schema change."""
+    with Session(engine) as session:
+        client = session.get(Business, client_id)
+        requested = json.loads(client.requested_roster) if client.requested_roster else []
+        if role_key not in requested:
+            requested.append(role_key)
+            client.requested_roster = json.dumps(requested)
+            session.add(client)
+            session.commit()
     return RedirectResponse(f"/clients/{client_id}", status_code=303)
 
 

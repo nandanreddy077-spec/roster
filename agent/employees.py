@@ -16,6 +16,13 @@ Every quarter, review every `internal` entry and move it to `live`
 keep half-finished). An entry still `internal` after a review with no
 graduation decision is a signal to force the call, not to leave it. See
 `ROADMAP.md` "Employee registry discipline."
+
+Companion file: `runner.py`'s `DECLARED_ROLES` is the execution-dispatch
+side of this same roster — it names, per role, either a real capability or
+exactly what blocks one. It also declares a few names (csr, office_manager,
+ceo_assistant, sales_assistant) that this registry deliberately does NOT
+include, per the 2026-07-21 decision to leave this list as-is rather than
+add speculative entries from a chat sketch with no defined responsibilities.
 """
 from dataclasses import dataclass
 from typing import Literal
@@ -44,7 +51,11 @@ REGISTRY: list[EmployeeDefinition] = [
     EmployeeDefinition("lead_qualifier", "sales", "planned", "Lead Qualifier"),
     EmployeeDefinition("quote_chaser", "sales", "internal", "Quote Chaser"),
     EmployeeDefinition("membership_agent", "sales", "planned", "Membership Agent"),
-    EmployeeDefinition("upsell_agent", "sales", "planned", "Upsell Agent"),
+    # upsell_agent graduated planned -> internal 2026-07-21: real capability
+    # in upsell_engine.py, dispatched via runner.py, founder-deployable
+    # through POST /clients/{id}/employees/deploy. Not `live` -- no
+    # customer-facing way to request it yet.
+    EmployeeDefinition("upsell_agent", "sales", "internal", "Upsell Agent"),
     # Operations
     EmployeeDefinition("dispatcher", "operations", "planned", "Dispatcher"),
     EmployeeDefinition("route_optimizer", "operations", "planned", "Route Optimizer"),
@@ -60,7 +71,10 @@ REGISTRY: list[EmployeeDefinition] = [
     EmployeeDefinition("retention_manager", "customer_success", "internal", "Retention Manager"),
     # Marketing
     EmployeeDefinition("reactivation", "marketing", "planned", "Reactivation"),
-    EmployeeDefinition("referral", "marketing", "planned", "Referral"),
+    # referral corrected planned -> internal 2026-07-21: referral_service.py
+    # + referral_engine.py already run in production, wired into the
+    # existing Retention Manager hire flow. Not `live` on its own.
+    EmployeeDefinition("referral", "marketing", "internal", "Referral"),
     EmployeeDefinition("campaign_manager", "marketing", "planned", "Campaign Manager"),
     # Intelligence
     EmployeeDefinition("business_analyst", "intelligence", "planned", "Business Analyst"),
