@@ -48,16 +48,30 @@ expansion — each one more money from customers you already captured.
 | "What's it cost?" | "Free for 7 days, then one flat monthly rate — no setup fee, no per-call surprise." |
 
 ## What we can honestly claim TODAY (the honesty anchor)
-- ✅ **Self-serve signup + onboarding** — real and live at rosterhires.com.
+- ✅ **Request-access + founder-led onboarding** — real and live at rosterhires.com. Self-serve `/signup` still works but is not advertised (see `DESIGN.md` 2026-07-21).
 - ⚠️ **SMS text-back + booking** — built; claim it as working **only after** a real end-to-end text has been verified (`ANTHROPIC_API_KEY` + a live number).
 - ⛔ **Live voice** — the primary wedge, but **unverified end-to-end** (see
   `CUSTOMER.md` Open Risk #1). Do **not** promise "answers your calls live"
   until a real call has been proven. Until then, sell the concierge setup, not a
   finished product.
 
-## The motion (first 20 = concierge)
-Self-serve signup, then **you personally join a 15-minute onboarding call** per
-pilot: configure forwarding, verify the AI, make the first real call succeed.
-Those calls are also **customer research** — every friction goes in
-`CUSTOMER.md`. Do not optimize for fully self-serve before you understand why
-customers struggle.
+## Customer Onboarding Principle (diagnosis before deployment)
+While founder-led onboarding is the default, Roster does not assume every
+customer starts with the same AI employee. Every customer begins with a
+business discovery session. We identify the customer's biggest operational
+bottleneck, estimate where the highest ROI exists, and recommend the AI
+employee most likely to solve that problem. We deploy that employee, measure
+results, and use those results to guide future AI hires. Today, Frontdesk is
+the only `live` employee (`agent/employees.py`), so it is usually the answer
+— but the onboarding experience is built around diagnosis and ROI first,
+deployment second, not product selection first.
+
+## The motion (concierge until proven otherwise)
+Request access, then **you personally join a 15-minute discovery call** per
+pilot: understand the business's biggest bottleneck (see the Customer
+Onboarding Principle above), configure forwarding, verify the AI, make the
+first real call succeed. Those calls are also **customer research** — every
+friction goes in `CUSTOMER.md`. Founder-led onboarding stays the default
+until a repeatable process is validated by customer-success metrics, not by
+hitting a fixed customer count. Do not optimize for fully self-serve before
+you understand why customers struggle.
