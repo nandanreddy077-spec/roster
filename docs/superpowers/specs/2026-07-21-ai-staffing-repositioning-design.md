@@ -34,8 +34,9 @@ implies.
 ## Scope
 
 **In scope (this pass):**
-1. Make the request-access-only funnel a permanent decision, not a KYC
-   workaround with a planned reversion.
+1. Make the request-access-only funnel the standing default, not a KYC
+   workaround with a planned reversion or a decision tied to a fixed
+   customer count.
 2. Reframe the dashboard's existing self-serve "Hire" action as a
    founder-reviewed hiring conversation, not a feature purchase — no backend
    change.
@@ -63,19 +64,24 @@ company for home-service businesses... Not 'an AI receptionist.'"*) The one
 stale line is `SALES.md`'s honesty anchor (§5 below) — fixed as part of that
 edit, not a standalone copy pass.
 
-## 2. Self-serve signup gate becomes permanent
+## 2. Self-serve signup gate becomes the standing default
 
 `DESIGN.md`'s 2026-07-16 log entry unlinked `/signup` from the landing because
 Twilio KYC blocked per-customer number provisioning, with an explicit note:
 *"REVERT to self-serve 'Hire your AI employee' CTAs once Twilio provisions
 numbers."* That reversion plan is cancelled. Request-led onboarding
 (`AccessRequest` → founder follow-up → founder walks the owner through
-`/signup` live, or `/clients/new`) stays the funnel for the first 50
-customers regardless of KYC status.
+`/signup` live, or `/clients/new`) stays the default funnel — not tied to
+KYC status, and not tied to a fixed customer count either. Founder-led
+onboarding remains the default until Roster has validated a repeatable
+onboarding and deployment process; the transition to self-serve is driven
+by customer-success metrics (e.g. onboarding time, activation rate,
+first-week retention), not by hitting an arbitrary number of customers.
 
 Changes:
 - `DESIGN.md` decision log: add a 2026-07-21 entry recording this as a
-  deliberate permanent decision, referencing this spec.
+  deliberate standing default (metrics-gated, not count-gated or
+  KYC-gated), referencing this spec.
 - `templates/login.html`: remove the "Haven't hired your team yet? Get
   started" link to `/signup` — the last discoverable self-serve entry point
   on a live page. `/signup` itself stays working (used directly by the
@@ -119,7 +125,12 @@ actually wired into the running product):
 from dataclasses import dataclass
 from typing import Literal
 
-Status = Literal["live", "planned"]
+Status = Literal["live", "internal", "planned"]
+# live     -> a customer can be hired into this employee today, self-serve or
+#             founder-configured, no bespoke engineering per customer.
+# internal -> the engine exists and the founder can manually deploy it for a
+#             customer on request; not yet a standing dashboard offer.
+# planned  -> vision only. No engine, no route, no UI.
 
 @dataclass(frozen=True)
 class EmployeeDefinition:
@@ -134,7 +145,7 @@ REGISTRY: list[EmployeeDefinition] = [
     EmployeeDefinition("support", "customer_service", "planned", "Support"),
     # Sales
     EmployeeDefinition("lead_qualifier", "sales", "planned", "Lead Qualifier"),
-    EmployeeDefinition("quote_chaser", "sales", "planned", "Quote Chaser"),
+    EmployeeDefinition("quote_chaser", "sales", "internal", "Quote Chaser"),
     EmployeeDefinition("membership_agent", "sales", "planned", "Membership Agent"),
     EmployeeDefinition("upsell_agent", "sales", "planned", "Upsell Agent"),
     # Operations
@@ -149,7 +160,7 @@ REGISTRY: list[EmployeeDefinition] = [
     # Reviews, listed under Customer Service in the doc); roles.py already
     # ships this as one employee, so the registry follows the shipped shape
     # rather than the doc's finer split.
-    EmployeeDefinition("retention_manager", "customer_success", "planned", "Retention Manager"),
+    EmployeeDefinition("retention_manager", "customer_success", "internal", "Retention Manager"),
     # Marketing
     EmployeeDefinition("reactivation", "marketing", "planned", "Reactivation"),
     EmployeeDefinition("referral", "marketing", "planned", "Referral"),
@@ -163,15 +174,19 @@ REGISTRY: list[EmployeeDefinition] = [
 This mirrors the PRD's existing pattern for `RoleDefinition` (§6: *"code
 registry, NOT a table... the template an Employee instantiates"*) — same
 shape, so it composes with the platform-architecture-locked plan instead of
-introducing a second data model. `status="planned"` entries are inert data:
-no route references them, no template renders them, nothing imports them
-except (later) documentation tooling and, eventually, the real
-`RoleDefinition` registry when a role actually ships.
+introducing a second data model. **The registry defines the long-term
+capability map of the company. Inclusion in the registry does not imply
+implementation, availability, or customer visibility** — `internal` and
+`planned` entries are inert data: no route references them, no template
+renders them, nothing imports them except (later) documentation tooling and,
+eventually, the real `RoleDefinition` registry when a role actually ships.
 
-Note: `quote_chaser` and `retention_manager` are marked `planned` here even
-though their *engines* exist (`recovery_engine.py`, `referral_engine.py`) —
-"live" in this registry means "a customer can be hired into it today without
-founder-side manual setup," which is not yet true for either.
+Note: `quote_chaser` and `retention_manager` are `internal`, not `live` —
+their engines exist (`recovery_engine.py`, `referral_engine.py`) and you can
+deploy either manually today, but neither is a standing self-serve or
+standing dashboard offer yet. `live` in this registry specifically means "a
+customer can be hired into this without bespoke founder engineering," which
+is only true for Frontdesk.
 
 PRD update: add a short §6a to
 `docs/superpowers/specs/2026-07-13-roster-platform-architecture-prd.md`
@@ -182,13 +197,15 @@ one sentence, no restructuring of the existing PRD content.
 
 New governing rule, recorded here and in `SALES.md`:
 
-> For the first 50 customers, Roster does not assume every customer starts
-> with the same AI employee. Every customer begins with a business discovery
-> session. During that session we identify the customer's largest
-> operational bottleneck and determine which AI employee should be deployed.
-> Today, Frontdesk is the only production-ready employee, so it is usually
-> the answer — but the onboarding experience is built around diagnosis first,
-> deployment second, not product selection first.
+> While founder-led onboarding is the default (§2), Roster does not assume
+> every customer starts with the same AI employee. Every customer begins
+> with a business discovery session. We identify the customer's biggest
+> operational bottleneck, estimate where the highest ROI exists, and
+> recommend the AI employee most likely to solve that problem. We deploy
+> that employee, measure results, and use those results to guide future AI
+> hires. Today, Frontdesk is the only `live` employee (§4), so it is usually
+> the answer — but the onboarding experience is built around diagnosis and
+> ROI first, deployment second, not product selection first.
 
 This is the throughline connecting §3 and §4: the dashboard's "opportunity
 detected" card *is* the ongoing, post-hire version of this diagnosis — it's
@@ -212,6 +229,7 @@ so it's not implicit.
 | File | Change |
 |---|---|
 | `agent/employees.py` (new) | Employee registry, §4 |
+| `agent/tests/test_employees.py` (new) | Registry check, §7 |
 | `docs/superpowers/specs/2026-07-13-roster-platform-architecture-prd.md` | +1 short section, pointer to registry |
 | `agent/templates/dashboard.html` | Copy only, §3 |
 | `agent/templates/login.html` | Remove self-serve link, §2 |
@@ -219,7 +237,8 @@ so it's not implicit.
 | `SALES.md` | Onboarding principle + honesty-anchor fix, §5 |
 
 No changes to: `db_models.py`, `app.py`, `portal.py`, `roles.py`,
-`recovery_engine.py`, `referral_engine.py`, any webhook, any test file.
+`recovery_engine.py`, `referral_engine.py`, any webhook, or any existing
+test file (one new test file is added — see §7).
 
 ## 7. Testing
 
@@ -233,7 +252,8 @@ assert on role names and POST behavior, not copy — see §3).
 ## 8. Commit sequence
 
 Four independent, revertable commits:
-1. `agent/employees.py` + PRD pointer — pure addition, zero behavior change.
+1. `agent/employees.py` + `test_employees.py` + PRD pointer — pure addition,
+   zero behavior change.
 2. `templates/dashboard.html` copy reframe (§3).
 3. `templates/login.html` self-serve link removal + `DESIGN.md` log entry (§2).
 4. `SALES.md` onboarding principle + honesty-anchor fix (§5).
