@@ -19,10 +19,10 @@ this file. Repeated pain here > any internal idea.
 ### Deploy / ops state (updated 2026-07-21 from founder's Railway dashboard —
 ### previous entries below were stale, dated from before this was fixed)
 - **Hosting:** Railway, service `roster`, root dir `agent/`, domain rosterhires.com.
-- **Persistent volume attached** (`roster-volume`) — the prior data-loss risk
-  (redeploys wiping the SQLite DB) is resolved. Not independently verified that
-  the volume's mount path matches `ROSTER_DATA_DIR`'s value (both present,
-  masked in the dashboard) — worth a glance if data ever appears to vanish.
+- **Persistent volume attached and confirmed correct** (`roster-volume`,
+  mount path `/data`, matching `ROSTER_DATA_DIR=/data` exactly — verified in
+  the Railway dashboard, not assumed). The prior data-loss risk (redeploys
+  wiping the SQLite DB) is fully resolved.
 - **11 env vars set in Railway:** `ADMIN_PASSWORD`, `ANTHROPIC_API_KEY`,
   `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `OAUTH_REDIRECT_BASE_URL`,
   `ROSTER_DATA_DIR`, `ROSTER_ENV`, `SESSION_SECRET_KEY`, `TWILIO_ACCOUNT_SID`,
