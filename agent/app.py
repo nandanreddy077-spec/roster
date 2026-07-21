@@ -320,6 +320,35 @@ def provision_number(client_id: int, area_code: str = Form("")):
     return RedirectResponse(redirect_url, status_code=303)
 
 
+@app.post("/clients/{client_id}/retry-xai-registration")
+def retry_xai_registration(client_id: int):
+    """Retry only the xAI voice half for a number already bought via Twilio
+    (provision-number's Twilio half succeeded, its xAI half didn't). Does not
+    purchase a new number -- that route always buys fresh, which would waste
+    money re-buying on every retry while debugging the xAI side."""
+    error = None
+    with Session(engine) as session:
+        client = session.get(Business, client_id)
+        if not client.inbound_number or not client.twilio_number_sid:
+            raise HTTPException(status_code=400, detail="No purchased number to retry xAI registration for")
+        try:
+            xai_registration = register_number_with_xai(client.inbound_number)
+            attach_number_to_xai_trunk(client.twilio_number_sid, client.inbound_number)
+            client.xai_phone_number = client.inbound_number
+            client.xai_signing_secret = xai_registration["signing_secret"]
+            session.add(client)
+            session.commit()
+        except ProvisioningError as e:
+            error = str(e)
+
+    redirect_url = f"/clients/{client_id}"
+    if error:
+        from urllib.parse import quote
+
+        redirect_url += f"?provision_error={quote(error)}"
+    return RedirectResponse(redirect_url, status_code=303)
+
+
 @app.post("/clients/{client_id}/attach-xai-number")
 def attach_xai_number(
     client_id: int,

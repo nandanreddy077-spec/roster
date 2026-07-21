@@ -109,3 +109,71 @@ def test_client_detail_does_not_claim_bought_for_manually_typed_number(test_engi
     assert "bought" not in r.text
     assert "on file" in r.text
     assert f'action="/clients/{bid}/provision-number"' in r.text
+
+
+def test_retry_xai_registration_succeeds_without_rebuying_number(test_engine, monkeypatch):
+    """provision-number always buys a fresh Twilio number -- wasteful to retry
+    with when only the xAI half failed. retry-xai-registration must reuse the
+    existing purchase instead."""
+    client, bid = _client(test_engine, monkeypatch)
+    with Session(test_engine) as s:
+        b = s.get(Business, bid)
+        b.inbound_number = "+16187473488"
+        b.twilio_number_sid = "PN_real_sid"
+        s.add(b); s.commit()
+
+    def _boom_if_called(*args, **kwargs):
+        raise AssertionError("must not re-purchase a number on retry")
+
+    monkeypatch.setattr(app_module, "buy_twilio_number", _boom_if_called)
+    monkeypatch.setattr(
+        app_module, "register_number_with_xai",
+        lambda phone_number: {"signing_secret": "whsec_retry123"},
+    )
+    monkeypatch.setattr(app_module, "attach_number_to_xai_trunk", lambda sid, phone_number: None)
+
+    r = client.post(f"/clients/{bid}/retry-xai-registration", headers=DASH_AUTH, follow_redirects=False)
+
+    assert r.status_code == 303
+    with Session(test_engine) as s:
+        b = s.get(Business, bid)
+    assert b.xai_phone_number == "+16187473488"
+    assert b.xai_signing_secret == "whsec_retry123"
+    assert b.inbound_number == "+16187473488"  # unchanged, no new number
+
+
+def test_retry_xai_registration_requires_an_existing_purchase(test_engine, monkeypatch):
+    client, bid = _client(test_engine, monkeypatch)  # no inbound_number/twilio_number_sid
+
+    r = client.post(f"/clients/{bid}/retry-xai-registration", headers=DASH_AUTH)
+
+    assert r.status_code == 400
+
+
+def test_retry_xai_registration_surfaces_error_without_crashing(test_engine, monkeypatch):
+    client, bid = _client(test_engine, monkeypatch)
+    with Session(test_engine) as s:
+        b = s.get(Business, bid)
+        b.inbound_number = "+16187473488"
+        b.twilio_number_sid = "PN_real_sid"
+        s.add(b); s.commit()
+
+    from provisioning import ProvisioningError
+
+    def _fail(phone_number):
+        raise ProvisioningError("xAI registration returned no signing secret — webhook keys: ['url']")
+
+    monkeypatch.setattr(app_module, "register_number_with_xai", _fail)
+
+    r = client.post(f"/clients/{bid}/retry-xai-registration", headers=DASH_AUTH, follow_redirects=False)
+
+    assert r.status_code == 303
+    assert "provision_error" in r.headers["location"]
+    with Session(test_engine) as s:
+        assert s.get(Business, bid).xai_phone_number is None
+
+
+def test_retry_xai_registration_requires_admin_auth(test_engine, monkeypatch):
+    client, bid = _client(test_engine, monkeypatch)
+    r = client.post(f"/clients/{bid}/retry-xai-registration", follow_redirects=False)
+    assert r.status_code == 401

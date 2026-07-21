@@ -25,7 +25,10 @@
       <p class="agent-tile-desc">Live — voice + SMS both wired up. Have the client forward their real number to {{ client.inbound_number }}.</p>
       {% elif client.twilio_number_sid %}
       <p class="agent-tile-desc">Number bought and SMS-ready ({{ client.inbound_number }}), but voice registration with xAI didn't complete — see server logs.</p>
-      <p class="agent-tile-desc" style="margin-top:12px;">Retry: create the number in the xAI console, point its webhook at <code>/webhook/xai-incoming-call</code>, and paste it + its signing secret here.</p>
+      <form method="post" action="/clients/{{ client.id }}/retry-xai-registration" class="review-link-form">
+        <button class="btn btn-primary btn-small" type="submit">Retry xAI voice registration</button>
+      </form>
+      <p class="agent-tile-desc" style="margin-top:12px;">Or attach one manually: create the number in the xAI console, point its webhook at <code>/webhook/xai-incoming-call</code>, and paste it + its signing secret here.</p>
       <form method="post" action="/clients/{{ client.id }}/attach-xai-number" class="review-link-form">
         <input type="text" name="xai_phone_number" placeholder="xAI number, e.g. +15125550123" required>
         <input type="text" name="xai_signing_secret" placeholder="Webhook signing secret" required>
