@@ -127,21 +127,22 @@
   </div>
 
   <div style="border-top:1px solid var(--border); margin:16px 0;"></div>
-  <p style="font-size:12px; letter-spacing:.08em; text-transform:uppercase; color:var(--text-dim); margin:0 0 8px;">{% if 'Quote Chaser' in requested %}On the roster{% else %}Ready to hire{% endif %}</p>
+  <p style="font-size:12px; letter-spacing:.08em; text-transform:uppercase; color:var(--text-dim); margin:0 0 8px;">{% if 'Quote Chaser' in requested %}On the roster{% else %}Opportunity detected{% endif %}</p>
   <div style="display:flex; align-items:flex-start; gap:12px;">
     <div style="flex:1;">
       <p style="font-weight:600; margin:0;">Quote Chaser</p>
       <p style="color:var(--text-dim); font-size:13px; margin:2px 0 0;">Follows up on every estimate, so the jobs {{ role_name|lower }} books don't go cold.</p>
       {% if 'Quote Chaser' not in requested and real_job_count > 0 %}
       <p style="font-size:12px; color:var(--accent); margin:7px 0 0;">› Recommended because you've already booked {{ real_job_count }} {{ 'job' if real_job_count == 1 else 'jobs' }} — the estimates are piling up.</p>
+      <p style="font-size:12px; color:var(--text-dim); margin:4px 0 0;">There may be another AI employee that can help — we review your business before deploying one.</p>
       {% endif %}
     </div>
     {% if 'Quote Chaser' in requested %}
-    <span style="font-size:12px; font-weight:600; color:var(--text-dim); background:var(--bg-alt); border-radius:20px; padding:3px 10px; white-space:nowrap;">Setting up</span>
+    <span style="font-size:12px; font-weight:600; color:var(--text-dim); background:var(--bg-alt); border-radius:20px; padding:3px 10px; white-space:nowrap;">We'll be in touch</span>
     {% else %}
     <form method="post" action="/roster/hire">
       <input type="hidden" name="role" value="Quote Chaser">
-      <button type="submit" class="btn btn-primary" style="width:auto; padding:8px 16px;">Hire</button>
+      <button type="submit" class="btn btn-primary" style="width:auto; padding:8px 16px;">Discuss Your Next AI Hire</button>
     </form>
     {% endif %}
   </div>
@@ -154,7 +155,7 @@
       <p style="color:var(--text-dim); font-size:13px; margin:2px 0 0;">Rebooking, renewals, and review asks — ready to go once you've built up customer history worth keeping warm.</p>
     </div>
     {% if 'Retention Manager' in requested %}
-    <span style="font-size:12px; font-weight:600; color:var(--text-dim); background:var(--bg-alt); border-radius:20px; padding:3px 10px; white-space:nowrap;">Setting up</span>
+    <span style="font-size:12px; font-weight:600; color:var(--text-dim); background:var(--bg-alt); border-radius:20px; padding:3px 10px; white-space:nowrap;">We'll be in touch</span>
     {% endif %}
   </div>
 </div>
