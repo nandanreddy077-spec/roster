@@ -21,9 +21,9 @@
           Phone number{% if client.inbound_number %} &middot; {{ client.inbound_number }}{% endif %}
         </span>
       </div>
-      {% if client.inbound_number and client.xai_phone_number %}
+      {% if client.xai_phone_number %}
       <p class="agent-tile-desc">Live — voice + SMS both wired up. Have the client forward their real number to {{ client.inbound_number }}.</p>
-      {% elif client.inbound_number %}
+      {% elif client.twilio_number_sid %}
       <p class="agent-tile-desc">Number bought and SMS-ready ({{ client.inbound_number }}), but voice registration with xAI didn't complete — see server logs.</p>
       <p class="agent-tile-desc" style="margin-top:12px;">Retry: create the number in the xAI console, point its webhook at <code>/webhook/xai-incoming-call</code>, and paste it + its signing secret here.</p>
       <form method="post" action="/clients/{{ client.id }}/attach-xai-number" class="review-link-form">
@@ -32,7 +32,11 @@
         <button class="btn btn-primary btn-small" type="submit">Attach xAI number</button>
       </form>
       {% else %}
+      {% if client.inbound_number %}
+      <p class="agent-tile-desc">Business line on file ({{ client.inbound_number }}), but no AI number is provisioned yet — buy one below to enable SMS and voice.</p>
+      {% else %}
       <p class="agent-tile-desc">No number yet — buy one to enable SMS and voice for this client.</p>
+      {% endif %}
       <form method="post" action="/clients/{{ client.id }}/provision-number" class="review-link-form">
         <input type="text" name="area_code" placeholder="Area code (optional)" maxlength="3">
         <button class="btn btn-primary btn-small" type="submit">Buy &amp; wire up number</button>
