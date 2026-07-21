@@ -90,3 +90,18 @@ The foundation supports it; we do not build it now.
 If it isn't on the current phase's list, the default answer is **"add it to this
 table, don't build it"** — unless a real pilot or paying customer forces it.
 Competitor parity is never a reason on its own.
+
+---
+
+## Employee registry discipline (founder, 2026-07-21)
+`agent/employees.py`'s `internal` status is not a resting state. Every
+quarter, review each `internal` entry and move it to `live` (repeatable,
+customer-ready) or back to `planned` (not valuable enough to keep
+half-finished). No employee stays "internal" indefinitely — that's how a
+roadmap quietly turns into ten half-finished agents.
+
+**What decides the next employee to build is customer conversations, not
+this list or intuition.** Track the recurring bottleneck pattern in
+`CUSTOMER.md`'s onboarding-call log (its "Biggest bottleneck identified"
+field). If 15 of 20 discovery calls surface unclosed estimates, Quote
+Chaser graduates next — not because it's next in `employees.py`.

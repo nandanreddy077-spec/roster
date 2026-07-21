@@ -66,15 +66,23 @@ built only when a pilot names their tool.
 
 ## Onboarding-call log *(fill one per pilot — this is the research the 15-min calls are for)*
 
-Template:
+Template — extended 2026-07-21 to track the discovery-led onboarding
+principle (`SALES.md` "Customer Onboarding Principle"): diagnosis before
+deployment only works if the diagnosis and its outcome are actually logged.
 ```
 ### <Business name> — <trade>, <#> trucks — <date>
-- Signed up self-serve? (Y/N, where they got stuck)
+- How they reached us (request-access / cold call / referral) — where they got stuck
+- Biggest bottleneck identified (discovery call)
+- AI employee recommended — and why (which data/answer pointed to it)
 - Call forwarding: how long, what confused them, did it work?
 - First live call: answered? booked? what broke?
+- Time to deployment (request → live)
+- Time to first measurable value (live → first booked/recovered job)
 - Manual steps YOU had to do (candidates to automate later)
 - Hesitations / objections (verbatim if possible)
 - Feature requests (verbatim)
+- Would recommend? (Y/N + why)
+- Next employee requested (if any) — this is the expansion signal
 - Outcome: went live? paid? churned? why?
 ```
 

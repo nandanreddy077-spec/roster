@@ -9,6 +9,13 @@ Roster commits to are what matters.
 
 Inclusion in this registry does NOT imply implementation, availability, or
 customer visibility. Nothing in the running app reads this module yet.
+
+Governance rule (founder, 2026-07-21): "internal" is not a resting state.
+Every quarter, review every `internal` entry and move it to `live`
+(repeatable, customer-ready) or back to `planned` (not valuable enough to
+keep half-finished). An entry still `internal` after a review with no
+graduation decision is a signal to force the call, not to leave it. See
+`ROADMAP.md` "Employee registry discipline."
 """
 from dataclasses import dataclass
 from typing import Literal
