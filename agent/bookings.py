@@ -69,7 +69,7 @@ def book_job(
         customer_phone=thread,
         customer_name=args.get("customer_name"),
         service_type=service_type,
-        urgency=args["urgency"],
+        urgency=args.get("urgency") or "routine",
         address=args.get("address"),
         callback_number=args.get("callback_number") or caller_number,
         notes=args.get("notes"),

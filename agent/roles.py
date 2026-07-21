@@ -48,3 +48,19 @@ def coming_later_after(next_role: Optional[str]) -> Optional[str]:
     if idx + 1 < len(ROSTER_HIRE_ORDER):
         return ROSTER_HIRE_ORDER[idx + 1]
     return None
+
+
+# Maps a requested_roster display name (as appended by portal.py's hire
+# routes) to the Employee.role_key it's stored under. The single source of
+# truth for both the live hire path and db.py's backfill, so they can never
+# derive a different key for the same role name.
+ROLE_KEYS = {
+    "frontdesk": "frontdesk", "receptionist": "frontdesk",
+    "quote chaser": "quote_chaser", "retention manager": "retention",
+    "reviews": "reviews",
+}
+
+
+def role_key_for(role: str) -> str:
+    name = role.strip().lower()
+    return ROLE_KEYS.get(name, name.replace(" ", "_"))

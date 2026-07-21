@@ -24,6 +24,7 @@ didn't spell this out. Confirm against a real webhook delivery before relying
 on this in production. The number-registration call that hands you this
 secret is implemented in provisioning.py's `register_number_with_xai`.
 """
+import asyncio
 import base64
 import hashlib
 import hmac
@@ -84,7 +85,10 @@ def verify_webhook_signature(
     if not webhook_id or not webhook_timestamp or not signature_header:
         return False
     secret = signing_secret[len("whsec_"):] if signing_secret.startswith("whsec_") else signing_secret
-    secret_bytes = base64.b64decode(secret)
+    try:
+        secret_bytes = base64.b64decode(secret, validate=True)
+    except (ValueError, TypeError):
+        return False
     signed_content = f"{webhook_id}.{webhook_timestamp}.".encode() + raw_body
     expected = base64.b64encode(hmac.new(secret_bytes, signed_content, hashlib.sha256).digest()).decode()
 
@@ -128,17 +132,17 @@ def _thread_id(call_id: str) -> str:
     return f"{VOICE_THREAD_PREFIX}{call_id}"
 
 
-def _persist_job(session: Session, client: Business, thread: str, caller_number: str, args: Dict[str, Any]) -> Job:
+async def _persist_job(session: Session, client: Business, thread: str, caller_number: str, args: Dict[str, Any]) -> Job:
     # Idempotent: the tool description invites re-calls with new details, and
     # webhook/LLM retries can replay this — book_job merges into the existing
     # open job for this call's thread instead of inserting a duplicate.
     job, created = book_job(session, client, thread, caller_number, args)
     # Same owner-text as the SMS path, for a NEW voice-booked job only — a
-    # detail-merge never re-texts the owner. Best-effort: the send is
-    # synchronous, but it's a short call on a per-call background task and
-    # notify_owner_of_booking swallows any failure.
+    # detail-merge never re-texts the owner. Offloaded to a thread: this SMS
+    # send is a blocking HTTP call, and blocking the event loop here would
+    # stall every other in-progress call's audio on the same process.
     if created:
-        notify_owner_of_booking(client, job)
+        await asyncio.to_thread(notify_owner_of_booking, client, job)
     return job
 
 
@@ -152,7 +156,7 @@ async def _handle_function_call(
     trace.stage("tool_invoked", tool=name)
 
     if name == LOG_JOB_TOOL["name"]:
-        job = _persist_job(session, client, thread, caller_number, args)
+        job = await _persist_job(session, client, thread, caller_number, args)
         trace.stage("job_persisted", job_id=job.id)
         # _persist_job already fired the owner text (best-effort) — mark the
         # stage here so the latency trace shows when the notification went out.
@@ -176,7 +180,7 @@ async def _handle_function_call(
         session.add(job)
         session.commit()
         trace.stage("job_persisted", job_id=job.id, escalation=True)
-        alerted = notify_owner_of_escalation(client, caller_number, reason)
+        alerted = await asyncio.to_thread(notify_owner_of_escalation, client, caller_number, reason)
         trace.stage("owner_alerted" if alerted else "owner_alert_failed")
         result = {
             "status": "owner_alerted" if alerted else "alert_failed",
@@ -240,10 +244,13 @@ async def run_call(call_id: str, client: Business, caller_number: str, session_f
         # silently: record it, and text the owner the caller's number so the
         # human relationship survives the software failure.
         trace.stage("call_failed", error=repr(e))
-        notify_owner_of_escalation(
+        await asyncio.to_thread(
+            notify_owner_of_escalation,
             client, caller_number,
             f"the AI call with this customer dropped mid-call — call them back",
         )
+    finally:
+        trace.close()
 
 
 async def _run_call_session(connect, call_id, client, caller_number, session_factory, thread, trace) -> None:

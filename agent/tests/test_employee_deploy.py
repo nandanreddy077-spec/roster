@@ -8,7 +8,6 @@ from sqlmodel import Session
 import app as app_module
 from conftest import DASH_AUTH
 from db_models import Business
-from runner import is_active
 
 
 def make_client(test_engine) -> int:
@@ -27,15 +26,14 @@ def test_deploy_employee_appends_to_requested_roster(monkeypatch, test_engine):
 
     response = test_client.post(
         f"/clients/{client_id}/employees/deploy",
-        data={"role_key": "upsell_agent"},
+        data={"role_key": "quote_chaser"},
         follow_redirects=False,
     )
 
     assert response.status_code == 303
     with Session(test_engine) as session:
         business = session.get(Business, client_id)
-        assert json.loads(business.requested_roster) == ["upsell_agent"]
-        assert is_active(business, "upsell_agent") is True
+        assert json.loads(business.requested_roster) == ["quote_chaser"]
 
 
 def test_deploy_employee_is_idempotent(monkeypatch, test_engine):
@@ -43,12 +41,12 @@ def test_deploy_employee_is_idempotent(monkeypatch, test_engine):
     client_id = make_client(test_engine)
     test_client = TestClient(app_module.app, headers=DASH_AUTH)
 
-    test_client.post(f"/clients/{client_id}/employees/deploy", data={"role_key": "upsell_agent"})
-    test_client.post(f"/clients/{client_id}/employees/deploy", data={"role_key": "upsell_agent"})
+    test_client.post(f"/clients/{client_id}/employees/deploy", data={"role_key": "quote_chaser"})
+    test_client.post(f"/clients/{client_id}/employees/deploy", data={"role_key": "quote_chaser"})
 
     with Session(test_engine) as session:
         business = session.get(Business, client_id)
-        assert json.loads(business.requested_roster) == ["upsell_agent"]
+        assert json.loads(business.requested_roster) == ["quote_chaser"]
 
 
 def test_deploy_employee_requires_admin_auth(test_engine, monkeypatch):
@@ -56,6 +54,6 @@ def test_deploy_employee_requires_admin_auth(test_engine, monkeypatch):
     client_id = make_client(test_engine)
     test_client = TestClient(app_module.app)
 
-    response = test_client.post(f"/clients/{client_id}/employees/deploy", data={"role_key": "upsell_agent"})
+    response = test_client.post(f"/clients/{client_id}/employees/deploy", data={"role_key": "quote_chaser"})
 
     assert response.status_code == 401

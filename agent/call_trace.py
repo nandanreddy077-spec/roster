@@ -46,6 +46,7 @@ class CallTrace:
         self.capture_dir = Path(capture_dir) if capture_dir else None
         self._t0 = time.monotonic()
         self.records: list[Dict[str, Any]] = []
+        self._fh = None  # opened once and kept open for the call, not per write
 
     def _elapsed_ms(self) -> float:
         return round((time.monotonic() - self._t0) * 1000, 1)
@@ -78,18 +79,33 @@ class CallTrace:
         path via call_id)."""
         self.capture_dir = Path(capture_dir)
         self.capture_dir.mkdir(parents=True, exist_ok=True)
-        path = self._capture_file()
-        with open(path, "a") as f:
-            for rec in self.records:
-                f.write(json.dumps(rec, default=str) + "\n")
+        fh = self._ensure_open()
+        for rec in self.records:
+            fh.write(json.dumps(rec, default=str) + "\n")
+        fh.flush()
+
+    def _ensure_open(self):
+        # ponytail: still a blocking write() per record (not offloaded to a
+        # thread), but reusing one handle for the whole call cuts the open()
+        # syscall a live call was paying on every single WS event. Move to a
+        # background writer/thread if profiling shows write() itself matters.
+        if self._fh is None:
+            self.capture_dir.mkdir(parents=True, exist_ok=True)
+            self._fh = open(self._capture_file(), "a")
+        return self._fh
+
+    def close(self) -> None:
+        if self._fh is not None:
+            self._fh.close()
+            self._fh = None
 
     def _write(self, rec: Dict[str, Any]) -> None:
         rec = {"call_id": self.call_id, "t_ms": self._elapsed_ms(), **rec}
         self.records.append(rec)
         if self.capture_dir is not None:
-            self.capture_dir.mkdir(parents=True, exist_ok=True)
-            with open(self._capture_file(), "a") as f:
-                f.write(json.dumps(rec, default=str) + "\n")
+            fh = self._ensure_open()
+            fh.write(json.dumps(rec, default=str) + "\n")
+            fh.flush()
         label = rec.get("stage") or rec.get("type") or rec["kind"]
         print(f"[call {self.call_id}] +{rec['t_ms']}ms {rec['kind']}: {label}", file=sys.stderr)
 

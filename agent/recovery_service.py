@@ -10,10 +10,12 @@ from typing import Any, Dict, List, Optional
 from sqlalchemy import update as sa_update
 from sqlmodel import Session, select
 
+from bookings import book_job
 from calendar_provider import get_calendar_provider
 from channels import get_channel
-from db_models import Business, Job, RecoveryCampaign, RecoveryJob, RecoveryMessageLog
+from db_models import Business, RecoveryCampaign, RecoveryJob, RecoveryMessageLog
 from engine import AgentEngine
+from repositories import get_or_create_customer
 from recovery_engine import (
     CONFIRM_SLOT_TOOL,
     MEMBERSHIP_OFFSETS,
@@ -231,18 +233,20 @@ def handle_recovery_reply(session: Session, client: Business, job: RecoveryJob, 
             slots = job.offered_slots
             if isinstance(idx, int) and 0 <= idx < len(slots):
                 chosen = slots[idx]
-                new_job = Job(
-                    business_id=client.id,
-                    customer_phone=job.customer_phone,
-                    customer_name=job.customer_name,
-                    service_type=job.service_type,
-                    urgency="routine",
-                    callback_number=job.customer_phone,
-                    notes=f"Booked via Revenue Recovery for {chosen}",
+                cust = get_or_create_customer(session, client.id, job.customer_phone, job.customer_name)
+                new_job, _ = book_job(
+                    session,
+                    client,
+                    job.customer_phone,
+                    job.customer_phone,
+                    {
+                        "service_type": job.service_type,
+                        "urgency": "routine",
+                        "customer_name": job.customer_name,
+                        "notes": f"Booked via Revenue Recovery for {chosen}",
+                    },
+                    customer_id=cust.id,
                 )
-                session.add(new_job)
-                session.commit()
-                session.refresh(new_job)
                 job.booked_job_id = new_job.id
                 job.current_status = "booked"
                 reply = f"Perfect, you're booked for {chosen}! We'll text you a reminder. Any questions, just reply here."

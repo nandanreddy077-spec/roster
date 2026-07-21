@@ -11,6 +11,7 @@ from typing import Optional
 from fastapi import APIRouter, Form, Request
 from fastapi.responses import RedirectResponse
 from fastapi.templating import Jinja2Templates
+from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, select
 
 from authlib.integrations.starlette_client import OAuthError
@@ -18,10 +19,11 @@ from authlib.integrations.starlette_client import OAuthError
 from activation import activate_frontdesk
 from auth import hash_password, verify_password
 from db import engine
-from db_models import Business, Job, Message
+from db_models import Business, Employee, Job, Message
 from google_auth import callback_url, get_oauth, google_enabled
 from locks import conversation_lock
-from roles import ROSTER_DESCRIPTIONS, coming_later_after, next_hire, receptionist_display_name
+from notifications import _TEST_THREADS
+from roles import ROSTER_DESCRIPTIONS, coming_later_after, next_hire, receptionist_display_name, role_key_for
 from service import handle_customer_message
 
 BASE_DIR = Path(__file__).parent
@@ -42,6 +44,18 @@ router = APIRouter()
 # separate from real customer threads and from the founder-admin "dashboard"
 # thread so a test never mixes into real activity.
 PORTAL_TEST_THREAD = "portal-test"
+
+
+def _hire_employee(session: Session, business_id: int, role: str) -> None:
+    """Creates the Employee row for a just-requested role, if it doesn't
+    already exist — the hire must be reflected immediately, not just queued
+    in requested_roster for the next db.py backfill to pick up."""
+    key = role_key_for(role)
+    exists = session.exec(
+        select(Employee).where(Employee.business_id == business_id, Employee.role_key == key)
+    ).first()
+    if not exists:
+        session.add(Employee(business_id=business_id, role_key=key, display_name=role))
 
 
 def _display_text(content) -> str:
@@ -79,7 +93,16 @@ def signup_submit(request: Request, email: str = Form(...), password: str = Form
             )
         client = Business(email=email, password_hash=hash_password(password))
         session.add(client)
-        session.commit()
+        try:
+            session.commit()
+        except IntegrityError:
+            session.rollback()
+            return templates.TemplateResponse(
+                request,
+                "signup.html",
+                {"error": "That email's already registered — try logging in instead.", "email": email, "trade": trade},
+                status_code=400,
+            )
         session.refresh(client)
         request.session["client_id"] = client.id
         if trade.strip():
@@ -126,8 +149,15 @@ def _login_or_create_by_email(request: Request, session: Session, email: str) ->
     if client is None:
         client = Business(email=email)  # no password_hash — Google is their sign-in
         session.add(client)
-        session.commit()
-        session.refresh(client)
+        try:
+            session.commit()
+        except IntegrityError:
+            # Lost a race with a concurrent signup/login for the same email —
+            # that row now exists, so use it instead of failing this request.
+            session.rollback()
+            client = session.exec(select(Business).where(Business.email == email)).first()
+        else:
+            session.refresh(client)
     request.session["client_id"] = client.id
     if client.frontdesk_live:
         return RedirectResponse("/dashboard", status_code=303)
@@ -289,7 +319,7 @@ def dashboard(request: Request):
                 "customer_name": j.customer_name,
                 "callback_number": j.callback_number,
                 "created_at": j.created_at,
-                "is_test": j.customer_phone == PORTAL_TEST_THREAD,
+                "is_test": j.customer_phone in _TEST_THREADS,
             }
             for j in jobs
         ]
@@ -396,6 +426,7 @@ def roster_hire(request: Request, role: str = Form(...)):
             requested.append(role)
             client.requested_roster = json.dumps(requested)
             session.add(client)
+            _hire_employee(session, client.id, role)
             session.commit()
     return RedirectResponse("/dashboard", status_code=303)
 
@@ -430,5 +461,6 @@ def roster_hire_retention_manager_submit(
         requested.append("Retention Manager")
         client.requested_roster = json.dumps(requested)
         session.add(client)
+        _hire_employee(session, client.id, "Retention Manager")
         session.commit()
     return RedirectResponse("/dashboard", status_code=303)

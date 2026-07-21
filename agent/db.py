@@ -183,9 +183,13 @@ def _backfill_customers(engine=None):
 
 
 def _backfill_employees(engine=None):
+    """Catches up any Employee row a live hire couldn't create at the time
+    (e.g. rows from before roster_hire() started creating them directly) —
+    not the primary path for a fresh hire, see portal.py's roster_hire()."""
     import json as _json
     from sqlmodel import Session, select
     from db_models import Business, Employee
+    from roles import role_key_for
     eng = engine if engine is not None else globals()["engine"]
     with Session(eng) as s:
         for b in s.exec(select(Business)).all():
@@ -195,14 +199,8 @@ def _backfill_employees(engine=None):
                 have.add("frontdesk")
             requested = getattr(b, "requested_roster", None)
             if requested:
-                ROLE_KEYS = {
-                    "frontdesk": "frontdesk", "receptionist": "frontdesk",
-                    "quote chaser": "quote_chaser", "retention manager": "retention",
-                    "reviews": "reviews",
-                }
                 for role in _json.loads(requested):
-                    name = role.strip().lower()
-                    key = ROLE_KEYS.get(name, name.replace(" ", "_"))
+                    key = role_key_for(role)
                     if key and key not in have:
                         s.add(Employee(business_id=b.id, role_key=key, display_name=role))
                         have.add(key)
