@@ -200,3 +200,27 @@ def test_register_number_with_xai_raises_when_no_secret_in_response(monkeypatch)
 
     with pytest.raises(ProvisioningError):
         register_number_with_xai("+14155550123")
+
+
+def test_register_number_with_xai_reads_camelcase_secret_nested_in_webhook(monkeypatch):
+    """A real production response (2026-07-21) had top-level keys
+    ['phoneNumber', 'webhook'] -- confirmed camelCase. The exact nested key
+    name is a guess by convention (signingSecret), not confirmed -- if this
+    is still wrong, the improved error message now also logs `webhook`'s own
+    keys so the real name is visible on the next failure."""
+    monkeypatch.setenv("XAI_API_KEY", "xai-test-key")
+
+    def fake_post(url, headers=None, json=None, timeout=None):
+        resp = MagicMock()
+        resp.raise_for_status.return_value = None
+        resp.json.return_value = {
+            "phoneNumber": "+14155550123",
+            "webhook": {"url": "https://roster.example/webhook/xai-incoming-call", "signingSecret": "whsec_camel123"},
+        }
+        return resp
+
+    monkeypatch.setattr(provisioning.httpx, "post", fake_post)
+
+    result = register_number_with_xai("+14155550123")
+
+    assert result["signing_secret"] == "whsec_camel123"

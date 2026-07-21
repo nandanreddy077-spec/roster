@@ -110,17 +110,23 @@ def attach_number_to_xai_trunk(phone_number_sid: str, phone_number: str) -> None
 
 def _extract_signing_secret(payload: dict) -> Optional[str]:
     """xAI's docs say the response "includes a signing secret" but don't name
-    the field, so check the plausible locations. Fail loud (caller raises) if
-    none are present, rather than silently storing None — a None secret would
-    make every real webhook fail signature verification, invisibly."""
+    the field, so check the plausible locations — both snake_case and
+    camelCase, since xAI's confirmed response shape uses camelCase
+    (`phoneNumber`). Fail loud (caller raises) if none are present, rather
+    than silently storing None — a None secret would make every real webhook
+    fail signature verification, invisibly."""
     if not isinstance(payload, dict):
         return None
-    for key in ("signing_secret", "webhook_signing_secret", "signing_key", "secret"):
+    keys = (
+        "signing_secret", "webhook_signing_secret", "signing_key", "secret",
+        "signingSecret", "webhookSigningSecret", "signingKey",
+    )
+    for key in keys:
         if payload.get(key):
             return payload[key]
     webhook = payload.get("webhook")
     if isinstance(webhook, dict):
-        for key in ("signing_secret", "secret", "signing_key"):
+        for key in keys:
             if webhook.get(key):
                 return webhook[key]
     return None
@@ -171,9 +177,11 @@ def register_number_with_xai(phone_number: str) -> dict:
 
     secret = _extract_signing_secret(payload)
     if not secret:
+        webhook = payload.get("webhook") if isinstance(payload, dict) else None
         raise ProvisioningError(
             "xAI registration returned no signing secret — cannot verify call webhooks. "
-            f"Response keys: {sorted(payload) if isinstance(payload, dict) else type(payload)}"
+            f"Response keys: {sorted(payload) if isinstance(payload, dict) else type(payload)}; "
+            f"webhook keys: {sorted(webhook) if isinstance(webhook, dict) else webhook}"
         )
     return {"signing_secret": secret, "xai_phone_number": phone_number}
 
