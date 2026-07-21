@@ -146,6 +146,8 @@ RoleDefinition (code registry, NOT a table): the template an Employee instantiat
 - **Event** *(new, append-only)* — the domain event log. `business_id`, `type`, `payload_json`, `customer_id?`, `employee_id?`, `dedup_key?` (provider message SID for idempotency), `occurred_at`. This is both the EventBus's persistence and the analytics/audit/eval substrate.
 - **Property / Equipment** *(reserved, unimplemented)* — the home and the units in it (furnace, AC, water heater). Reserved because trade work is ultimately *about a physical asset at an address*, and modeling it later is a natural evolution (service history per unit). **Not built in v1**; noted here so no future decision accidentally forecloses it. No table, no fields — only this reservation.
 
+**Long-term roster:** the full employee-by-employee roadmap (beyond the `RoleDefinition`s above) is enumerated as a code registry in `agent/employees.py`, not here — see `docs/superpowers/specs/2026-07-21-ai-staffing-repositioning-design.md` §4. Inclusion there does not imply implementation.
+
 ---
 
 ## 7. Database Schema
