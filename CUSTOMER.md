@@ -16,23 +16,26 @@ this file. Repeated pain here > any internal idea.
   SMS in review (PR #2).
 - **Revenue:** $0
 
-### Deploy / ops state (operational handoff — verify before relying on it)
+### Deploy / ops state (updated 2026-07-21 from founder's Railway dashboard —
+### previous entries below were stale, dated from before this was fixed)
 - **Hosting:** Railway, service `roster`, root dir `agent/`, domain rosterhires.com.
-- **Env vars SET in Railway:** `ANTHROPIC_API_KEY`, `TWILIO_ACCOUNT_SID`,
-  `TWILIO_AUTH_TOKEN`, `XAI_API_KEY` (confirmed real), `GOOGLE_CLIENT_ID`,
-  `GOOGLE_CLIENT_SECRET`, `OAUTH_REDIRECT_BASE_URL`, `SESSION_SECRET_KEY`.
-- **⚠️ MISSING — data-loss risk:** `ROSTER_DATA_DIR=/data` is **not set**, and a
-  persistent volume must be attached at `/data` (Railway → service → Settings →
-  Volumes). Without both, **every redeploy wipes the SQLite DB** (all signups/
-  jobs/conversations). `main` now auto-deploys the Phase-1 migration, so fix this
-  *before* real customer data exists.
-- **MISSING — minor:** `ADMIN_PASSWORD` (the founder `/clients` view 503s until
-  set; public site + signup work regardless).
-- **`ROSTER_ENV` not set** → the session fail-closed guard is inert (harmless;
-  the app boots on `SESSION_SECRET_KEY`). Set `ROSTER_ENV=production` only after
-  confirming `SESSION_SECRET_KEY` is set (it is).
-- **Git:** PR #1 (foundation) merged to `main`. PR #2 (Owner SMS + operating
-  docs) open, not merged.
+- **Persistent volume attached** (`roster-volume`) — the prior data-loss risk
+  (redeploys wiping the SQLite DB) is resolved. Not independently verified that
+  the volume's mount path matches `ROSTER_DATA_DIR`'s value (both present,
+  masked in the dashboard) — worth a glance if data ever appears to vanish.
+- **11 env vars set in Railway:** `ADMIN_PASSWORD`, `ANTHROPIC_API_KEY`,
+  `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `OAUTH_REDIRECT_BASE_URL`,
+  `ROSTER_DATA_DIR`, `ROSTER_ENV`, `SESSION_SECRET_KEY`, `TWILIO_ACCOUNT_SID`,
+  `TWILIO_AUTH_TOKEN`, `XAI_API_KEY`. Founder admin (`/clients`) is reachable.
+- **Twilio KYC cleared** (2026-07-21) — number provisioning
+  (`buy_twilio_number`/`attach_number_to_xai_trunk`/`register_number_with_xai`)
+  should now succeed instead of failing at the KYC wall. **Not yet proven**: no
+  real inbound call has ever been captured (`data/call_captures/` is empty as
+  of this writing) — Open Risk #1 below is still open until one real call is
+  placed and logged.
+- **Git:** no PR workflow in use this sprint — commits land directly on `main`,
+  which Railway auto-deploys. Latest pushed: `674872c` (Roll back speculative
+  employees; keep the Runner seam only).
 
 ### THE next action (not code)
 Run the live Frontdesk test — sign up as a test business, confirm a real number
