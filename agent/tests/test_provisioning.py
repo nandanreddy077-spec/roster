@@ -202,6 +202,24 @@ def test_register_number_with_xai_raises_when_no_secret_in_response(monkeypatch)
         register_number_with_xai("+14155550123")
 
 
+def test_register_number_with_xai_gives_actionable_error_on_409(monkeypatch):
+    """Live 2026-07-21: registering an already-registered number 409s. xAI's
+    docs say the signing secret is returned only once with no GET/rotate
+    endpoint, so this is not retryable -- the error must say so instead of
+    surfacing the generic httpx 409 text, so nobody retries it forever."""
+    monkeypatch.setenv("XAI_API_KEY", "xai-test-key")
+
+    def fake_post(url, headers=None, json=None, timeout=None):
+        resp = MagicMock()
+        resp.status_code = 409
+        return resp
+
+    monkeypatch.setattr(provisioning.httpx, "post", fake_post)
+
+    with pytest.raises(ProvisioningError, match="unrecoverable"):
+        register_number_with_xai("+16187473488")
+
+
 def test_register_number_with_xai_reads_camelcase_secret_nested_in_webhook(monkeypatch):
     """A real production response (2026-07-21) had top-level keys
     ['phoneNumber', 'webhook'] -- confirmed camelCase. The exact nested key

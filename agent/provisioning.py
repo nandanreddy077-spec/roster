@@ -170,6 +170,17 @@ def register_number_with_xai(phone_number: str) -> dict:
             json=body,
             timeout=30.0,
         )
+        if resp.status_code == 409:
+            # xAI's docs say the signing secret is "returned only once" and
+            # there's no documented GET/rotate endpoint -- so a 409 (number
+            # already registered, almost always from an earlier attempt whose
+            # response we failed to parse) is not retryable for this number.
+            # Fail with an actionable message instead of the generic 409 text.
+            raise ProvisioningError(
+                f"xAI already has {phone_number} registered from an earlier attempt, and its "
+                "signing secret can only be retrieved once — it's unrecoverable now. Retrying "
+                "won't help; provision a different phone number instead."
+            )
         resp.raise_for_status()
         payload = resp.json()
     except httpx.HTTPError as e:
