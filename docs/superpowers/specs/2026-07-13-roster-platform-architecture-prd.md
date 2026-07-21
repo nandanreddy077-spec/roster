@@ -317,6 +317,35 @@ The **Runner** is the only executor: on an event, it finds active Employees whos
 
 **Kill switch (review-hardened):** `Employee.status` is authoritative in the Runner. `paused`/`fired` employees receive no dispatch. Firing does **not** delete the business's memory — a re-hire inherits the full history. This is the "fire and replace without re-explaining your business" mechanic, and it falls out of the model for free.
 
+### 11a. Deployment model: Founder Admin configures, Customer Portal reflects (founder, 2026-07-21)
+
+Forward-looking constraint on top of the model above — **not implemented, no
+code/schema/dashboard change accompanies this entry.** See
+`docs/superpowers/specs/2026-07-21-ai-staffing-repositioning-design.md` for
+the conversation that produced it.
+
+- **The Founder Admin is the only place an Employee gets selected,
+  configured, deployed, or managed.** Every `Employee` creation and
+  `status` change is a founder-initiated action on the admin surface (§5),
+  driven by what a discovery call and real business data justify — never a
+  customer choosing from a menu.
+- **The Customer Portal is a read-only reflection of what's already
+  deployed, not a configuration interface.** It shows the business's actual
+  roster and each employee's state — it never presents a catalog of
+  undeployed employees for the customer to browse or activate. Roster
+  recommends and deploys; the customer doesn't self-serve a hire.
+- **Today this is a distinction without a difference.** Frontdesk is the
+  only `live` employee (`agent/employees.py`), so the current generic
+  onboarding wizard and the fixed three-slot "Your office" dashboard card
+  are acceptable as-is. Do not refactor them now.
+- **The trigger to act on this:** the day a second employee reaches `live`
+  status, the dashboard must stop being a fixed template (Frontdesk +
+  Quote Chaser prompt + Retention Manager prompt shown to every business
+  regardless of what's actually deployed) and become a view generated from
+  that business's real `Employee` rows, with no undeployed-employee catalog
+  visible. Until that trigger, this section constrains future design — it
+  is not a task.
+
 ---
 
 ## 12. Memory System

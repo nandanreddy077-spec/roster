@@ -105,3 +105,11 @@ this list or intuition.** Track the recurring bottleneck pattern in
 `CUSTOMER.md`'s onboarding-call log (its "Biggest bottleneck identified"
 field). If 15 of 20 discovery calls surface unclosed estimates, Quote
 Chaser graduates next — not because it's next in `employees.py`.
+
+**When an entry actually graduates to `live`:** the dashboard's fixed
+"Your office" template stops being acceptable — see the platform PRD §11a
+(`docs/superpowers/specs/2026-07-13-roster-platform-architecture-prd.md`)
+for the deployment-model principle that governs the rebuild (Founder Admin
+configures/deploys, Customer Portal only reflects what's actually deployed
+— never a catalog). That's a trigger for future work, not something to
+build now.
