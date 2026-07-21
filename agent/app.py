@@ -191,6 +191,11 @@ def landing_styles():
     return FileResponse(LANDING_DIR / "styles.css", media_type="text/css")
 
 
+@app.get("/roster")
+def roster_page():
+    return FileResponse(LANDING_DIR / "roster.html", media_type="text/html")
+
+
 @app.get("/clients")
 def list_clients(request: Request):
     with Session(engine) as session:
