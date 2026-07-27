@@ -106,9 +106,10 @@ h3 { font-size: 20px; line-height: 1.28; letter-spacing: -0.012em; }
 .shell.mid { max-width: var(--w-mid); }
 .narrow, .mid { margin-left: auto; margin-right: auto; }
 
-section { padding: var(--s7) 0; }
-.section-head { text-align: center; margin-bottom: var(--s6); }
-.section-head .eyebrow, .section-head h2 { text-align: center; }
+/* Baseline is deliberately tighter than the hero/statement/employees/cta
+   moments below — uniform padding everywhere reads as templated, not edited. */
+section { padding: var(--s6) 0; }
+.section-head { margin-bottom: var(--s5); }
 
 /* ---- Reveal: one-time, never loops ------------------------------------- */
 .reveal {
@@ -231,7 +232,6 @@ section { padding: var(--s7) 0; }
 }
 
 /* Calculator */
-.calc-section { text-align: center; }
 .calc-section h2 { margin-bottom: var(--s2); }
 .calc-section .lede { margin-bottom: var(--s5); }
 .calc {
@@ -279,9 +279,12 @@ section { padding: var(--s7) 0; }
 .field-money input { padding-left: 30px; }
 
 /* ═══ 3. SOLUTION ═══════════════════════════════════════════════════════ */
-.solution { background: var(--bg-alt); border-top: 1px solid var(--border-soft); border-bottom: 1px solid var(--border-soft); text-align: center; }
-.solution h2 { margin-bottom: var(--s2); }
-.solution .lede { margin-bottom: var(--s6); }
+/* Quiet transition, not a second hero — content is one line + three short
+   steps, so it gets the tightest padding on the page instead of matching
+   everything else's rhythm. */
+.solution { background: var(--bg-alt); border-top: 1px solid var(--border-soft); border-bottom: 1px solid var(--border-soft); padding: var(--s5) 0; }
+.solution h2 { margin-bottom: 6px; }
+.solution .lede { margin-bottom: var(--s5); }
 .steps { list-style: none; display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--s4); text-align: left; }
 .step-num {
   display: flex; align-items: center; justify-content: center;
@@ -294,6 +297,9 @@ section { padding: var(--s7) 0; }
 .step p { color: var(--text-dim); font-size: 16px; }
 
 /* ═══ 4. EMPLOYEES ══════════════════════════════════════════════════════ */
+/* The core of the page — back to full-weight padding after the quiet
+   solution transition. */
+.employees { padding: var(--s7) 0; }
 .emp-grid {
   display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--s3);
   margin-bottom: var(--s7);
@@ -334,42 +340,8 @@ section { padding: var(--s7) 0; }
 .emp-more:hover { border-color: var(--accent); }
 .emp-more-cta { font-size: 15px; font-weight: 600; color: var(--accent-dark); padding-top: var(--s2); border-top: 1px solid var(--border); }
 
-/* Department strip */
-.dept-strip-wrap { text-align: center; }
-.dept-strip {
-  list-style: none; display: flex; flex-wrap: wrap; justify-content: center;
-  align-items: center; gap: 12px 28px;
-}
-.dept-strip li {
-  display: inline-flex; align-items: center; gap: 8px;
-  font-size: 19px; font-weight: 500; color: var(--soon);
-}
-.dept-strip li.on { color: var(--text); }
-.dot { width: 6px; height: 6px; border-radius: 50%; background: var(--proof); }
-
-/* ═══ 5. JOURNEY ════════════════════════════════════════════════════════ */
-.track { list-style: none; display: grid; grid-template-columns: repeat(7, 1fr); gap: var(--s2); }
-.track-step {
-  position: relative; display: flex; flex-direction: column; gap: 6px;
-  padding-top: var(--s3);
-  border-top: 2px solid var(--border);
-}
-.track-step::before {
-  content: ""; position: absolute; top: -6px; left: 0;
-  width: 10px; height: 10px; border-radius: 50%;
-  background: var(--bg); border: 2px solid var(--accent);
-}
-.track-last { border-top-color: var(--accent); }
-.track-last::before { background: var(--accent); }
-.track-owner {
-  font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .1em;
-  color: var(--accent-dark);
-}
-.track-act { font-size: 14.5px; color: var(--text); line-height: 1.4; }
-
 /* ═══ 6. DIFFERENCE ═════════════════════════════════════════════════════ */
-.diff { text-align: center; }
-.diff h2 { margin-bottom: var(--s6); }
+.diff h2 { max-width: 22ch; margin-bottom: var(--s5); }
 .diff-grid { display: grid; grid-template-columns: 1fr 1fr; gap: var(--s3); text-align: left; }
 .diff-col { border-radius: var(--r-lg); padding: var(--s4) var(--s3); background: var(--bg-alt); border: 1px solid var(--border); }
 .diff-ours { background: var(--card); border: 1px solid var(--accent); box-shadow: 0 18px 44px -22px rgba(194,105,61,.4); }
@@ -392,18 +364,15 @@ section { padding: var(--s7) 0; }
 .diff-ours .diff-foot { color: var(--ink); font-weight: 600; }
 
 /* ═══ 7. FAQ ════════════════════════════════════════════════════════════ */
-.faq .eyebrow, .faq h2 { text-align: center; }
-.faq h2 { margin-bottom: var(--s6); }
+.faq h2 { margin-bottom: var(--s5); }
 .qa { padding-left: var(--s3); border-left: 2px solid var(--accent-dim); margin-bottom: var(--s4); }
 .qa:last-child { margin-bottom: 0; }
 .qa h3 { margin-bottom: 8px; }
 .qa p { color: var(--text-dim); font-size: 16.5px; }
 
 /* ═══ 8. PRICING ════════════════════════════════════════════════════════ */
-.pricing { text-align: center; }
-.pricing h2 { margin-bottom: var(--s2); }
-.pricing .lede { margin-bottom: var(--s6); }
-.price-grid { display: grid; grid-template-columns: 1fr 1fr; gap: var(--s3); text-align: left; }
+.pricing h2 { max-width: 20ch; margin-bottom: var(--s5); }
+.price-grid { display: grid; grid-template-columns: 1fr 1fr; gap: var(--s3); }
 .price-card { border-radius: var(--r-lg); padding: var(--s4) var(--s3); background: var(--bg-alt); border: 1px solid var(--border); }
 .price-ours { background: var(--card); border: 1px solid var(--accent); box-shadow: 0 18px 44px -22px rgba(194,105,61,.4); }
 .price-label {
@@ -420,10 +389,11 @@ section { padding: var(--s7) 0; }
 .price-ours li::before { top: 8px; height: 8px; border-radius: 50%; background: var(--accent); }
 
 /* ═══ TRADES ════════════════════════════════════════════════════════════ */
-.trades { text-align: center; padding-top: 0; }
-.trades h2 { margin-bottom: var(--s5); }
+/* A qualifying footnote, not a destination — smallest padding on the page. */
+.trades { padding: var(--s5) 0; }
+.trades h2 { margin-bottom: var(--s4); }
 .trade-strip {
-  list-style: none; display: flex; flex-wrap: wrap; justify-content: center;
+  list-style: none; display: flex; flex-wrap: wrap;
   align-items: center; gap: var(--s2) var(--s4);
 }
 .trade-strip li {
@@ -435,7 +405,8 @@ section { padding: var(--s7) 0; }
 .trade-strip li.on .ti { color: var(--accent); }
 
 /* ═══ 9. CTA ════════════════════════════════════════════════════════════ */
-.cta { text-align: center; background: var(--bg-alt); border-top: 1px solid var(--border-soft); }
+/* The other legitimate centered moment — a closing full stop, not a form to scan left-to-right. */
+.cta { text-align: center; background: var(--bg-alt); border-top: 1px solid var(--border-soft); padding: var(--s7) 0; }
 .cta h2 { margin-bottom: var(--s2); }
 .cta .lede { margin-bottom: var(--s5); }
 .request-form { text-align: left; display: flex; flex-direction: column; gap: var(--s2); }
@@ -454,7 +425,6 @@ section { padding: var(--s7) 0; }
   .feed-wrap { grid-column: 1 / span 12; max-width: 520px; }
   .hero-grid { gap: var(--s5) var(--s3); }
   .emp-grid { grid-template-columns: repeat(2, 1fr); }
-  .track { grid-template-columns: repeat(4, 1fr); gap: var(--s3) var(--s2); }
 }
 
 @media (max-width: 760px) {
@@ -475,18 +445,9 @@ section { padding: var(--s7) 0; }
 
   .steps, .emp-grid, .diff-grid, .price-grid, .form-row { grid-template-columns: 1fr; }
   .steps { gap: var(--s4); }
-  .track { grid-template-columns: 1fr; gap: 0; }
-  .track-step {
-    border-top: none; border-left: 2px solid var(--border);
-    padding: 0 0 var(--s3) var(--s3); flex-direction: row; align-items: baseline; gap: var(--s2);
-  }
-  .track-step::before { top: 4px; left: -6px; }
-  .track-last { border-left-color: var(--accent); }
-  .track-owner { flex-shrink: 0; min-width: 96px; }
 
   .qa { padding-left: var(--s2); }
-  .dept-strip, .trade-strip { gap: 10px var(--s3); }
-  .dept-strip li { font-size: 17px; }
+  .trade-strip { gap: 10px var(--s3); }
   .trade-strip li { font-size: 16px; }
   .footer-inner { flex-direction: column; align-items: center; text-align: center; gap: 6px; }
 }
@@ -502,7 +463,7 @@ section { padding: var(--s7) 0; }
 /* ═══ Reduced motion ════════════════════════════════════════════════════ */
 @media (prefers-reduced-motion: reduce) {
   html { scroll-behavior: auto; }
-  .reveal, .feed-row, .flow-step, .flow-arrow {
+  .reveal, .feed-row, .flow-step {
     opacity: 1 !important; transform: none !important; transition: none !important;
   }
   .btn, .emp, .nav-cta { transition: none; }
