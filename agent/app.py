@@ -7,6 +7,17 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
+# ponytail: naive KEY=VALUE parser, no quotes/multiline support — switch to
+# python-dotenv if .env grows past that.
+_env_file = Path(__file__).parent / ".env"
+if _env_file.exists():
+    for _line in _env_file.read_text().splitlines():
+        _line = _line.strip()
+        if not _line or _line.startswith("#") or "=" not in _line:
+            continue
+        _key, _, _value = _line.partition("=")
+        os.environ.setdefault(_key.strip(), _value.strip())
+
 from fastapi import FastAPI, Form, HTTPException, Request
 from fastapi.responses import FileResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
@@ -194,6 +205,21 @@ def landing_styles():
 @app.get("/roster")
 def roster_page():
     return FileResponse(LANDING_DIR / "roster.html", media_type="text/html")
+
+
+# Unlinked preview of the homepage rewrite. Live "/" is untouched; shipping is
+# repointing root() at index-v2.html. Spec:
+# docs/superpowers/specs/2026-07-27-homepage-craft-pass-design.md
+
+
+@app.get("/preview")
+def landing_preview():
+    return FileResponse(LANDING_DIR / "index-v2.html", media_type="text/html")
+
+
+@app.get("/styles-v2.css")
+def landing_preview_styles():
+    return FileResponse(LANDING_DIR / "styles-v2.css", media_type="text/css")
 
 
 @app.get("/clients")
