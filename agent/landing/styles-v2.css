@@ -396,13 +396,13 @@ section { padding: var(--s6) 0; }
   list-style: none; display: flex; flex-wrap: wrap;
   align-items: center; gap: var(--s2) var(--s4);
 }
+/* All ten read the same weight — the product has no per-trade limits,
+   so there's no "live vs. coming soon" distinction left to signal. */
 .trade-strip li {
   display: inline-flex; align-items: center; gap: 9px;
-  font-size: 18px; font-weight: 500; color: var(--soon);
+  font-size: 18px; font-weight: 500; color: var(--text);
 }
-.trade-strip li.on { color: var(--text); }
-.ti { width: 21px; height: 21px; flex-shrink: 0; }
-.trade-strip li.on .ti { color: var(--accent); }
+.ti { width: 21px; height: 21px; flex-shrink: 0; color: var(--accent); }
 
 /* ═══ 9. CTA ════════════════════════════════════════════════════════════ */
 /* The other legitimate centered moment — a closing full stop, not a form to scan left-to-right. */
