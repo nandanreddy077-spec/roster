@@ -194,7 +194,7 @@ def twiml_empty() -> Response:
 
 @app.get("/")
 def root():
-    return FileResponse(LANDING_DIR / "index.html", media_type="text/html")
+    return FileResponse(LANDING_DIR / "index-v2.html", media_type="text/html")
 
 
 @app.get("/styles.css")
