@@ -126,9 +126,9 @@ of forcing everyone through it.
 
 ## Trades section
 Keep the existing 10-trade strip and "Live in HVAC/plumbing, rest incoming"
-copy unchanged. Add a small icon (line-art, not photographic) beside each
-trade name — visual upgrade requested in the brief, without stock photos of
-people.
+copy unchanged. Add a small icon beside each trade name — hand-rolled inline
+SVG line-art (single-color, matches `--text`/`--soon` per trade's live/soon
+state), not a photo. No icon-library dependency added for ten glyphs.
 
 ## Files touched
 - New: `agent/landing/index-v2.html`, `agent/landing/styles-v2.css`
