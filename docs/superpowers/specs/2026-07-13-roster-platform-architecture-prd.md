@@ -17,6 +17,38 @@
 > **The define/implement rule that governs this whole document:** for every subsystem we *define a stable interface (port)* in v1 and *implement the thinnest possible body behind it*. "Define the abstraction" ≠ "build the subsystem."
 >
 > **ARCHITECTURE FROZEN (2026-07-13).** From this point onward, every architectural change must be justified by a **real pilot or paying customer**. Future discussions focus on customer outcomes, onboarding, sales, reliability, and shipping — **not** inventing additional platform layers. If a change is proposed with no customer behind it, the default answer is no.
+>
+> **AMENDMENT — department-first product pivot (founder, 2026-07-28).** The
+> customer-facing product is now defined by
+> `docs/superpowers/specs/2026-07-28-departments-product-blueprint-design.md`
+> (canonical source of truth), migrated via
+> `docs/superpowers/plans/2026-07-28-departments-migration-execution-plan.md`.
+>
+> **The backend architecture in this document is unchanged and remains
+> accurate.** The audit behind the pivot
+> (`docs/superpowers/specs/2026-07-28-departments-architecture-migration-review.md`)
+> confirmed that `Business`/`Customer`/`Employee`/`Event`, the ports, the
+> EventBus seam, and the Runner shape are already business-scoped rather
+> than employee-scoped, and need no structural change to support
+> departments. The frozen-architecture rule above therefore still governs
+> everything below — this amendment is not a licence to add platform layers.
+>
+> **What the pivot overrides is the product layer only:**
+> - **§4 (User Journey)** — no self-serve signup or onboarding. Every
+>   customer starts at Contact Us and is provisioned by the Roster team.
+>   One onboarding flow, with no founder-only exception.
+> - **§5 (Information Architecture)** — the owner portal is department-first:
+>   Overview / Departments / executive-view page / Notifications / Settings.
+> - **§11a's trigger condition** — the dashboard rebuild it anticipated is
+>   now happening on this pivot, not on "the day a second employee reaches
+>   `live`." Its actual constraint (Founder Admin configures, Customer Portal
+>   reflects — never a browsable catalog) is **strengthened**, not replaced.
+> - **§14 / §15 (Frontend Pages / UI Components)** — superseded by the
+>   blueprint's IA.
+>
+> **"Department" is a code registry, not a table** — consistent with the
+> `RoleDefinition` pattern already established in §6 and §11. No schema
+> change is required to introduce it.
 
 ---
 

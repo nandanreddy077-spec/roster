@@ -1,7 +1,41 @@
 # Roster Roadmap
 
-**Mission:** make a home-service business owner believe they **hired an office
-employee**, not installed software. Every feature, screen, notification,
+> ## ⚠️ SUPERSEDED IN PART — department-first pivot (founder, 2026-07-28)
+>
+> **The canonical product source of truth is now**
+> [`docs/superpowers/specs/2026-07-28-departments-product-blueprint-design.md`](docs/superpowers/specs/2026-07-28-departments-product-blueprint-design.md).
+> It is executed from
+> [`docs/superpowers/plans/2026-07-28-departments-migration-execution-plan.md`](docs/superpowers/plans/2026-07-28-departments-migration-execution-plan.md),
+> grounded in the audit at
+> [`docs/superpowers/specs/2026-07-28-departments-architecture-migration-review.md`](docs/superpowers/specs/2026-07-28-departments-architecture-migration-review.md).
+>
+> **What changed:** customers hire **departments**, not individual employees.
+> Employees still exist, as an implementation detail inside a department.
+> There is **no self-serve onboarding** — every customer begins at Contact
+> Us and is provisioned by the Roster team through the internal ops
+> platform, then receives dashboard access. One onboarding flow, no
+> internal exception.
+>
+> **What that overrides in this file:**
+> - The **M1–M4 sequence** under Phase B — written entirely in
+>   employee-singular terms ("hire the next employee… one at a time"). The
+>   execution plan's phases replace it as the build order.
+> - The **build freeze after M1** — lifted for this migration by founder
+>   directive. Its underlying reason still stands as *risk*, not as a
+>   blocker: the live voice loop is still unverified (`CUSTOMER.md` Open
+>   Risk #1).
+> - **"Employee registry discipline"** — the registry survives as internal
+>   implementation detail. It is no longer the customer-facing unit of
+>   anything, so its `live`/`internal`/`planned` statuses now describe
+>   what Roster can *deploy*, not what a customer can *browse*.
+>
+> **What still holds, unchanged:** the three-part build filter (Trust /
+> Revenue / Employee experience), the "default answer is add it to the
+> Deferred table" guardrail, and the Deferred table itself — all now applied
+> at department level.
+
+**Mission:** make a home-service business owner believe they **hired an
+office**, not installed software. Every feature, screen, notification,
 onboarding step, and workflow reinforces that.
 
 **The filter — build only if it clearly improves one of:**
@@ -32,8 +66,17 @@ Goal: an owner watches it work and believes it. Nothing here adds new revenue
 mechanics — it makes the existing product *trustable* and *feel like employees*.
 - **M1 — Owner SMS** *(complete, PR #2)* — booked job → owner gets a text in seconds.
 
-> ## ⛔ BUILD FREEZE after M1 (founder directive, 2026-07-13)
-> **Do NOT start M2 or anything below it until BOTH gates clear:**
+> ## ⛔ BUILD FREEZE after M1 — **LIFTED 2026-07-28 for the departments migration**
+> **Read the banner at the top of this file first.** This freeze no longer
+> blocks work: the M2–M4 sequence it protects has itself been superseded by
+> the departments blueprint + execution plan, and the founder has approved
+> that migration explicitly. Gate 1 below (Frontdesk proven end-to-end) is
+> **still an open risk**, tracked in `CUSTOMER.md` Open Risk #1 — it is a
+> reason to keep the voice loop unclaimed in sales copy, not a reason to
+> block the migration. The original text is preserved below as the record of
+> why the freeze existed.
+>
+> ~~**Do NOT start M2 or anything below it until BOTH gates clear:**~~
 > 1. **Frontdesk is proven end-to-end** — a real call/text is *answered*,
 >    *books* a job, and *notifies* the owner. (Currently NOT met — no real
 >    call has been verified. See `CUSTOMER.md` Open Risk #1.)

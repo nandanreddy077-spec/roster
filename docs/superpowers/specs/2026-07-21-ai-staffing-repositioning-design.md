@@ -1,7 +1,18 @@
 # AI Staffing Repositioning — Immediate Changes
 
 **Date:** 2026-07-21
-**Status:** Approved by founder, pending spec review
+**Status:** ⚠️ **SUPERSEDED 2026-07-28** by the department-first pivot —
+`docs/superpowers/specs/2026-07-28-departments-product-blueprint-design.md`
+(canonical product source of truth). **Kept as the historical record, not as
+guidance.** Its §4 decision — *"the registry is employee-first, with
+`department` as a descriptive tag, not a structural entity"* — is exactly what
+the 2026-07-28 pivot reverses: departments are now the structural,
+customer-facing unit and employees are an implementation detail inside them.
+Its §2/§3 direction of travel (request-led onboarding as the standing default,
+hiring as a reviewed conversation rather than a self-serve purchase) was
+*correct* and is carried forward and hardened — self-serve is now retired
+outright, with no founder-only exception.
+**Original status:** Approved by founder, pending spec review
 **Supersedes (partially):** the "REVERT to self-serve" note in `DESIGN.md`'s 2026-07-16 decision log entry
 
 ## Context
