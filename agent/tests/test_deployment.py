@@ -185,3 +185,66 @@ def test_backfill_is_a_no_op_once_deployment_creates_rows(session):
 
     rows = session.exec(select(Employee).where(Employee.business_id == b.id)).all()
     assert len(rows) == 1
+
+
+# --- is_active parity (I6) ----------------------------------------------------
+
+
+def test_is_active_parity_frontdesk(session):
+    """I6: same answers before and after the migration. Frontdesk was read
+    from Business.frontdesk_live; it now comes from the Employee row that
+    activate_frontdesk creates alongside that flag."""
+    from activation import activate_frontdesk
+    from runner import is_active
+
+    b = _business(session, "parity1@test.io")
+    assert is_active(session, b, "frontdesk") is False
+
+    activate_frontdesk(session, b)
+    assert is_active(session, b, "frontdesk") is True
+
+
+def test_is_active_parity_deployed_role(session):
+    from runner import is_active
+
+    b = _business(session, "parity2@test.io")
+    assert is_active(session, b, "quote_chaser") is False
+
+    deploy_role(session, b.id, "quote_chaser")
+    assert is_active(session, b, "quote_chaser") is True
+
+
+def test_is_active_parity_retention_legacy_key(session):
+    """The stored key is "retention" (pinned by test_employee_model.py), but
+    callers ask for "retention_manager". Both must answer the same, or the
+    migration silently loses an employee (audit F8/I13)."""
+    from runner import is_active
+
+    b = _business(session, "parity3@test.io")
+    deploy_role(session, b.id, "retention")
+
+    assert is_active(session, b, "retention") is True
+    assert is_active(session, b, "retention_manager") is True
+
+
+def test_is_active_ignores_a_fired_employee(session):
+    from runner import is_active
+
+    b = _business(session, "parity4@test.io")
+    row = deploy_role(session, b.id, "quote_chaser")
+    row.status = "fired"
+    session.add(row)
+    session.commit()
+
+    assert is_active(session, b, "quote_chaser") is False
+
+
+def test_is_active_never_crosses_businesses(session):
+    """I12 at the engine layer."""
+    from runner import is_active
+
+    a = _business(session, "parity5a@test.io")
+    b = _business(session, "parity5b@test.io")
+    deploy_role(session, a.id, "quote_chaser")
+
+    assert is_active(session, b, "quote_chaser") is False

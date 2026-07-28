@@ -38,29 +38,39 @@ class RoleDefinition:
     capability: Capability
 
 
-def is_active(business: Business, role_key: str) -> bool:
-    """Is `role_key` deployed for this business? Reuses existing fields — no
-    schema change: Frontdesk is the `frontdesk_live` flag; everything else is
-    membership in `requested_roster`.
+def is_active(session, business: Business, role_key: str) -> bool:
+    """Is `role_key` deployed and working for this business?
 
-    ponytail: requested_roster has two writers with two formats — the
-    customer prompt (portal.py) writes display names ("Quote Chaser"), the
-    founder deploy route writes raw keys ("quote_chaser"). This bridges the
-    two known display-name roles and otherwise matches the raw key. Reconcile
-    to one format when the first job.completed employee actually ships and
-    needs is_active to be authoritative."""
-    if role_key == "frontdesk":
-        return business.frontdesk_live
-    requested = json.loads(business.requested_roster) if business.requested_roster else []
-    name_by_key = {"quote_chaser": "Quote Chaser", "retention_manager": "Retention Manager"}
-    return name_by_key.get(role_key, role_key) in requested
+    Reads the Employee row, which IS the deployment record. This replaces the
+    old requested_roster/frontdesk_live check, which conflated "the customer
+    asked for this" with "this is running" — requested_roster was both (see
+    docs/superpowers/specs/2026-07-29-phase-4-deployment-path-audit.md F6).
+
+    Legacy key spellings are normalized: real rows carry "retention" while
+    callers ask for "retention_manager".
+
+    Takes a session because deployment state is a row now, not a column. The
+    only caller, dispatch_job_completed, already has one.
+    """
+    from sqlmodel import select
+
+    from db_models import Employee
+    from departments import canonical_role_key
+
+    wanted = canonical_role_key(role_key)
+    for e in session.exec(
+        select(Employee).where(Employee.business_id == business.id)
+    ).all():
+        if canonical_role_key(e.role_key) == wanted and e.status != "fired":
+            return True
+    return False
 
 
 def dispatch_job_completed(session: Session, business: Business, job: Job) -> None:
     """Fire every deployed employee that reacts to a completed job. Empty
     until the first such employee is built and validated — a no-op today."""
     for defn in JOB_COMPLETED_ROLES:
-        if is_active(business, defn.role_key):
+        if is_active(session, business, defn.role_key):
             defn.capability(session, business, job)
 
 
