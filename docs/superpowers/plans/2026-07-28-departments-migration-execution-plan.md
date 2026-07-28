@@ -245,44 +245,65 @@ architecture review explicitly wants kept clean. A small dedicated table is
 the lower-risk choice; wiring the EventBus into the live path remains
 available as future work, independent of this migration.
 
+> **Corrected 2026-07-29** after a pre-implementation audit of every owner-alert
+> path. Five findings changed this phase's scope; full detail in the task plan,
+> `docs/superpowers/plans/2026-07-29-phase-2-owner-notification-log.md`.
+
 **Files affected:**
 - Modify: `agent/db_models.py` — add `OwnerNotification` table: `id,
-  business_id (FK), kind (str), message (str), created_at (datetime),
-  read_at (datetime, nullable)`.
-- Modify: `agent/notifications.py` — `notify_owner_of_booking` and the
-  `alert_owner` tool's execution path (in `service.py`'s handling of
-  `engine.py`'s passthrough tool call) each also insert one
-  `OwnerNotification` row alongside the existing SMS send. The SMS send
-  itself is unchanged.
-- Modify: `agent/tests/test_owner_notification.py` — extend the existing
-  file (it already covers the SMS-send behavior).
+  business_id (FK), kind (str), message (str), **delivered (bool)**,
+  created_at (datetime), read_at (datetime, nullable)`. The `delivered` flag
+  is new to this correction: a failed owner SMS is currently swallowed by a
+  bare `except` and is invisible everywhere, so "we tried and it failed" has
+  to be distinguishable from "it went out."
+- Modify: `agent/notifications.py` — add `record_owner_notification(session,
+  ...)`, `recent_notifications(session, business_id)`, `is_test_thread()`,
+  and extract `build_escalation_message()`. **The existing
+  `notify_owner_of_*` senders keep their exact signatures and return
+  values** — they must stay pure and database-free (see risks).
+- Modify: **four** call sites, not one — `service.py:118` (SMS booking),
+  `xai_voice_adapter.py:145` (voice booking), `:183` (the `alert_owner`
+  tool), and `:247` (**the mid-call crash handler**, which was missed in the
+  original scoping and is the alert most worth a durable record).
+- Create: `agent/tests/test_owner_notification_log.py`. The existing
+  `test_owner_notification.py` is **not** extended — its six tests run with
+  no database at all, and must keep doing so.
 
 **What changes:** Every existing owner-alert moment also writes a durable
-row. No new alert types are introduced.
+row carrying whether the SMS actually went out. No new alert types.
 
-**What stays unchanged:** SMS sending logic, `engine.py`'s `alert_owner`
-tool contract, all webhook behavior. This rides alongside working code; it
-does not modify it.
+**What stays unchanged:** SMS sending logic, every `notify_owner_of_*`
+signature and return value, `engine.py`'s `alert_owner` tool contract, all
+webhook behavior, and `db.py` (a new *table* needs no migration —
+`create_all` handles it; only new *columns* need `_migrate_add_columns`).
 
 **Dependencies:** None.
 
-**Risks:** Low. The one real failure mode: a notification-row write failure
-must never block or roll back the SMS send it accompanies, and vice versa —
-mirrors the existing "best-effort, never blocks the real action" pattern
-already used for review-request sends in `app.py`'s `complete_job`.
+**Risks:** Low overall, with one sharp edge and one structural constraint:
+- ⚠️ **`notify_owner_of_escalation`'s return value is load-bearing for a
+  live caller.** It becomes `"owner_alerted"` vs `"alert_failed"` in the
+  model's tool result, and `engine.py` instructs the voice agent to tell the
+  caller plainly when the alert failed. A logging failure that flipped that
+  bool would make the AI tell someone with a gas leak that the owner wasn't
+  reached when they were. Logging is strictly downstream and cannot affect
+  it; there is an explicit regression test.
+- **Three of the four call sites run in a worker thread**
+  (`asyncio.to_thread`). A `Session` is not thread-safe, so the log write
+  stays on the calling thread with the session already in scope — it is never
+  passed across the `to_thread` boundary.
+- A notification-row write failure must never raise into, or roll back, the
+  booking/escalation that already committed — the same best-effort posture
+  `app.py`'s `complete_job` already uses for review sends.
 
-**Required tests:**
-- A booked job creates exactly one `OwnerNotification` row with the correct
-  `business_id` and a human-readable message.
-- An `alert_owner` tool execution creates exactly one row.
-- A simulated notification-write failure does not raise past the caller and
-  does not prevent the SMS from sending (and vice versa).
-- Existing SMS-notification assertions in `test_owner_notification.py`
-  remain green unmodified.
+**Required tests:** one per alert site (SMS booking, voice booking,
+escalation tool, dropped call); a failed owner SMS still records an
+undelivered row; dashboard-test bookings record nothing; a detail-merge
+doesn't double-log; a broken log cannot change the escalation return value;
+`recent_notifications` is newest-first and never returns another business's
+rows; and all six pre-existing SMS tests stay green unmodified.
 
-**Completion criteria:** Full suite green. Manually triggering the existing
-dashboard test-chat with a bookable message produces one `OwnerNotification`
-row, verified directly against the database, not only via unit test.
+**Completion criteria:** Full suite green at 357 (from Phase 1's 340), zero
+pre-existing tests modified, `git diff main -- agent/db.py` empty.
 
 **Complexity:** Low.
 
