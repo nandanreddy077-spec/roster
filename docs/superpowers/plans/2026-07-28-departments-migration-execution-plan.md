@@ -358,6 +358,15 @@ request must not create two open rows.
 
 ---
 
+> **⚠️ Re-audited 2026-07-29** — see
+> `docs/superpowers/specs/2026-07-29-phase-4-deployment-path-audit.md` for the
+> full trace of every `Employee` writer, the 14 invariants Phase 4 must
+> preserve, and the empirical verification that `create_all()` will **not**
+> add an index to an existing table. Six pieces of migration work were added
+> (§5 of that audit), and it **recommends splitting this phase into 4a
+> (deployment correctness, no UI) and 4b (the ops console)** — pending founder
+> decision. The scope below is the un-split version.
+
 ## Phase 4 — Ops Console: Department Grouping + Pipeline Stage
 
 **Objective:** Build the internal tooling half of the blueprint's §10a —
