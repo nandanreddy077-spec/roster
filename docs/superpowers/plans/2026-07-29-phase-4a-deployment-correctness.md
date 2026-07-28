@@ -39,11 +39,11 @@ The audit's 14 invariants, and where each is satisfied or deferred.
 | **I3** Duplicates impossible under concurrency | 1 | `test_the_database_rejects_a_duplicate_employee` |
 | **I4** Every deployed key resolves to a department | 2 | `test_every_deployable_role_resolves_to_a_department` |
 | **I5** `planned` employees cannot deploy | 2 | `test_deploying_a_planned_employee_is_rejected` |
-| **I6** `is_active` parity | 5 | `test_is_active_parity_*` (4 scenarios) |
-| **I7** Delete cascade complete | 6 | `test_delete_client_removes_interests_and_notifications` |
+| **I6** `is_active` parity | 4 | `test_is_active_parity_*` (4 scenarios) |
+| **I7** Delete cascade complete | 5 | `test_delete_client_removes_interests_and_notifications` |
 | **I8** Backfill stays idempotent, no resurrection | 1, 3 | existing `test_backfill_employees_idempotent` + `test_backfill_is_a_no_op_once_deployment_creates_rows` |
-| **I9** Notification only after rows commit | 4 | `test_employee_rows_are_visible_before_the_notification_is_recorded` |
-| **I10** Re-running completes a partial deploy | 4 | `test_re_running_a_partial_deployment_completes_it` |
+| **I9** Notification only after rows commit | — | **DEFERRED** — see below |
+| **I10** Re-running completes a partial deploy | 2 | `test_re_running_a_partial_deployment_completes_it` |
 | **I11** Interest deploys nothing | — | Phase 3's two guards; must stay green |
 | **I12** Business isolation | 2 | `test_deploying_for_one_business_never_touches_another` |
 | **I13** Retention key stays `"retention"` | 1 | existing `test_retention_manager_maps_to_canonical_key` stays green |
@@ -52,11 +52,30 @@ The audit's 14 invariants, and where each is satisfied or deferred.
 **I5 note:** `reviews` is `internal`, not `live` — both count as deployable.
 Only `planned` is rejected.
 
-**Deferred, with reason:** none. I14 is satisfied by making `activate_frontdesk`
-create the row, but the deeper question of *which* is authoritative is settled
-narrowly here — `runner.is_active` moves to `Employee` rows (Task 5), leaving
+### I9 is explicitly deferred (founder, 2026-07-29)
+
+Phase 4a **does not send an owner notification when a department is
+deployed**, and therefore **does not create an `OwnerNotification` row for
+it.** The reason is that `delivered` has one meaning and must keep it:
+
+- `True` — an outbound notification was successfully delivered.
+- `False` — an outbound notification was attempted and failed.
+
+A deployment row with no send behind it fits neither, and writing one purely
+as an activity record would overload the column into "something happened."
+So Phase 4a touches `notifications.py` **not at all**.
+
+**When the deferral lifts:** if "your department is live" becomes a real
+product notification (a candidate for Phase 4b, where the ops console decides
+whether go-live warrants a text), it ships *with* a send, and I9's ordering
+test is written then — asserting the `Employee` rows are already queryable at
+the moment the notification is recorded. The ordering constraint itself is
+already documented in the audit (§3) so it is not lost.
+
+**I14 is satisfied narrowly, deliberately:** `activate_frontdesk` creates the
+row, and `runner.is_active` moves onto `Employee` rows (Task 4), leaving
 `frontdesk_live` as the **activation-lifecycle flag** the portal redirects on.
-Removing it entirely belongs to Phase 7's cleanup, not here.
+Removing it entirely belongs to Phase 7's cleanup.
 
 ---
 
@@ -73,7 +92,8 @@ the proof is meaningless without the index.
 
 **Interfaces:**
 - Produces: `db._dedupe_employees(engine=None) -> list[int]` (ids removed, for logging/tests); `db._migrate_add_indexes()`.
-- `db_models.Employee` gains `__table_args__ = (UniqueConstraint("business_id", "role_key", name="uq_employee_business_role"),)`.
+- `db_models.Employee` gains `__table_args__ = (Index("uq_employee_business_role", "business_id", "role_key", unique=True),)`.
+- Task 1 also proves the WHOLE migration is idempotent by running `_init_db_locked()` twice against a database seeded with duplicates (founder request, 2026-07-29): no rows removed the second time, none recreated, index still present, no errors.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -224,7 +244,13 @@ class Employee(SQLModel, table=True):
     # docs/superpowers/specs/2026-07-29-phase-4-deployment-path-audit.md F2) —
     # so db._migrate_add_indexes issues the DDL for those.
     __table_args__ = (
-        UniqueConstraint("business_id", "role_key", name="uq_employee_business_role"),
+        # Index, NOT UniqueConstraint: a table-level UNIQUE becomes part of
+        # CREATE TABLE under an auto-generated name, so `CREATE UNIQUE INDEX IF
+        # NOT EXISTS uq_employee_business_role` would then build a SECOND,
+        # separately-named mechanism enforcing the same rule. A named unique
+        # Index means fresh databases (create_all) and existing ones
+        # (_migrate_add_indexes) converge on exactly one object with one name.
+        Index("uq_employee_business_role", "business_id", "role_key", unique=True),
     )
 
     id: Optional[int] = Field(default=None, primary_key=True)
@@ -316,10 +342,10 @@ def _init_db_locked():
 - [ ] **Step 5: Run new tests, then the full suite**
 
 Run: `cd agent && .venv/bin/python -m pytest tests/test_employee_dedupe.py -v`
-Expected: 7 passed.
+Expected: 8 passed.
 
 Run: `cd agent && .venv/bin/python -m pytest tests/ -q`
-Expected: `385 passed`. In particular `test_employee_model.py` must stay green
+Expected: `386 passed`. In particular `test_employee_model.py` must stay green
 unmodified — including `test_retention_manager_maps_to_canonical_key` (I13)
 and `test_backfill_employees_idempotent` (I8).
 
@@ -626,10 +652,10 @@ def deploy_department(session, business_id: int, department_key: str) -> List[Em
 - [ ] **Step 5: Run new tests, then the full suite**
 
 Run: `cd agent && .venv/bin/python -m pytest tests/test_deployment.py -v`
-Expected: 10 passed.
+Expected: 11 passed.
 
 Run: `cd agent && .venv/bin/python -m pytest tests/ -q`
-Expected: `395 passed`. No failures.
+Expected: `397 passed`. No failures.
 
 - [ ] **Step 6: Commit**
 
@@ -772,10 +798,10 @@ def _hire_employee(session: Session, business_id: int, role: str) -> None:
 - [ ] **Step 5: Run new tests, then the full suite**
 
 Run: `cd agent && .venv/bin/python -m pytest tests/test_deployment.py -v`
-Expected: 13 passed.
+Expected: 14 passed.
 
 Run: `cd agent && .venv/bin/python -m pytest tests/ -q`
-Expected: `398 passed`. `test_portal_dashboard.py`, `test_employee_deploy.py`,
+Expected: `400 passed`. `test_portal_dashboard.py`, `test_employee_deploy.py`,
 `test_activation_live.py` and `test_employee_model.py` must all stay green
 **unmodified**.
 
@@ -798,167 +824,7 @@ Satisfies I1 and I14; keeps I8 green."
 
 ---
 
-## Task 4: Deployment notification + ordering (I9, I10)
-
-**Files:**
-- Modify: `agent/notifications.py` — `KIND_DEPARTMENT_DEPLOYED`, `SOURCE_DEPLOYMENT`
-- Modify: `agent/deployment.py` — `deploy_department` records one notification
-- Test: `agent/tests/test_deployment.py` (append)
-
-- [ ] **Step 1: Write the failing tests**
-
-Append to `agent/tests/test_deployment.py`:
-
-```python
-# --- notification ordering and recovery (I9, I10) -----------------------------
-
-
-def test_deploying_a_department_notifies_the_owner(session):
-    from db_models import OwnerNotification
-    from notifications import KIND_DEPARTMENT_DEPLOYED, SOURCE_DEPLOYMENT
-
-    b = _business(session, "notif1@test.io")
-    deploy_department(session, b.id, "customer_service")
-
-    rows = session.exec(select(OwnerNotification)).all()
-    assert len(rows) == 1
-    assert rows[0].kind == KIND_DEPARTMENT_DEPLOYED
-    assert rows[0].source == SOURCE_DEPLOYMENT
-    assert "Customer Service" in rows[0].message
-
-
-def test_employee_rows_are_visible_before_the_notification_is_recorded(session, monkeypatch):
-    """I9 — the ordering guard.
-
-    Reversed, a customer could be told "Customer Service is now staffed"
-    while their dashboard still shows nothing. This asserts the rows are
-    already queryable at the moment the notification is written, rather than
-    asserting on wall-clock order."""
-    import deployment
-
-    seen = {}
-    real = deployment.record_owner_notification
-
-    def _spy(sess, business_id, *a, **k):
-        seen["rows"] = sess.exec(
-            select(Employee).where(Employee.business_id == business_id)
-        ).all()
-        return real(sess, business_id, *a, **k)
-
-    monkeypatch.setattr(deployment, "record_owner_notification", _spy)
-    b = _business(session, "notif2@test.io")
-
-    deploy_department(session, b.id, "customer_service")
-
-    assert {r.role_key for r in seen["rows"]} == {"frontdesk", "reviews"}
-
-
-def test_re_running_a_partial_deployment_completes_it(session):
-    """I10 — recovery with no special path. A crash after the first role
-    leaves the department half-staffed; re-running the same action fills only
-    the gap."""
-    b = _business(session, "notif3@test.io")
-    deploy_role(session, b.id, "frontdesk")  # simulate a partial deploy
-
-    created = deploy_department(session, b.id, "customer_service")
-
-    assert [e.role_key for e in created] == ["reviews"]
-    assert len(session.exec(
-        select(Employee).where(Employee.business_id == b.id)
-    ).all()) == 2
-
-
-def test_re_deploying_a_complete_department_does_not_re_notify(session):
-    """A repeat deploy created nothing, so there is nothing to announce."""
-    from db_models import OwnerNotification
-
-    b = _business(session, "notif4@test.io")
-    deploy_department(session, b.id, "customer_service")
-    deploy_department(session, b.id, "customer_service")
-
-    assert len(session.exec(select(OwnerNotification)).all()) == 1
-```
-
-- [ ] **Step 2: Run and confirm failure**
-
-Run: `cd agent && .venv/bin/python -m pytest tests/test_deployment.py -q 2>&1 | tail -6`
-Expected: the 4 new tests fail — first on
-`ImportError: cannot import name 'KIND_DEPARTMENT_DEPLOYED'`.
-
-- [ ] **Step 3: Add the constants**
-
-In `agent/notifications.py`, alongside the existing kinds and sources:
-
-```python
-KIND_DEPARTMENT_DEPLOYED = "department_deployed"
-```
-```python
-SOURCE_DEPLOYMENT = "deployment"
-```
-
-- [ ] **Step 4: Record the notification, after the rows commit**
-
-In `agent/deployment.py`, at the end of `deploy_department`:
-
-```python
-    if created:
-        # Strictly AFTER the rows are committed (deploy_role commits each):
-        # reversed, the owner could be told a department is staffed while
-        # their dashboard still shows nothing. Only notify when something was
-        # actually created, so re-running to finish a partial deploy doesn't
-        # announce twice.
-        record_owner_notification(
-            session, business_id, KIND_DEPARTMENT_DEPLOYED, SOURCE_DEPLOYMENT,
-            f"{department.display_name} is now staffed and working for you.",
-            delivered=True,
-        )
-    return created
-```
-
-…with the import added at the top of `deployment.py`:
-
-```python
-from notifications import (
-    KIND_DEPARTMENT_DEPLOYED,
-    SOURCE_DEPLOYMENT,
-    record_owner_notification,
-)
-```
-
-**Note on `delivered=True`:** this notification has no SMS behind it yet —
-it is dashboard-only. `delivered` describes whether an owner *text* went out,
-so recording `True` here would be a small lie. Use `delivered=True` **only if**
-a send is added; otherwise pass `delivered=False`. **Decision for this task:
-pass `delivered=False` and leave the SMS to Phase 4b**, where the ops console
-decides whether go-live warrants a text. Adjust the test's assertion to match.
-
-- [ ] **Step 5: Run new tests, then the full suite**
-
-Run: `cd agent && .venv/bin/python -m pytest tests/test_deployment.py -v`
-Expected: 17 passed.
-
-Run: `cd agent && .venv/bin/python -m pytest tests/ -q`
-Expected: `402 passed`. No failures.
-
-- [ ] **Step 6: Commit**
-
-```bash
-git add agent/notifications.py agent/deployment.py agent/tests/test_deployment.py
-git commit -m "feat(deployment): announce a staffed department, after the rows commit
-
-Ordering is the point: the guard asserts Employee rows are already
-queryable at the moment the notification is written, so a customer can
-never be told a department is staffed while their dashboard shows nothing.
-
-Only notifies when something was actually created, so re-running to finish
-a half-completed deploy fills the gap without announcing twice.
-
-Satisfies I9 and I10."
-```
-
----
-
-## Task 5: Migrate `runner.is_active()` to `Employee` rows (I6)
+## Task 4: Migrate `runner.is_active()` to `Employee` rows (I6)
 
 **Files:**
 - Modify: `agent/runner.py`
@@ -1087,10 +953,10 @@ pre-existing test file this phase modifies**; note it in the commit message.
 - [ ] **Step 5: Run the full suite**
 
 Run: `cd agent && .venv/bin/python -m pytest tests/test_deployment.py tests/test_runner.py -v`
-Expected: 22 in `test_deployment.py`, all of `test_runner.py` green.
+Expected: 19 in `test_deployment.py`, all of `test_runner.py` green.
 
 Run: `cd agent && .venv/bin/python -m pytest tests/ -q`
-Expected: `407 passed`.
+Expected: `405 passed`.
 
 - [ ] **Step 6: Commit**
 
@@ -1117,7 +983,7 @@ Satisfies I6."
 
 ---
 
-## Task 6: Complete the delete cascade (I7)
+## Task 5: Complete the delete cascade (I7)
 
 **Files:**
 - Modify: `agent/app.py` — `delete_client`
@@ -1177,7 +1043,7 @@ In `agent/app.py`'s `delete_client`, alongside the existing deletes:
 - [ ] **Step 4: Run the full suite**
 
 Run: `cd agent && .venv/bin/python -m pytest tests/ -q`
-Expected: `408 passed`.
+Expected: `406 passed`.
 
 - [ ] **Step 5: Commit**
 
@@ -1196,17 +1062,18 @@ Satisfies I7."
 
 ## Phase 4a Acceptance Criteria
 
-1. **Full suite green at 408 passed**, up from Phase 3's 378 — 30 new tests.
-2. **Every invariant I1–I14 has a passing regression test** (see the map above); none is deferred.
+1. **Full suite green at 406 passed**, up from Phase 3's 378 — 28 new tests.
+2. **Every invariant I1–I14 is satisfied or explicitly deferred** (see the map above). Exactly one is deferred — **I9**, because Phase 4a sends no deployment notification and therefore writes no `OwnerNotification` row for one.
 3. **No UI changed** — `git diff main --stat -- agent/templates/` is empty.
 4. **One deployment writer** — `grep -rn "Employee(" --include="*.py" agent/ | grep -v tests/` returns only `deployment.py` and `db.py`'s backfill.
 5. **Duplicates are impossible** — a second `(business_id, role_key)` raises `IntegrityError`, and the index exists by name.
 6. **De-duplication is deterministic and auditable** — keeps the lowest id, returns and logs what it removed.
 7. **`test_runner.py` is the only pre-existing test file modified**, with the reason recorded in its commit.
 8. **App boots** — `cd agent && .venv/bin/python -c "import app"` exits 0, and `init_db()` runs the new migration steps without error on an existing database.
-9. **Six commits**, one per task, each green independently.
+9. **Five commits**, one per task, each green independently.
 
-**Deliberately NOT in this phase:** no ops-console UI, no deploy-by-department
+**Deliberately NOT in this phase:** no deployment notification (I9 deferred —
+`notifications.py` is untouched), no ops-console UI, no deploy-by-department
 route, no pipeline stage, no `requested_roster` removal (Phase 7 deletes it;
 until then it is written but no longer read for deployment state), and no
 resolution of whether `frontdesk_live` should exist at all (Phase 7).
