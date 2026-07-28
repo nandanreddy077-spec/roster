@@ -6,8 +6,8 @@ from sqlmodel import Session, select
 import app as app_module
 from conftest import DASH_AUTH
 from db_models import (
-    Business, Customer, Employee, Event, Job, Message,
-    RecoveryCampaign, RecoveryJob, RecoveryMessageLog, ReferralLead,
+    Business, Customer, DepartmentInterest, Employee, Event, Job, Message,
+    OwnerNotification, RecoveryCampaign, RecoveryJob, RecoveryMessageLog, ReferralLead,
 )
 from starlette.testclient import TestClient
 
@@ -30,6 +30,12 @@ def _fully_populated_client(test_engine) -> int:
 
         s.add(Employee(business_id=bid, role_key="frontdesk"))
         s.add(Event(business_id=bid, type="job_booked"))
+        # Added Phase 4a (audit F7): the cascade predated both of these tables,
+        # and SQLite enforces no foreign keys here (db.py sets no PRAGMA), so
+        # the orphans they left behind were silent.
+        s.add(DepartmentInterest(business_id=bid, department_key="finance"))
+        s.add(OwnerNotification(business_id=bid, kind="job_booked",
+                                source="sms_booking", message="m", delivered=True))
         s.add(ReferralLead(business_id=bid, source_job_id=j.id, asker_phone="+15550001111", raw_reply_text="yes, my friend Bob"))
 
         camp = RecoveryCampaign(business_id=bid, face="quote", name="June quotes", customer_list_json="[]")
@@ -63,6 +69,10 @@ def test_delete_client_removes_business_and_every_related_row(test_engine, monke
         assert s.exec(select(RecoveryCampaign).where(RecoveryCampaign.business_id == bid)).all() == []
         assert s.exec(select(RecoveryJob).where(RecoveryJob.business_id == bid)).all() == []
         assert s.exec(select(RecoveryMessageLog)).all() == []  # only row was under this business
+        assert s.exec(select(DepartmentInterest).where(
+            DepartmentInterest.business_id == bid)).all() == []
+        assert s.exec(select(OwnerNotification).where(
+            OwnerNotification.business_id == bid)).all() == []
 
 
 def test_client_detail_404s_after_delete_instead_of_crashing(test_engine, monkeypatch):

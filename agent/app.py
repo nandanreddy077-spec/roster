@@ -33,8 +33,9 @@ from db import DATA_DIR, engine, init_db
 from deployment import deploy_role
 from locks import conversation_lock
 from db_models import (
-    AccessRequest, Business, Customer, Employee, Event, Job, Message,
-    RecoveryCampaign, RecoveryJob, RecoveryMessageLog, ReferralLead, WebhookDelivery,
+    AccessRequest, Business, Customer, DepartmentInterest, Employee, Event, Job, Message,
+    OwnerNotification, RecoveryCampaign, RecoveryJob, RecoveryMessageLog, ReferralLead,
+    WebhookDelivery,
 )
 from portal import router as portal_router
 from provisioning import ProvisioningError, attach_number_to_xai_trunk, buy_twilio_number, register_number_with_xai
@@ -502,6 +503,8 @@ def delete_client(client_id: int, confirm_name: str = Form(...)):
         recovery_job_ids = select(RecoveryJob.id).where(RecoveryJob.business_id == client_id)
         session.exec(delete(RecoveryMessageLog).where(RecoveryMessageLog.recovery_job_id.in_(recovery_job_ids)))
         session.exec(delete(Event).where(Event.business_id == client_id))
+        session.exec(delete(DepartmentInterest).where(DepartmentInterest.business_id == client_id))
+        session.exec(delete(OwnerNotification).where(OwnerNotification.business_id == client_id))
         session.exec(delete(ReferralLead).where(ReferralLead.business_id == client_id))
         session.exec(delete(RecoveryJob).where(RecoveryJob.business_id == client_id))
         session.exec(delete(RecoveryCampaign).where(RecoveryCampaign.business_id == client_id))
