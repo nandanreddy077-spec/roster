@@ -17,6 +17,7 @@ from notifications import (
     SOURCE_SMS_BOOKING,
     SOURCE_VOICE_BOOKING,
     is_test_thread,
+    recent_notifications,
     record_owner_notification,
 )
 
@@ -317,3 +318,39 @@ def test_a_dropped_call_records_a_notification(session, monkeypatch):
     ).all()
     assert len(rows) == 1
     assert rows[0].source == SOURCE_CALL_DROPPED
+
+
+# --- reading the log ---------------------------------------------------------
+
+
+def _record(session, business_id, message):
+    return record_owner_notification(
+        session, business_id, KIND_JOB_BOOKED, SOURCE_SMS_BOOKING, message, True,
+    )
+
+
+def test_recent_notifications_returns_newest_first(session):
+    for i in range(3):
+        _record(session, 1, f"job {i}")
+
+    assert [n.message for n in recent_notifications(session, 1)] == ["job 2", "job 1", "job 0"]
+
+
+def test_recent_notifications_never_leaks_another_business(session):
+    """Business-scoped isolation is the security boundary throughout Roster
+    (platform PRD §12). One business must never see another's alerts."""
+    _record(session, 1, "mine")
+    _record(session, 2, "theirs")
+
+    assert [n.message for n in recent_notifications(session, 1)] == ["mine"]
+
+
+def test_recent_notifications_respects_the_limit(session):
+    for i in range(5):
+        _record(session, 1, f"job {i}")
+
+    assert len(recent_notifications(session, 1, limit=2)) == 2
+
+
+def test_recent_notifications_on_an_empty_log(session):
+    assert recent_notifications(session, 1) == []

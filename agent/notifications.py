@@ -54,6 +54,23 @@ def build_owner_message(job: Job, employee_name: str) -> str:
     )
 
 
+def recent_notifications(session, business_id: int, limit: int = 50):
+    """This business's owner alerts, newest first — what the dashboard's
+    Notifications page renders (blueprint §4).
+
+    Scoped to one business_id, which is the security boundary everywhere in
+    Roster (platform PRD §12): no query may cross businesses.
+    """
+    from sqlmodel import select
+
+    return list(session.exec(
+        select(OwnerNotification)
+        .where(OwnerNotification.business_id == business_id)
+        .order_by(OwnerNotification.id.desc())
+        .limit(limit)
+    ).all())
+
+
 def build_escalation_message(business: Business, caller_number: str, reason: str) -> str:
     """One builder for both the SMS body and the logged message — built
     separately they would drift, and the owner's dashboard would show
