@@ -2,7 +2,7 @@ import json
 from datetime import datetime
 from typing import List, Optional
 
-from sqlalchemy import UniqueConstraint
+from sqlalchemy import Index, UniqueConstraint, text
 from sqlmodel import Field, SQLModel
 
 from models import ClientConfig
@@ -200,6 +200,44 @@ class AccessRequest(SQLModel, table=True):
     phone: str = ""
     trade: str = ""
     created_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class DepartmentInterest(SQLModel, table=True):
+    """An existing customer asking Roster for one more department.
+
+    STRICTLY a request record: recording interest deploys nothing, creates no
+    Employee, and has no effect on runner.is_active(). That separation is the
+    point — Business.requested_roster currently conflates "asked for" with
+    "deployed" (runner.py:41), and the department model requires them to be
+    different, separately-observable facts. Roster provisions after a
+    discovery call, never on a click. Actioning a request likewise means
+    "operations handled it", NOT "the department was deployed".
+
+    Distinct from AccessRequest, which is the NEW-LEAD contact form (it has no
+    business_id — the business doesn't exist yet).
+    """
+    __table_args__ = (
+        # One OPEN request per business per department, enforced by the
+        # database because a double-submit is genuinely concurrent: FastAPI
+        # runs sync handlers in a threadpool even at --workers 1, and Postgres
+        # deployments run many workers. Declared for both dialects since
+        # db.resolve_engine_config supports both.
+        # PARTIAL on purpose: an actioned row leaves the index, so a customer
+        # whose request was declined months ago can ask again.
+        Index(
+            "uq_department_interest_open",
+            "business_id", "department_key",
+            unique=True,
+            sqlite_where=text("actioned_at IS NULL"),
+            postgresql_where=text("actioned_at IS NULL"),
+        ),
+    )
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    business_id: int = Field(foreign_key="business.id", index=True)
+    department_key: str  # departments.REGISTRY key; validated on write by expansion.record_interest
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    actioned_at: Optional[datetime] = None  # set when ops has handled it (Phase 4)
 
 
 class OwnerNotification(SQLModel, table=True):
