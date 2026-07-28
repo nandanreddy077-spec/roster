@@ -90,6 +90,7 @@ def _init_db_locked():
     _migrate_add_columns()
     _backfill_customers()
     _backfill_employees()
+    _backfill_pipeline_stage()
     # Order matters: duplicates must be gone before the unique index is built.
     _dedupe_employees()
     _migrate_add_indexes()
@@ -151,6 +152,7 @@ def _migrate_add_columns():
         "ALTER TABLE job ADD COLUMN customer_id INTEGER",
         "ALTER TABLE message ADD COLUMN customer_id INTEGER",
         "ALTER TABLE message ADD COLUMN external_id VARCHAR",
+        "ALTER TABLE business ADD COLUMN pipeline_stage VARCHAR DEFAULT 'lead'",
     )
     with engine.connect() as conn:
         for ddl in statements:
@@ -208,6 +210,26 @@ def _backfill_employees(engine=None):
                         s.add(Employee(business_id=b.id, role_key=key, display_name=role))
                         have.add(key)
         s.commit()
+
+
+def _backfill_pipeline_stage(engine=None):
+    """A business that was already running before pipeline_stage existed must
+    not appear stuck at 'lead' in the founder's pipeline. Idempotent: only
+    touches rows still sitting at the default."""
+    from sqlmodel import Session, select
+
+    from db_models import Business
+
+    eng = engine if engine is not None else globals()["engine"]
+    with Session(eng) as s:
+        changed = False
+        for b in s.exec(select(Business).where(Business.frontdesk_live == True)).all():  # noqa: E712
+            if b.pipeline_stage == "lead":
+                b.pipeline_stage = "live"
+                s.add(b)
+                changed = True
+        if changed:
+            s.commit()
 
 
 def _dedupe_employees(engine=None) -> list:

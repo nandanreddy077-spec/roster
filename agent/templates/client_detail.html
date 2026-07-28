@@ -4,6 +4,21 @@
 <a class="back-link" href="/clients">&larr; All clients</a>
 <h1>{{ client.business_name }}</h1>
 <span class="trade-tag">{{ client.trade }}</span>
+<span class="trade-tag">{{ client.pipeline_stage }}</span>
+
+<section class="agent-roster">
+  <h2 class="agent-roster-heading">Provisioning pipeline</h2>
+  {% if stage_error %}<p class="job-notes">{{ stage_error }}</p>{% endif %}
+  <div class="agent-tile" style="max-width:640px;">
+    <p class="agent-tile-desc">Where this business sits in onboarding. Set it explicitly — it never advances on its own.</p>
+    <form method="post" action="/clients/{{ client.id }}/pipeline-stage" class="review-link-form">
+      {% for s in pipeline_stages %}
+      <button class="btn {{ 'btn-primary' if s == client.pipeline_stage else 'btn-secondary' }} btn-small"
+              type="submit" name="stage" value="{{ s }}">{{ s }}</button>
+      {% endfor %}
+    </form>
+  </div>
+</section>
 
 <section class="agent-roster">
   <h2 class="agent-roster-heading">Departments</h2>

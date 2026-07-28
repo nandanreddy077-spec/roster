@@ -528,6 +528,42 @@ def complete_job(client_id: int, job_id: int):
     return RedirectResponse(f"/clients/{client_id}", status_code=303)
 
 
+# Roster's provisioning pipeline (blueprint §10a). Ordered for display only —
+# the route takes an explicit target, so ops can move a business backward to
+# correct a mis-click without a database edit.
+PIPELINE_STAGES = ("lead", "discovery", "provisioning", "qa", "live", "managed")
+
+
+@app.post("/clients/{client_id}/pipeline-stage")
+def set_pipeline_stage(client_id: int, stage: str = Form(...)):
+    """Move a business to an EXPLICIT pipeline stage.
+
+    Deliberately not an "advance to next" action: that isn't idempotent, and a
+    double-submit would silently skip a stage. Setting the stage a business is
+    already on is a no-op success, so a stale tab re-posting never shows the
+    founder an error.
+    """
+    error = None
+    if stage not in PIPELINE_STAGES:
+        error = f"Unknown pipeline stage: {stage}"
+    else:
+        with Session(engine) as session:
+            client = session.get(Business, client_id)
+            if client is None:
+                raise HTTPException(status_code=404, detail="No such client")
+            if client.pipeline_stage != stage:
+                client.pipeline_stage = stage
+                session.add(client)
+                session.commit()
+
+    redirect_url = f"/clients/{client_id}"
+    if error:
+        from urllib.parse import quote
+
+        redirect_url += f"?stage_error={quote(error)}"
+    return RedirectResponse(redirect_url, status_code=303)
+
+
 @app.post("/clients/{client_id}/employees/deploy")
 def deploy_employee(
     client_id: int,
@@ -726,8 +762,10 @@ def client_detail(request: Request, client_id: int):
             "face_display_names": FACE_DISPLAY_NAMES,
             "referral_leads": referral_leads,
             "department_rows": department_rows,
+            "pipeline_stages": PIPELINE_STAGES,
             "provision_error": request.query_params.get("provision_error"),
             "deploy_error": request.query_params.get("deploy_error"),
+            "stage_error": request.query_params.get("stage_error"),
         },
     )
 

@@ -204,3 +204,108 @@ def test_deploying_a_department_then_following_the_redirect_shows_it_staffed(
     assert "Working: Frontdesk, Reviews" in landed.text
     # and the deploy affordance is gone for that department, not offered again
     assert "Complete deployment" not in landed.text
+
+
+# --- provisioning pipeline stage (B7) -----------------------------------------
+
+
+def _post_stage(bid, stage):
+    return TestClient(app_module.app, headers=DASH_AUTH).post(
+        f"/clients/{bid}/pipeline-stage", data={"stage": stage}, follow_redirects=False
+    )
+
+
+def test_a_new_business_starts_at_lead(test_engine, monkeypatch):
+    monkeypatch.setattr(app_module, "engine", test_engine)
+    with Session(test_engine) as s:
+        b = _business(s)
+        assert b.pipeline_stage == "lead"
+
+
+def test_setting_a_stage_moves_the_business(test_engine, monkeypatch):
+    monkeypatch.setattr(app_module, "engine", test_engine)
+    with Session(test_engine) as s:
+        bid = _business(s).id
+
+    r = _post_stage(bid, "provisioning")
+
+    assert r.status_code == 303
+    with Session(test_engine) as s:
+        assert s.get(Business, bid).pipeline_stage == "provisioning"
+
+
+def test_setting_the_same_stage_twice_is_idempotent(test_engine, monkeypatch):
+    """B7: the route takes an explicit TARGET, never 'advance' — so a
+    double-submit or a stale tab re-posting lands on the same stage instead of
+    silently skipping one."""
+    monkeypatch.setattr(app_module, "engine", test_engine)
+    with Session(test_engine) as s:
+        bid = _business(s).id
+
+    first = _post_stage(bid, "qa")
+    second = _post_stage(bid, "qa")
+
+    assert first.status_code == 303 and second.status_code == 303
+    with Session(test_engine) as s:
+        assert s.get(Business, bid).pipeline_stage == "qa"
+
+
+def test_re_posting_the_current_stage_is_a_no_op_success_not_an_error(test_engine, monkeypatch):
+    """B7: a stale tab re-submitting the stage the business is already on is
+    harmless and must not show the founder an error page."""
+    monkeypatch.setattr(app_module, "engine", test_engine)
+    with Session(test_engine) as s:
+        bid = _business(s).id
+    _post_stage(bid, "discovery")
+
+    r = _post_stage(bid, "discovery")
+
+    assert r.status_code == 303
+    assert "stage_error" not in r.headers["location"]
+
+
+def test_an_unknown_stage_is_rejected(test_engine, monkeypatch):
+    monkeypatch.setattr(app_module, "engine", test_engine)
+    with Session(test_engine) as s:
+        bid = _business(s).id
+
+    r = _post_stage(bid, "not_a_stage")
+
+    assert r.status_code == 303
+    assert "stage_error" in r.headers["location"]
+    with Session(test_engine) as s:
+        assert s.get(Business, bid).pipeline_stage == "lead"
+
+
+def test_a_stage_can_move_backward_to_correct_a_mistake(test_engine, monkeypatch):
+    """Ops mis-clicks. Refusing to go back would mean the only fix is a
+    database edit."""
+    monkeypatch.setattr(app_module, "engine", test_engine)
+    with Session(test_engine) as s:
+        bid = _business(s).id
+    _post_stage(bid, "live")
+
+    _post_stage(bid, "provisioning")
+
+    with Session(test_engine) as s:
+        assert s.get(Business, bid).pipeline_stage == "provisioning"
+
+
+def test_existing_live_businesses_backfill_to_the_live_stage(test_engine, monkeypatch):
+    """A business already running before this column existed must not appear
+    stuck at 'lead' in the founder's pipeline."""
+    import db
+
+    monkeypatch.setattr(db, "engine", test_engine)
+    with Session(test_engine) as s:
+        b = Business(business_name="Already Live", trade="hvac", frontdesk_live=True)
+        b.pipeline_stage = "lead"
+        s.add(b)
+        s.commit()
+        s.refresh(b)
+        bid = b.id
+
+    db._backfill_pipeline_stage(test_engine)
+
+    with Session(test_engine) as s:
+        assert s.get(Business, bid).pipeline_stage == "live"

@@ -28,6 +28,10 @@ class Business(SQLModel, table=True):
     email: Optional[str] = Field(default=None, unique=True, index=True)
     password_hash: Optional[str] = None
     tone: str = "professional and friendly"
+    # Where this business sits in Roster's provisioning pipeline (blueprint
+    # §10a). Set explicitly by the founder — never auto-advanced, so a
+    # double-submit can't silently skip a stage.
+    pipeline_stage: str = Field(default="lead")
     source: Optional[str] = None  # how the owner heard about Roster; asked from the dashboard, not at signup
     source_prompt_dismissed: bool = False
     frontdesk_live: bool = False
