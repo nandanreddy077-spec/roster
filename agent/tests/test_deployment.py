@@ -1,0 +1,140 @@
+"""The single deployment path. Before this module, three separate places
+created Employee rows (db.py's backfill x2, portal.py's _hire_employee) and
+two more marked a business deployed without creating one at all
+(activation.activate_frontdesk, app.deploy_employee) — audit F1."""
+import pytest
+from sqlmodel import select
+
+from db_models import Business, Employee
+from deployment import deploy_department, deploy_role
+
+
+def _business(session, email):
+    b = Business(business_name="B", trade="hvac", email=email)
+    session.add(b)
+    session.commit()
+    session.refresh(b)
+    return b
+
+
+def test_deploy_role_creates_the_employee_row(session):
+    b = _business(session, "dep1@test.io")
+
+    row = deploy_role(session, b.id, "frontdesk")
+
+    assert row is not None
+    assert row.id is not None
+    assert row.role_key == "frontdesk"
+    assert row.status == "active"
+
+
+def test_deploying_the_same_role_twice_creates_one_row(session):
+    """I2. Idempotent: the second call is a no-op that reports it created
+    nothing, so a caller can tell a fresh deploy from a repeat."""
+    b = _business(session, "dep2@test.io")
+
+    first = deploy_role(session, b.id, "frontdesk")
+    second = deploy_role(session, b.id, "frontdesk")
+
+    assert first is not None
+    assert second is None
+    assert len(session.exec(
+        select(Employee).where(Employee.business_id == b.id)
+    ).all()) == 1
+
+
+def test_deploying_a_planned_employee_is_rejected(session):
+    """I5 / audit F4. `dispatcher` has no engine — status `planned` in the
+    registry. Creating a row for it would make active_departments_for()
+    report Operations as STAFFED, and the customer's dashboard would show a
+    department that cannot do anything."""
+    b = _business(session, "dep3@test.io")
+
+    with pytest.raises(ValueError):
+        deploy_role(session, b.id, "dispatcher")
+
+    assert session.exec(select(Employee).where(Employee.business_id == b.id)).all() == []
+
+
+def test_deploying_an_unknown_role_is_rejected(session):
+    b = _business(session, "dep4@test.io")
+
+    with pytest.raises(ValueError):
+        deploy_role(session, b.id, "not_a_role")
+
+
+def test_deploying_for_one_business_never_touches_another(session):
+    """I12. Business isolation is the security boundary (platform PRD §12)."""
+    a = _business(session, "dep5a@test.io")
+    b = _business(session, "dep5b@test.io")
+
+    deploy_role(session, a.id, "frontdesk")
+
+    assert session.exec(select(Employee).where(Employee.business_id == b.id)).all() == []
+
+
+def test_deploy_department_creates_every_deployable_role(session):
+    """Customer Service = frontdesk (live) + reviews (internal). `support` is
+    planned and must be skipped, not deployed."""
+    b = _business(session, "dep6@test.io")
+
+    created = deploy_department(session, b.id, "customer_service")
+
+    keys = {e.role_key for e in created}
+    assert keys == {"frontdesk", "reviews"}
+    assert "support" not in keys
+
+
+def test_deploy_department_is_idempotent(session):
+    b = _business(session, "dep7@test.io")
+
+    deploy_department(session, b.id, "customer_service")
+    second = deploy_department(session, b.id, "customer_service")
+
+    assert second == []
+    assert len(session.exec(
+        select(Employee).where(Employee.business_id == b.id)
+    ).all()) == 2
+
+
+def test_re_running_a_partial_deployment_completes_it(session):
+    """I10 — recovery with no special path. A crash after the first role
+    leaves the department half-staffed; re-running the same action fills only
+    the gap, and reports only what it filled."""
+    b = _business(session, "dep8@test.io")
+    deploy_role(session, b.id, "frontdesk")  # simulate a partial deploy
+
+    created = deploy_department(session, b.id, "customer_service")
+
+    assert [e.role_key for e in created] == ["reviews"]
+    assert len(session.exec(
+        select(Employee).where(Employee.business_id == b.id)
+    ).all()) == 2
+
+
+def test_deploy_department_rejects_a_department_with_nothing_deployable(session):
+    """audit F4: Operations, Finance and Marketing are hireable in the
+    registry but have zero live/internal employees today. Refusing loudly is
+    what stops the ops console from 'deploying' vaporware."""
+    b = _business(session, "dep9@test.io")
+
+    with pytest.raises(ValueError):
+        deploy_department(session, b.id, "operations")
+
+
+def test_deploy_department_rejects_leadership(session):
+    b = _business(session, "dep10@test.io")
+
+    with pytest.raises(ValueError):
+        deploy_department(session, b.id, "leadership")
+
+
+def test_every_deployable_role_resolves_to_a_department(session):
+    """I4. A deployed role whose key doesn't resolve would vanish from every
+    department view — the exact failure Phase 1's alias exists to prevent,
+    asserted here against what deployment can actually write."""
+    from departments import REGISTRY, deployable_employees_for, department_for_role
+
+    for department in REGISTRY:
+        for employee in deployable_employees_for(department.key):
+            assert department_for_role(employee.key) is not None, employee.key

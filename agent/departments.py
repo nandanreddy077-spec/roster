@@ -185,6 +185,26 @@ def department_for_role(role_key: str):
     return _BY_KEY.get(department_key)
 
 
+def canonical_role_key(role_key: str) -> str:
+    """The registry spelling of a role key, resolving legacy spellings.
+    roles.ROLE_KEYS emits "retention" where the registry says
+    "retention_manager", and that spelling is on real Employee rows
+    (test_employee_model.py pins it), so callers comparing a stored key to the
+    registry must normalize through here."""
+    return _LEGACY_ROLE_KEYS.get(role_key, role_key)
+
+
+def deployable_employees_for(department_key: str) -> List:
+    """The employees in this department that can actually be provisioned —
+    registry status `live` or `internal`. NEVER `planned`: those have no
+    engine, and deploying one would make active_departments_for() report the
+    department as staffed while it cannot do any work (audit F4)."""
+    return [
+        e for e in _EMPLOYEE_REGISTRY
+        if e.department == department_key and e.status in ("live", "internal")
+    ]
+
+
 def get_department(key: str):
     """The Department with this key, or None. The public lookup for callers
     validating a department key that arrived from outside the system (see
