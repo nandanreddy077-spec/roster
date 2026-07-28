@@ -399,6 +399,17 @@ disjoint audience (founder vs. customer).
     department(s) the discovery call recommended. This is a hard
     prerequisite for Phase 6: the moment self-serve closes, this is the only
     door left.
+  - ⚠️ **`/clients/{id}/employees/deploy` must create `Employee` rows
+    directly** *(found during the Phase 3 audit, 2026-07-29)*. It currently
+    only appends to `requested_roster` and stops — unlike `portal.py`'s
+    `_hire_employee`, it never inserts an `Employee`. Rows appear solely via
+    `db.py:_backfill_employees` on the next boot, so a founder-deployed
+    business would show **zero departments** on its dashboard until the
+    process restarts, because Phase 1's `active_departments_for()` reads
+    `Employee` rows. Phase 5's dashboard depends on this fix.
+  - Surface open expansion requests via Phase 3's
+    `expansion.open_interests_for()`, and close them with
+    `expansion.mark_actioned()` once handled.
 - Modify: `agent/templates/client_detail.html` — department-grouped
   employee display; pipeline-stage control; open `DepartmentInterest` list.
 - Modify: `agent/templates/new_client.html` — department selection at
