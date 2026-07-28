@@ -54,6 +54,17 @@ def build_owner_message(job: Job, employee_name: str) -> str:
     )
 
 
+def build_escalation_message(business: Business, caller_number: str, reason: str) -> str:
+    """One builder for both the SMS body and the logged message — built
+    separately they would drift, and the owner's dashboard would show
+    something subtly different from the text they actually got."""
+    return (
+        f"URGENT — {business.business_name or 'your business'}: caller "
+        f"{caller_number} needs you NOW. Reason: {reason}. "
+        f"Call them back immediately."
+    )
+
+
 def notify_owner_of_escalation(
     business: Business, caller_number: str, reason: str, channel=None
 ) -> bool:
@@ -70,11 +81,7 @@ def notify_owner_of_escalation(
         ch.send(
             business.inbound_number or "",
             business.escalation_phone,
-            (
-                f"URGENT — {business.business_name or 'your business'}: caller "
-                f"{caller_number} needs you NOW. Reason: {reason}. "
-                f"Call them back immediately."
-            ),
+            build_escalation_message(business, caller_number, reason),
         )
     except Exception:
         return False

@@ -3,7 +3,9 @@ fire-and-forget SMS: it vanishes into a text thread, and a failed send is
 swallowed silently (notifications.py's bare `except`). These rows are what
 the Notifications page reads (blueprint §4), and the first place a failed
 owner alert is visible at all."""
-from sqlmodel import select
+import json
+
+from sqlmodel import Session, select
 
 from db_models import Business, OwnerNotification
 from notifications import (
@@ -215,3 +217,103 @@ def test_a_repeat_turn_on_the_same_job_does_not_log_twice(session, monkeypatch):
     service.handle_customer_message(session, biz, "+15557778888", "it's also leaking")
 
     assert len(session.exec(select(OwnerNotification)).all()) == 1
+
+
+# --- escalation paths --------------------------------------------------------
+
+
+def test_build_escalation_message_is_shared_by_the_sms_and_the_log(session):
+    """One string, one source. Built separately they would drift, and the
+    owner's dashboard would show something subtly different from the text
+    they actually received."""
+    import notifications
+    biz = _live_business(session, "esc0@test.io")
+    spy = _SpyChannel()
+
+    notifications.notify_owner_of_escalation(biz, "+15125559999", "gas smell", channel=spy)
+
+    assert spy.sent[0][2] == notifications.build_escalation_message(
+        biz, "+15125559999", "gas smell"
+    )
+
+
+def test_a_failed_log_write_cannot_change_what_the_caller_is_told(session, monkeypatch):
+    """H4 — THE critical guard in this phase.
+
+    notify_owner_of_escalation's bool becomes "owner_alerted" vs
+    "alert_failed" in the model's tool result, and engine.py instructs the
+    voice agent to tell the caller plainly when the alert failed. If a
+    notification-log failure could flip that bool, the AI would tell someone
+    with a gas leak that the owner wasn't reached when in fact they were."""
+    import notifications
+    biz = _live_business(session, "esc1@test.io")
+    monkeypatch.setattr(
+        notifications, "record_owner_notification",
+        lambda *a, **k: (_ for _ in ()).throw(RuntimeError("log is down")),
+    )
+
+    # The send itself succeeds; only the log is broken.
+    assert notifications.notify_owner_of_escalation(
+        biz, "+15125559999", "gas smell", channel=_SpyChannel(),
+    ) is True
+
+
+def test_escalation_tool_records_a_notification(session, monkeypatch):
+    import asyncio
+
+    import xai_voice_adapter as adapter
+    from engine import TRANSFER_CALL_TOOL
+
+    biz = _live_business(session, "esc2@test.io")
+    monkeypatch.setattr(adapter, "notify_owner_of_escalation", lambda *a, **k: True)
+
+    class _WS:
+        def __init__(self):
+            self.sent = []
+
+        async def send(self, payload):
+            self.sent.append(payload)
+
+    asyncio.run(adapter._handle_function_call(
+        _WS(), session, biz, "xai-voice:c1", "+15125559999",
+        {"name": TRANSFER_CALL_TOOL["name"], "call_id": "fc1",
+         "arguments": json.dumps({"reason": "gas smell"})},
+        adapter.CallTrace("c1"),
+    ))
+
+    rows = session.exec(
+        select(OwnerNotification).where(OwnerNotification.kind == KIND_ESCALATION)
+    ).all()
+    assert len(rows) == 1
+    assert rows[0].source == SOURCE_ALERT_OWNER
+    assert rows[0].delivered is True
+    assert "gas smell" in rows[0].message
+
+
+def test_a_dropped_call_records_a_notification(session, monkeypatch):
+    """H1 site 4: the crash handler. It fires exactly when the software failed
+    the customer, which is the alert an owner most needs a durable record
+    of — today it's an SMS and nothing else."""
+    import asyncio
+
+    import xai_voice_adapter as adapter
+
+    biz = _live_business(session, "esc3@test.io")
+    monkeypatch.setattr(adapter, "notify_owner_of_escalation", lambda *a, **k: True)
+
+    async def _explode(*_a, **_kw):
+        raise RuntimeError("websocket died")
+
+    monkeypatch.setattr(adapter, "_run_call_session", _explode)
+    bind = session.get_bind()
+
+    asyncio.run(adapter.run_call(
+        "c2", biz, "+15125559999", lambda: Session(bind),
+        trace=adapter.CallTrace("c2"),
+    ))
+
+    rows = session.exec(
+        select(OwnerNotification).where(OwnerNotification.kind == KIND_CALL_DROPPED)
+    ).all()
+    assert len(rows) == 1
+    assert rows[0].source == SOURCE_CALL_DROPPED

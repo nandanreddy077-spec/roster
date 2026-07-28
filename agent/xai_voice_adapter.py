@@ -42,8 +42,13 @@ from call_trace import CallTrace
 from db_models import Business, Job, Message
 from engine import LOG_JOB_TOOL, TRANSFER_CALL_TOOL, build_voice_system_prompt
 from notifications import (
+    KIND_CALL_DROPPED,
+    KIND_ESCALATION,
     KIND_JOB_BOOKED,
+    SOURCE_ALERT_OWNER,
+    SOURCE_CALL_DROPPED,
     SOURCE_VOICE_BOOKING,
+    build_escalation_message,
     build_owner_message,
     notify_owner_of_booking,
     notify_owner_of_escalation,
@@ -196,6 +201,12 @@ async def _handle_function_call(
         trace.stage("job_persisted", job_id=job.id, escalation=True)
         alerted = await asyncio.to_thread(notify_owner_of_escalation, client, caller_number, reason)
         trace.stage("owner_alerted" if alerted else "owner_alert_failed")
+        # Strictly after `alerted` is decided: this must never influence what
+        # the model — and therefore the caller — is told about the alert.
+        record_owner_notification(
+            session, client.id, KIND_ESCALATION, SOURCE_ALERT_OWNER,
+            build_escalation_message(client, caller_number, reason), alerted,
+        )
         result = {
             "status": "owner_alerted" if alerted else "alert_failed",
             "owner_number": client.escalation_phone,
@@ -258,11 +269,17 @@ async def run_call(call_id: str, client: Business, caller_number: str, session_f
         # silently: record it, and text the owner the caller's number so the
         # human relationship survives the software failure.
         trace.stage("call_failed", error=repr(e))
-        await asyncio.to_thread(
-            notify_owner_of_escalation,
-            client, caller_number,
-            f"the AI call with this customer dropped mid-call — call them back",
+        dropped_reason = "the AI call with this customer dropped mid-call — call them back"
+        alerted = await asyncio.to_thread(
+            notify_owner_of_escalation, client, caller_number, dropped_reason,
         )
+        # Its own short-lived session: this path has no open one, and the
+        # crashed call's session is not safe to reuse.
+        with session_factory() as session:
+            record_owner_notification(
+                session, client.id, KIND_CALL_DROPPED, SOURCE_CALL_DROPPED,
+                build_escalation_message(client, caller_number, dropped_reason), alerted,
+            )
     finally:
         trace.close()
 
