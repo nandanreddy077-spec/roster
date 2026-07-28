@@ -6,15 +6,40 @@
 <span class="trade-tag">{{ client.trade }}</span>
 
 <section class="agent-roster">
-  <h2 class="agent-roster-heading">Agent roster</h2>
+  <h2 class="agent-roster-heading">Departments</h2>
+  {% if deploy_error %}<p class="job-notes">{{ deploy_error }}</p>{% endif %}
   <div class="agent-roster-grid">
+    {% for row in department_rows %}
     <div class="agent-tile">
       <div class="agent-tile-head">
-        <span class="agent-badge agent-badge-active">Frontdesk</span>
+        <span class="agent-badge {{ 'agent-badge-active' if row.state == 'staffed' else 'agent-badge-off' }}">
+          {{ row.department.display_name }}
+        </span>
       </div>
-      <p class="agent-tile-desc">Always on — answers inbound calls &amp; texts for this client.</p>
+      <p class="agent-tile-desc"><strong>{{ row.state_label }}</strong></p>
+      <p class="agent-tile-desc">{{ row.department.mission }}</p>
+      {% if row.staffed %}
+      <p class="agent-tile-desc">Working: {% for e in row.staffed %}{{ e.display_name }}{{ ", " if not loop.last }}{% endfor %}</p>
+      {% endif %}
+      {% if row.state == 'unavailable' %}
+      <p class="job-notes">Every role in this department is still planned — nothing to deploy yet.</p>
+      {% elif row.state in ('empty', 'partial') %}
+      <form method="post" action="/clients/{{ client.id }}/employees/deploy" class="review-link-form"
+            onsubmit="this.querySelector('button').disabled = true;">
+        <input type="hidden" name="department_key" value="{{ row.department.key }}">
+        <button class="btn btn-primary btn-small" type="submit">
+          {{ "Complete deployment" if row.state == 'partial' else "Deploy" }}
+        </button>
+      </form>
+      {% endif %}
     </div>
+    {% endfor %}
+  </div>
+</section>
 
+<section class="agent-roster">
+  <h2 class="agent-roster-heading">Configuration</h2>
+  <div class="agent-roster-grid">
     <div class="agent-tile">
       <div class="agent-tile-head">
         <span class="agent-badge {{ 'agent-badge-active' if client.xai_phone_number else 'agent-badge-off' }}">

@@ -29,6 +29,7 @@ from starlette.middleware.sessions import SessionMiddleware
 
 from call_trace import CallTrace
 from channels import get_channel
+import departments
 from db import DATA_DIR, engine, init_db
 from deployment import deploy_role
 from locks import conversation_lock
@@ -224,10 +225,74 @@ def landing_preview_styles():
     return FileResponse(LANDING_DIR / "styles-v2.css", media_type="text/css")
 
 
+_DEPARTMENT_STATE_LABELS = {
+    "staffed": "Staffed",
+    "partial": "Partially staffed",
+    "empty": "Not staffed",
+    "unavailable": "No employees built yet",
+}
+
+
+def _employees_by_business(session, business_ids: list) -> dict:
+    """One query for every listed business's employees, grouped in Python.
+
+    A per-business query here would be an N+1 over the whole client list — the
+    same trap the recovery counts above already avoid with a grouped query.
+    test_ops_console asserts the query count so this can't quietly regress.
+    """
+    if not business_ids:
+        return {}
+    rows = session.exec(
+        select(Employee).where(Employee.business_id.in_(business_ids))
+    ).all()
+    grouped = {bid: [] for bid in business_ids}
+    for e in rows:
+        grouped.setdefault(e.business_id, []).append(e)
+    return grouped
+
+
+def _department_rows(employees: list) -> list:
+    """Every department, with what's actually deployed for this business.
+
+    Renders the full org every time so the founder sees the whole company,
+    with honest per-department state — replacing a roster that hardcoded
+    Frontdesk as active for every business whether or not it was deployed.
+    """
+    deployed = {
+        departments.canonical_role_key(e.role_key)
+        for e in employees if e.status != "fired"
+    }
+    rows = []
+    for department in departments.REGISTRY:
+        deployable = departments.deployable_employees_for(department.key)
+        staffed = [d for d in deployable if departments.canonical_role_key(d.key) in deployed]
+        if not deployable:
+            state = "unavailable"
+        elif len(staffed) == len(deployable):
+            state = "staffed"
+        elif staffed:
+            state = "partial"
+        else:
+            state = "empty"
+        rows.append({
+            "department": department,
+            "deployable": deployable,
+            "staffed": staffed,
+            "state": state,
+            "state_label": _DEPARTMENT_STATE_LABELS[state],
+        })
+    return rows
+
+
 @app.get("/clients")
 def list_clients(request: Request):
     with Session(engine) as session:
         clients = session.exec(select(Business).order_by(Business.created_at.desc())).all()
+        employees_by_business = _employees_by_business(session, [c.id for c in clients])
+        staffed_departments = {
+            c.id: departments.active_departments_for(employees_by_business.get(c.id, []))
+            for c in clients
+        }
         count_rows = session.exec(
             select(RecoveryCampaign.business_id, func.count(RecoveryCampaign.id)).group_by(
                 RecoveryCampaign.business_id
@@ -240,7 +305,12 @@ def list_clients(request: Request):
     return templates.TemplateResponse(
         request,
         "clients.html",
-        {"clients": clients, "recovery_counts": recovery_counts, "access_requests": access_requests},
+        {
+            "clients": clients,
+            "recovery_counts": recovery_counts,
+            "access_requests": access_requests,
+            "staffed_departments": staffed_departments,
+        },
     )
 
 
@@ -607,6 +677,9 @@ def client_detail(request: Request, client_id: int):
         referral_leads = session.exec(
             select(ReferralLead).where(ReferralLead.business_id == client_id).order_by(ReferralLead.created_at.desc())
         ).all()
+        department_rows = _department_rows(
+            session.exec(select(Employee).where(Employee.business_id == client_id)).all()
+        )
 
     chat = [
         {"role": m.role, "text": extract_display_text(json.loads(m.content_json))}
@@ -628,7 +701,9 @@ def client_detail(request: Request, client_id: int):
             "campaigns_by_face": campaigns_by_face,
             "face_display_names": FACE_DISPLAY_NAMES,
             "referral_leads": referral_leads,
+            "department_rows": department_rows,
             "provision_error": request.query_params.get("provision_error"),
+            "deploy_error": request.query_params.get("deploy_error"),
         },
     )
 
