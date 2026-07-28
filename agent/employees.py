@@ -40,6 +40,12 @@ REGISTRY: list[EmployeeDefinition] = [
     # Customer Service
     EmployeeDefinition("frontdesk", "customer_service", "live", "Frontdesk"),
     EmployeeDefinition("support", "customer_service", "planned", "Support"),
+    # Reviews' capability ships today inside the same engine as Retention
+    # Manager, but it belongs to the department that owns the outcome
+    # (founder, 2026-07-28). roles.ROLE_KEYS already emits this key, so real
+    # Employee rows can carry it — it was missing from the registry, not
+    # from the product.
+    EmployeeDefinition("reviews", "customer_service", "internal", "Reviews"),
     # Sales
     EmployeeDefinition("lead_qualifier", "sales", "planned", "Lead Qualifier"),
     EmployeeDefinition("quote_chaser", "sales", "internal", "Quote Chaser"),
@@ -62,7 +68,7 @@ REGISTRY: list[EmployeeDefinition] = [
     EmployeeDefinition("reactivation", "marketing", "planned", "Reactivation"),
     EmployeeDefinition("referral", "marketing", "planned", "Referral"),
     EmployeeDefinition("campaign_manager", "marketing", "planned", "Campaign Manager"),
-    # Intelligence
-    EmployeeDefinition("business_analyst", "intelligence", "planned", "Business Analyst"),
-    EmployeeDefinition("operations_manager", "intelligence", "planned", "Operations Manager"),
+    # Leadership
+    EmployeeDefinition("business_analyst", "leadership", "planned", "Business Analyst"),
+    EmployeeDefinition("operations_manager", "leadership", "planned", "Operations Manager"),
 ]
