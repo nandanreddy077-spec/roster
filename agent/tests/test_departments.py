@@ -2,7 +2,13 @@
 (blueprint §1). These tests guard its own invariants and — critically — its
 join with the employee registry: the two are linked by a bare string, and if
 they drift, employees silently disappear from every department view."""
-from departments import REGISTRY, Department, department_for_role
+from departments import (
+    REGISTRY,
+    Department,
+    active_departments_for,
+    department_for_role,
+    hireable_departments,
+)
 from employees import REGISTRY as EMPLOYEE_REGISTRY
 
 CANONICAL_ORDER = [
@@ -103,3 +109,72 @@ def test_every_role_key_roles_py_can_emit_resolves_to_a_department():
         assert department_for_role(role_key) is not None, (
             f"roles.ROLE_KEYS can emit {role_key!r}, which resolves to no department"
         )
+
+
+# --- active_departments_for / hireable_departments ---------------------------
+
+
+class FakeEmployee:
+    """departments.py duck-types on .role_key/.status so it never imports
+    db_models — which also means these tests need no database fixture."""
+
+    def __init__(self, role_key, status="active"):
+        self.role_key = role_key
+        self.status = status
+
+
+def test_active_departments_for_returns_the_departments_that_are_staffed():
+    staffed = active_departments_for([
+        FakeEmployee("frontdesk"),
+        FakeEmployee("quote_chaser"),
+    ])
+    assert [d.key for d in staffed] == ["customer_service", "sales"]
+
+
+def test_active_departments_for_returns_display_order_not_input_order():
+    """The dashboard renders these in a fixed, learnable order — it must not
+    depend on the order rows came back from the database."""
+    staffed = active_departments_for([
+        FakeEmployee("quote_chaser"),   # sales
+        FakeEmployee("frontdesk"),      # customer_service
+    ])
+    assert [d.key for d in staffed] == ["customer_service", "sales"]
+
+
+def test_active_departments_for_deduplicates_two_employees_in_one_department():
+    staffed = active_departments_for([
+        FakeEmployee("quote_chaser"),
+        FakeEmployee("lead_qualifier"),
+    ])
+    assert [d.key for d in staffed] == ["sales"]
+
+
+def test_a_fired_employee_does_not_keep_a_department_staffed():
+    assert active_departments_for([FakeEmployee("frontdesk", status="fired")]) == []
+
+
+def test_a_paused_employee_keeps_its_department_staffed():
+    """Paused is 'muted', not 'gone' — the department is still on the roster
+    and must still appear on the dashboard."""
+    staffed = active_departments_for([FakeEmployee("frontdesk", status="paused")])
+    assert [d.key for d in staffed] == ["customer_service"]
+
+
+def test_an_unknown_role_key_is_skipped_rather_than_crashing():
+    """R2 again, at the aggregate level: a business carrying one unrecognized
+    role_key must still render its other departments."""
+    staffed = active_departments_for([
+        FakeEmployee("mystery_role"),
+        FakeEmployee("frontdesk"),
+    ])
+    assert [d.key for d in staffed] == ["customer_service"]
+
+
+def test_active_departments_for_handles_an_empty_roster():
+    assert active_departments_for([]) == []
+
+
+def test_hireable_departments_is_the_six_sellable_ones():
+    keys = [d.key for d in hireable_departments()]
+    assert "leadership" not in keys
+    assert len(keys) == 6

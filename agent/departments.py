@@ -183,3 +183,31 @@ def department_for_role(role_key: str):
     if department_key is None:
         return None
     return _BY_KEY.get(department_key)
+
+
+def active_departments_for(employees) -> List[Department]:
+    """Which departments this business actually has staffed, in display order.
+
+    A department counts as staffed while it has at least one employee that
+    hasn't been fired — `paused` is "muted", not "gone" (db_models.Employee
+    status: active | paused | fired). Unknown role keys are skipped, so one
+    unrecognized row can't hide a business's other departments.
+
+    Takes any iterable of objects with .role_key and .status — duck-typed on
+    purpose, so this module never imports db_models.
+    """
+    staffed = set()
+    for employee in employees:
+        if employee.status == "fired":
+            continue
+        department = department_for_role(employee.role_key)
+        if department is not None:
+            staffed.add(department.key)
+    return [d for d in REGISTRY if d.key in staffed]
+
+
+def hireable_departments() -> List[Department]:
+    """The departments a customer can actually be sold. Leadership is
+    excluded: it's included automatically with any active department and is
+    never hired separately (blueprint §4a)."""
+    return [d for d in REGISTRY if d.hireable]
