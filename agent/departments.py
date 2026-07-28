@@ -19,6 +19,8 @@ just report absence. Voice follows DESIGN.md: warm, blunt, plain, no jargon.
 from dataclasses import dataclass
 from typing import List
 
+from employees import REGISTRY as _EMPLOYEE_REGISTRY
+
 
 @dataclass(frozen=True)
 class Department:
@@ -153,3 +155,31 @@ REGISTRY: List[Department] = [
         hireable=False,
     ),
 ]
+
+
+# roles.ROLE_KEYS predates the employee registry and spells one key
+# differently: "retention" where the registry says "retention_manager". That
+# spelling is already on real Employee rows (portal.py's _hire_employee,
+# db.py's backfill), so this is a mapping over existing data, not a migration
+# to run. ("reviews", the other mismatch, is NOT aliased — it's a real
+# Customer Service employee registered in employees.py, so it resolves
+# natively.) test_departments.py asserts every key roles.py can emit
+# resolves through here.
+_LEGACY_ROLE_KEYS = {
+    "retention": "retention_manager",
+}
+
+_DEPARTMENT_KEY_BY_ROLE = {e.key: e.department for e in _EMPLOYEE_REGISTRY}
+_BY_KEY = {d.key: d for d in REGISTRY}
+
+
+def department_for_role(role_key: str):
+    """The Department an Employee.role_key belongs to, or None if the key
+    isn't one Roster knows. Returns None rather than raising: role keys reach
+    the database from roles.role_key_for()'s slugify fallback and from the
+    founder deploy route, so unknown values are ordinary data, not a bug."""
+    canonical = _LEGACY_ROLE_KEYS.get(role_key, role_key)
+    department_key = _DEPARTMENT_KEY_BY_ROLE.get(canonical)
+    if department_key is None:
+        return None
+    return _BY_KEY.get(department_key)
