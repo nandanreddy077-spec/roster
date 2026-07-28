@@ -19,7 +19,8 @@ from authlib.integrations.starlette_client import OAuthError
 from activation import activate_frontdesk
 from auth import hash_password, verify_password
 from db import engine
-from db_models import Business, Employee, Job, Message
+from db_models import Business, Job, Message
+from deployment import deploy_role
 from google_auth import callback_url, get_oauth, google_enabled
 from locks import conversation_lock
 from notifications import _TEST_THREADS
@@ -47,15 +48,15 @@ PORTAL_TEST_THREAD = "portal-test"
 
 
 def _hire_employee(session: Session, business_id: int, role: str) -> None:
-    """Creates the Employee row for a just-requested role, if it doesn't
-    already exist — the hire must be reflected immediately, not just queued
-    in requested_roster for the next db.py backfill to pick up."""
-    key = role_key_for(role)
-    exists = session.exec(
-        select(Employee).where(Employee.business_id == business_id, Employee.role_key == key)
-    ).first()
-    if not exists:
-        session.add(Employee(business_id=business_id, role_key=key, display_name=role))
+    """Routes through deployment.py so exactly ONE module creates Employee
+    rows. (This whole self-serve hire route is deleted in Phase 7; delegating
+    keeps it correct until then rather than leaving a second writer alive.)"""
+    try:
+        deploy_role(session, business_id, role_key_for(role))
+    except ValueError:
+        # A role the registry doesn't consider deployable. The customer-facing
+        # hire path is retired in Phase 7; until then, don't 500 on it.
+        pass
 
 
 def _display_text(content) -> str:

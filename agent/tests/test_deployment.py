@@ -138,3 +138,50 @@ def test_every_deployable_role_resolves_to_a_department(session):
     for department in REGISTRY:
         for employee in deployable_employees_for(department.key):
             assert department_for_role(employee.key) is not None, employee.key
+
+
+# --- every path now creates rows immediately (I1) -----------------------------
+
+
+def test_activate_frontdesk_creates_the_employee_row_immediately(session):
+    """I1 / audit F1. The second of the two paths that marked a business
+    deployed without creating a row — the dashboard would have shown zero
+    departments until the application restarted."""
+    from activation import activate_frontdesk
+
+    b = _business(session, "wire1@test.io")
+    activate_frontdesk(session, b)
+
+    rows = session.exec(select(Employee).where(Employee.business_id == b.id)).all()
+    assert [r.role_key for r in rows] == ["frontdesk"]
+
+
+def test_frontdesk_live_and_the_employee_row_agree(session):
+    """I14. Two fields encode the same fact; after activation they must not
+    disagree. runner.is_active moves onto the Employee row in Task 4, leaving
+    frontdesk_live as the activation-lifecycle flag the portal redirects on."""
+    from activation import activate_frontdesk
+    from departments import active_departments_for
+
+    b = _business(session, "wire2@test.io")
+    activate_frontdesk(session, b)
+    session.refresh(b)
+
+    employees = session.exec(select(Employee).where(Employee.business_id == b.id)).all()
+    assert b.frontdesk_live is True
+    assert [d.key for d in active_departments_for(employees)] == ["customer_service"]
+
+
+def test_backfill_is_a_no_op_once_deployment_creates_rows(session):
+    """I8. The boot backfill must not double-create what deployment already
+    made, and must not resurrect anything."""
+    from activation import activate_frontdesk
+    from db import _backfill_employees
+
+    b = _business(session, "wire3@test.io")
+    activate_frontdesk(session, b)
+
+    _backfill_employees(session.get_bind())
+
+    rows = session.exec(select(Employee).where(Employee.business_id == b.id)).all()
+    assert len(rows) == 1

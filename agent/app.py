@@ -30,6 +30,7 @@ from starlette.middleware.sessions import SessionMiddleware
 from call_trace import CallTrace
 from channels import get_channel
 from db import DATA_DIR, engine, init_db
+from deployment import deploy_role
 from locks import conversation_lock
 from db_models import (
     AccessRequest, Business, Customer, Employee, Event, Job, Message,
@@ -472,6 +473,11 @@ def deploy_employee(client_id: int, role_key: str = Form(...)):
             client.requested_roster = json.dumps(requested)
             session.add(client)
             session.commit()
+        # The Employee row is the deployment record, created NOW rather than at
+        # the next boot's backfill (audit F1). requested_roster is still written
+        # above until Phase 7 removes it; it is simply no longer what decides
+        # whether an employee is running.
+        deploy_role(session, client_id, role_key)
     return RedirectResponse(f"/clients/{client_id}", status_code=303)
 
 

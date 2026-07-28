@@ -11,6 +11,7 @@ from datetime import datetime
 from sqlmodel import Session
 
 from db_models import Business
+from deployment import deploy_role
 from provisioning import attach_number_to_xai_trunk, buy_twilio_number, register_number_with_xai
 
 
@@ -45,3 +46,12 @@ def activate_frontdesk(session: Session, client: Business) -> None:
     client.activated_at = datetime.utcnow()
     session.add(client)
     session.commit()
+    # The Employee row IS the deployment record (audit F1): without this the
+    # business shows zero departments until the app restarts and the backfill
+    # runs. Best-effort like the provisioning above — activation must always
+    # complete — but loud, because a missing row is invisible otherwise.
+    try:
+        deploy_role(session, client.id, "frontdesk")
+    except Exception as e:
+        print(f"[activation] failed to create frontdesk employee for business "
+              f"{client.id}: {e}", file=sys.stderr)
