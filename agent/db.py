@@ -90,6 +90,9 @@ def _init_db_locked():
     _migrate_add_columns()
     _backfill_customers()
     _backfill_employees()
+    # Order matters: duplicates must be gone before the unique index is built.
+    _dedupe_employees()
+    _migrate_add_indexes()
 
 
 def _migrate_rename_client_to_business():
@@ -205,6 +208,72 @@ def _backfill_employees(engine=None):
                         s.add(Employee(business_id=b.id, role_key=key, display_name=role))
                         have.add(key)
         s.commit()
+
+
+def _dedupe_employees(engine=None) -> list:
+    """Remove duplicate (business_id, role_key) Employee rows, keeping the
+    LOWEST id — the oldest, and the one any historical reference would point
+    at. Returns the ids removed so the migration is auditable rather than
+    silent.
+
+    Deterministic and safe because nothing has ever written Employee.status
+    (there is no pause/resume/fire path anywhere), so no duplicate can carry
+    state that another lacks. Must run BEFORE _migrate_add_indexes: the unique
+    index cannot be created while violations exist.
+    """
+    import sys
+
+    from sqlmodel import Session, select
+
+    from db_models import Employee
+
+    eng = engine if engine is not None else globals()["engine"]
+    removed = []
+    with Session(eng) as s:
+        seen = set()
+        for e in s.exec(select(Employee).order_by(Employee.id)).all():
+            key = (e.business_id, e.role_key)
+            if key in seen:
+                removed.append(e.id)
+                s.delete(e)
+            else:
+                seen.add(key)
+        if removed:
+            s.commit()
+            print(f"[migration] removed {len(removed)} duplicate employee rows: {removed}",
+                  file=sys.stderr)
+    return removed
+
+
+def _migrate_add_indexes(engine=None):
+    """Indexes added to tables that ALREADY exist. SQLModel.create_all() only
+    builds indexes as part of creating a table, so a constraint added to an
+    existing model never reaches an existing database without this (see
+    docs/superpowers/specs/2026-07-29-phase-4-deployment-path-audit.md F2 —
+    verified empirically, not assumed).
+
+    Idempotent via IF NOT EXISTS. Run only after _dedupe_employees.
+    """
+    import sys
+
+    from sqlalchemy import text
+
+    eng = engine if engine is not None else globals()["engine"]
+    statements = (
+        "CREATE UNIQUE INDEX IF NOT EXISTS uq_employee_business_role "
+        "ON employee (business_id, role_key)",
+    )
+    with eng.connect() as conn:
+        for ddl in statements:
+            try:
+                conn.execute(text(ddl))
+                conn.commit()
+            except Exception as e:
+                # A pre-existing violation is the real failure mode here, and it
+                # must be loud: the constraint silently not existing is exactly
+                # the state this migration exists to end.
+                print(f"[migration] FAILED to create index: {ddl} — {e}", file=sys.stderr)
+                conn.rollback()
 
 
 def get_session():

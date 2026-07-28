@@ -179,6 +179,16 @@ class ReferralLead(SQLModel, table=True):
 
 
 class Employee(SQLModel, table=True):
+    __table_args__ = (
+        # Index, NOT UniqueConstraint: a table-level UNIQUE becomes part of
+        # CREATE TABLE under an auto-generated name, so db._migrate_add_indexes'
+        # `CREATE UNIQUE INDEX IF NOT EXISTS uq_employee_business_role` would
+        # then build a SECOND, separately-named object enforcing the same rule.
+        # A named unique Index means fresh databases (create_all) and existing
+        # ones (the DDL migration) converge on exactly one index, one name.
+        Index("uq_employee_business_role", "business_id", "role_key", unique=True),
+    )
+
     id: Optional[int] = Field(default=None, primary_key=True)
     business_id: int = Field(foreign_key="business.id", index=True)
     role_key: str
