@@ -13,7 +13,14 @@ from bookings import book_job
 from db_models import Business, Job, Message
 from engine import AgentEngine, build_system_prompt, merge_consecutive_roles
 from memory import build_customer_context
-from notifications import notify_owner_of_booking
+from notifications import (
+    KIND_JOB_BOOKED,
+    SOURCE_SMS_BOOKING,
+    build_owner_message,
+    is_test_thread,
+    notify_owner_of_booking,
+    record_owner_notification,
+)
 from repositories import get_or_create_customer
 from trial_cap import can_respond, record_usage
 
@@ -115,6 +122,13 @@ def handle_customer_message(
     # re-text. Best-effort; a failed text can't affect the reply or the
     # already-committed job (see notifications.py).
     for job in newly_created:
-        notify_owner_of_booking(client, job)
+        delivered = notify_owner_of_booking(client, job)
+        # Log real bookings only — a dashboard test must not appear in the
+        # owner's notifications feed, exactly as it doesn't get an SMS.
+        if not is_test_thread(job.customer_phone):
+            record_owner_notification(
+                session, client.id, KIND_JOB_BOOKED, SOURCE_SMS_BOOKING,
+                build_owner_message(job, "Frontdesk"), delivered,
+            )
 
     return {"reply": result["reply"], "jobs": captured}

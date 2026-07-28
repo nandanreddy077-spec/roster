@@ -5,7 +5,7 @@ the Notifications page reads (blueprint §4), and the first place a failed
 owner alert is visible at all."""
 from sqlmodel import select
 
-from db_models import OwnerNotification
+from db_models import Business, OwnerNotification
 from notifications import (
     KIND_CALL_DROPPED,
     KIND_ESCALATION,
@@ -92,3 +92,126 @@ def test_is_test_thread_matches_the_threads_that_skip_owner_sms():
     assert is_test_thread("dashboard") is True
     assert is_test_thread("portal-test") is True
     assert is_test_thread("+15125550123") is False
+
+
+# --- the booking paths -------------------------------------------------------
+
+
+class _SpyChannel:
+    def __init__(self):
+        self.sent = []
+
+    def send(self, from_number, to_number, body):
+        self.sent.append((from_number, to_number, body))
+
+
+class _BoomChannel:
+    def send(self, *_a, **_kw):
+        raise RuntimeError("twilio down")
+
+
+class _BookingAgent:
+    def respond(self, client_config, history, tools=None, system_prompt=None, max_iters=None):
+        return {
+            "reply": "You're booked!",
+            "jobs": [{"id": "t1", "input": {
+                "service_type": "AC Repair", "urgency": "same_day", "customer_name": "Sarah",
+            }}],
+            "new_messages": [], "pending_tool_call": None,
+        }
+
+
+def _live_business(session, email):
+    biz = Business(
+        business_name="B", trade="hvac", email=email, frontdesk_live=True,
+        trial_cap_cents=10000, escalation_phone="+15550001111",
+        inbound_number="+15550002222",
+    )
+    session.add(biz)
+    session.commit()
+    session.refresh(biz)
+    return biz
+
+
+def test_sms_booking_records_a_delivered_notification(session, monkeypatch):
+    import notifications
+    import service
+    monkeypatch.setattr(service, "agent", _BookingAgent())
+    monkeypatch.setattr(notifications, "_owner_channel", _SpyChannel())
+    biz = _live_business(session, "log1@test.io")
+
+    service.handle_customer_message(session, biz, "+15557778888", "my AC is dead")
+
+    rows = session.exec(select(OwnerNotification)).all()
+    assert len(rows) == 1
+    assert rows[0].kind == KIND_JOB_BOOKED
+    assert rows[0].source == SOURCE_SMS_BOOKING
+    assert rows[0].business_id == biz.id
+    assert rows[0].delivered is True
+    assert "AC Repair" in rows[0].message
+
+
+def test_voice_booking_records_a_notification_with_the_voice_source(session, monkeypatch):
+    """Same kind as an SMS booking, different origin. Distinguishing the two
+    without parsing `message` is exactly what `source` is for."""
+    import asyncio
+
+    import xai_voice_adapter as adapter
+    monkeypatch.setattr(adapter, "notify_owner_of_booking", lambda *a, **k: True)
+    biz = _live_business(session, "log-voice@test.io")
+
+    asyncio.run(adapter._persist_job(
+        session, biz, "xai-voice:c9", "+15125559999",
+        {"service_type": "Burst pipe", "urgency": "emergency"},
+    ))
+
+    rows = session.exec(select(OwnerNotification)).all()
+    assert len(rows) == 1
+    assert rows[0].kind == KIND_JOB_BOOKED
+    assert rows[0].source == SOURCE_VOICE_BOOKING
+    assert "Burst pipe" in rows[0].message
+
+
+def test_a_failed_owner_sms_still_records_an_undelivered_notification(session, monkeypatch):
+    """H5: the whole reason the log exists. The SMS is gone, but the owner can
+    still find out this job was booked."""
+    import notifications
+    import service
+    monkeypatch.setattr(service, "agent", _BookingAgent())
+    monkeypatch.setattr(notifications, "_owner_channel", _BoomChannel())
+    biz = _live_business(session, "log2@test.io")
+
+    service.handle_customer_message(session, biz, "+15557778888", "my AC is dead")
+
+    rows = session.exec(select(OwnerNotification)).all()
+    assert len(rows) == 1
+    assert rows[0].delivered is False
+
+
+def test_dashboard_test_bookings_are_not_logged(session, monkeypatch):
+    """Mirrors the SMS skip exactly — an owner testing their own AI must not
+    fill their notifications feed with activity that never happened."""
+    import notifications
+    import service
+    monkeypatch.setattr(service, "agent", _BookingAgent())
+    monkeypatch.setattr(notifications, "_owner_channel", _SpyChannel())
+    biz = _live_business(session, "log3@test.io")
+
+    service.handle_customer_message(session, biz, "portal-test", "testing my receptionist")
+
+    assert session.exec(select(OwnerNotification)).all() == []
+
+
+def test_a_repeat_turn_on_the_same_job_does_not_log_twice(session, monkeypatch):
+    """Booking alerts are already deduplicated by book_job's `created` flag —
+    a detail-merge re-runs the turn but must not produce a second row."""
+    import notifications
+    import service
+    monkeypatch.setattr(service, "agent", _BookingAgent())
+    monkeypatch.setattr(notifications, "_owner_channel", _SpyChannel())
+    biz = _live_business(session, "log4@test.io")
+
+    service.handle_customer_message(session, biz, "+15557778888", "my AC is dead")
+    service.handle_customer_message(session, biz, "+15557778888", "it's also leaking")
+
+    assert len(session.exec(select(OwnerNotification)).all()) == 1

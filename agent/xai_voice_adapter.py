@@ -41,7 +41,14 @@ from memory import build_customer_context
 from call_trace import CallTrace
 from db_models import Business, Job, Message
 from engine import LOG_JOB_TOOL, TRANSFER_CALL_TOOL, build_voice_system_prompt
-from notifications import notify_owner_of_booking, notify_owner_of_escalation
+from notifications import (
+    KIND_JOB_BOOKED,
+    SOURCE_VOICE_BOOKING,
+    build_owner_message,
+    notify_owner_of_booking,
+    notify_owner_of_escalation,
+    record_owner_notification,
+)
 
 REALTIME_URL = "wss://api.x.ai/v1/realtime"
 VOICE_THREAD_PREFIX = "xai-voice:"
@@ -142,7 +149,14 @@ async def _persist_job(session: Session, client: Business, thread: str, caller_n
     # send is a blocking HTTP call, and blocking the event loop here would
     # stall every other in-progress call's audio on the same process.
     if created:
-        await asyncio.to_thread(notify_owner_of_booking, client, job)
+        delivered = await asyncio.to_thread(notify_owner_of_booking, client, job)
+        # The log write stays on THIS thread with the session already in
+        # scope: a Session is not thread-safe and must never cross the
+        # to_thread boundary the blocking SMS send goes through.
+        record_owner_notification(
+            session, client.id, KIND_JOB_BOOKED, SOURCE_VOICE_BOOKING,
+            build_owner_message(job, "Frontdesk"), delivered,
+        )
     return job
 
 
