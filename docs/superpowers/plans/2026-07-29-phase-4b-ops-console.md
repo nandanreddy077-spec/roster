@@ -465,6 +465,37 @@ def test_the_legacy_role_key_form_still_works(test_engine, monkeypatch):
             select(Employee).where(Employee.business_id == bid)).all()] == ["quote_chaser"]
 ```
 
+**Plus one end-to-end workflow test (founder request, 2026-07-29)** — this
+protects the actual browser round-trip rather than the route and the template
+separately, and is the real guard on B4's deploy→render ordering:
+
+```python
+def test_deploying_a_department_then_following_the_redirect_shows_it_staffed(
+    test_engine, monkeypatch
+):
+    """The founder's actual workflow, end to end: submit the form, follow the
+    303, and see the result. Route-level and template-level tests both passing
+    would still permit a page that renders stale data after a write — this is
+    what catches that."""
+    monkeypatch.setattr(app_module, "engine", test_engine)
+    with Session(test_engine) as s:
+        bid = _business(s).id
+    client = TestClient(app_module.app, headers=DASH_AUTH)
+
+    posted = client.post(
+        f"/clients/{bid}/employees/deploy",
+        data={"department_key": "customer_service"},
+        follow_redirects=False,
+    )
+    assert posted.status_code == 303
+
+    landed = client.get(posted.headers["location"])
+
+    assert landed.status_code == 200
+    assert "Working: Frontdesk, Reviews" in landed.text
+    assert "Not staffed" not in landed.text.split("Customer Service")[1][:200]
+```
+
 - [ ] **Step 2–4: Confirm failure, then extend the route**
 
 `deploy_employee` gains an optional `department_key` form field. When present
@@ -538,7 +569,7 @@ Expected after: `431 passed`.
 
 ---
 
-## Task 6 *(recommended, outside stated scope — founder decision)*: make `provision-number` idempotent
+## Task 6 *(approved — kept LAST so it stays independently reviewable)*: make `provision-number` idempotent
 
 **Why it's here:** B5. `/clients/{id}/provision-number` always buys a fresh
 Twilio number. PRG protects against refresh-after-response but **not** against
@@ -550,15 +581,16 @@ action in the founder workflow and it is pre-existing.
 (redirecting with an explanatory message rather than buying), and disable the
 submit button on click. Test: a second POST buys nothing and reports why.
 
-**Decision needed:** include in Phase 4b, or split into its own change? It is
-unrelated to departments, which argues for separate; it is three lines and
-prevents real money loss, which argues for now.
+**Approved (founder, 2026-07-29):** included in Phase 4b, as the **final
+commit of the phase**, so that although it ships here it remains independently
+reviewable and independently revertable — it is unrelated to departments and
+should not be buried inside a department-shaped diff.
 
 ---
 
 ## Phase 4b Acceptance Criteria
 
-1. **Full suite green** at the task's stated count (431 with Task 6 excluded).
+1. **Full suite green** at the task's stated count (433 with Task 6 included).
 2. **No customer-facing change** — `git diff` on `portal.py`, `dashboard.html`, and the customer templates is empty.
 3. **No route constructs an `Employee`** — `deployment.py` remains the only writer.
 4. **Every founder mutation is idempotent to the UI** — a double-submit of deploy, pipeline-stage, and action-interest each leaves the same end state with no error page.
