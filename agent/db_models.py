@@ -202,6 +202,30 @@ class AccessRequest(SQLModel, table=True):
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
 
+class OwnerNotification(SQLModel, table=True):
+    """A durable record of an owner-facing alert. Every alert is also sent as
+    an SMS (see notifications.py) — this table is what the dashboard's
+    Notifications page reads, and the only place a FAILED send is visible at
+    all (`delivered=False`); today a failed owner text is swallowed by a bare
+    `except` and is invisible everywhere.
+
+    Deliberately separate from the `event` table: nothing in the live
+    SMS/voice path publishes through eventbus.py today, and wiring the bus
+    into that path is a far larger change than a notifications list needs.
+    """
+    id: Optional[int] = Field(default=None, primary_key=True)
+    business_id: int = Field(foreign_key="business.id", index=True)
+    kind: str  # notifications.KIND_* — WHAT happened: job_booked | escalation | call_dropped
+    # notifications.SOURCE_* — WHERE it came from: sms_booking | voice_booking |
+    # alert_owner | call_dropped. Operational, not customer-facing: lets us tell
+    # an SMS booking from a voice one (both job_booked) without parsing `message`.
+    source: str = ""
+    message: str  # the exact text the owner was sent, so the log never drifts from the SMS
+    delivered: bool = True  # False when the SMS send failed or no escalation phone is set
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    read_at: Optional[datetime] = None  # no producer until the Notifications page ships
+
+
 class Event(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     business_id: int = Field(foreign_key="business.id", index=True)
