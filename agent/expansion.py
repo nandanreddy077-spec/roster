@@ -70,3 +70,47 @@ def record_interest(session, business_id: int, department_key: str) -> Departmen
         return winner
     session.refresh(row)
     return row
+
+
+def open_interests_for(session, business_id: int) -> List[DepartmentInterest]:
+    """This business's unactioned expansion requests, oldest first.
+
+    Oldest-first because this is a work queue for ops (blueprint §10a's
+    "ongoing customer management" stage) — the request waiting longest is the
+    one to handle next. Scoped to one business_id: business isolation is the
+    security boundary everywhere in Roster (platform PRD §12).
+    """
+    return list(session.exec(
+        select(DepartmentInterest)
+        .where(
+            DepartmentInterest.business_id == business_id,
+            DepartmentInterest.actioned_at.is_(None),
+        )
+        .order_by(DepartmentInterest.id)
+    ).all())
+
+
+def mark_actioned(session, interest_id: int) -> Optional[DepartmentInterest]:
+    """Close one expansion request — ops has handled it, whether that meant
+    deploying the department or declining.
+
+    Handled is NOT deployed: this sets a timestamp and nothing else. It
+    creates no Employee and changes no department's live status; deployment is
+    a separate founder action (Phase 4). Returns the row, or None if there is
+    no such request.
+
+    Idempotent: re-closing an already-closed request keeps the original
+    timestamp, so a double-click in the admin UI can't rewrite history.
+
+    Closing also frees the partial unique index, which is what lets the same
+    customer ask for that department again later.
+    """
+    row = session.get(DepartmentInterest, interest_id)
+    if row is None:
+        return None
+    if row.actioned_at is None:
+        row.actioned_at = datetime.utcnow()
+        session.add(row)
+        session.commit()
+        session.refresh(row)
+    return row

@@ -11,7 +11,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlmodel import select
 
 from db_models import Business, DepartmentInterest
-from expansion import record_interest
+from expansion import mark_actioned, open_interests_for, record_interest
 
 
 def test_a_new_interest_starts_open(session):
@@ -160,3 +160,100 @@ def test_recording_interest_deploys_nothing(session):
     assert session.exec(
         select(Employee).where(Employee.business_id == biz.id)
     ).all() == []
+
+
+# --- the ops seam Phase 4 consumes -------------------------------------------
+
+
+def test_open_interests_are_oldest_first(session):
+    """A work queue, not a feed: ops should handle the request that has been
+    waiting longest. (Deliberately the opposite of recent_notifications,
+    which is newest-first because it's something to read, not to work.)"""
+    first = record_interest(session, 1, "finance")
+    second = record_interest(session, 1, "marketing")
+
+    assert [i.id for i in open_interests_for(session, 1)] == [first.id, second.id]
+
+
+def test_open_interests_never_leak_another_business(session):
+    record_interest(session, 1, "finance")
+    record_interest(session, 2, "marketing")
+
+    assert [i.department_key for i in open_interests_for(session, 1)] == ["finance"]
+
+
+def test_open_interests_excludes_actioned_requests(session):
+    handled = record_interest(session, 1, "finance")
+    record_interest(session, 1, "marketing")
+
+    mark_actioned(session, handled.id)
+
+    assert [i.department_key for i in open_interests_for(session, 1)] == ["marketing"]
+
+
+def test_mark_actioned_sets_the_timestamp(session):
+    row = record_interest(session, 1, "finance")
+
+    actioned = mark_actioned(session, row.id)
+
+    assert actioned.actioned_at is not None
+
+
+def test_mark_actioned_is_idempotent(session):
+    """Ops double-clicking 'handled' must not move the timestamp or error."""
+    row = record_interest(session, 1, "finance")
+
+    first = mark_actioned(session, row.id)
+    when = first.actioned_at
+    second = mark_actioned(session, row.id)
+
+    assert second.actioned_at == when
+
+
+def test_mark_actioned_returns_none_for_an_unknown_id(session):
+    assert mark_actioned(session, 99999) is None
+
+
+def test_a_customer_can_ask_again_after_ops_actioned_the_request(session):
+    """End-to-end of the partial index's purpose: declined in March, asks
+    again in June, and ops sees a NEW request rather than a stale one."""
+    first = record_interest(session, 1, "finance")
+    mark_actioned(session, first.id)
+
+    second = record_interest(session, 1, "finance")
+
+    assert second.id != first.id
+    assert [i.id for i in open_interests_for(session, 1)] == [second.id]
+
+
+def test_actioning_a_request_deploys_nothing(session):
+    """THE lifecycle invariant (founder, 2026-07-29).
+
+    Actioning means "operations handled the request" — NOT "the department
+    was deployed". Deployment is a separate operation that arrives in Phase 4
+    and produces Employee rows. Walking the full lifecycle here
+    (record -> action -> still nothing deployed) is what stops a future edit
+    from making mark_actioned() a shortcut that provisions, which would
+    recreate the requested_roster conflation (H1) one level up.
+
+    Asserts through Phase 1's own helper, so the customer-visible answer —
+    "which departments does this business have?" — is what's being checked,
+    not merely the absence of rows."""
+    from db_models import Employee
+    from departments import active_departments_for
+
+    biz = Business(business_name="B", trade="hvac", email="lifecycle@test.io")
+    session.add(biz)
+    session.commit()
+    session.refresh(biz)
+
+    interest = record_interest(session, biz.id, "finance")
+    mark_actioned(session, interest.id)
+    session.refresh(biz)
+
+    employees = session.exec(
+        select(Employee).where(Employee.business_id == biz.id)
+    ).all()
+    assert employees == []
+    assert active_departments_for(employees) == []
+    assert biz.requested_roster is None
