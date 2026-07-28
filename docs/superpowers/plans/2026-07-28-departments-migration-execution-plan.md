@@ -55,9 +55,13 @@ phase in this plan.
   through the internal ops platform. **No second path may exist — including
   a founder-only or internal-only one.** Every engineering decision
   optimizes for the final product, never for preserving a legacy workflow.
-- All database migrations are additive only, via the existing
-  `_migrate_add_columns` mechanism in `db.py` — no destructive migration
-  anywhere in this plan.
+- Database migrations are additive via the existing `_migrate_add_columns`
+  mechanism in `db.py`, **with exactly one audited exception**: Phase 4a's
+  duplicate-`Employee` de-duplication deletes rows, and its unique index needs
+  real DDL because `create_all()` will not add an index to an existing table
+  (audit F2, verified empirically). That exception is deliberately isolated
+  into its own task and its own commit, is deterministic, and logs every row
+  it removes. No other destructive migration exists anywhere in this plan.
 - Any phase touching visual/template design must follow `DESIGN.md`, per
   `CLAUDE.md`'s standing project rule.
 - Full pytest suite must stay green at the end of every phase — this is
@@ -74,41 +78,62 @@ phase in this plan.
 | 1 | Department code registry | Low | — | 0, 2 |
 | 2 | Owner notification log | Low | — | 0, 1, 3 |
 | 3 | Expansion-interest capture | Low | 1 | 2 |
-| 4 | Ops console: department grouping + pipeline stage | Medium | 1, 3 | 5 |
-| 5 | New customer dashboard (built unlinked) | High | 1, 2, 3 | 4 |
-| 6 | Cutover: dashboard live, self-serve retired | Medium | 4, 5 | — |
+| **4a** | **Deployment correctness (migration bug fix, no UI)** | Medium | 1, 2 | 5 |
+| **4b** | **Ops console: department grouping + pipeline stage** | Medium | 4a, 3 | 5 |
+| 5 | New customer dashboard (built unlinked) | High | 1, 2, 3, **4a** | 4b |
+| 6 | Cutover: dashboard live, self-serve retired | Medium | 4b, 5 | — |
 | 7 | Remove legacy code | Low | 6 | — |
 | 8 | Documentation closeout | Low | 7 | — |
+
+**Why 4 was split (founder, 2026-07-29):** the
+`docs/superpowers/specs/2026-07-29-phase-4-deployment-path-audit.md` audit
+found that the original Phase 4 bundled **migration bug fixes** (correctness
+on existing behavior — `Employee` rows created only at boot, no duplicate
+constraint, `runner.is_active` about to break, an incomplete delete cascade)
+with **new product surface** (the department-grouped ops console). Those have
+different risk profiles and different review needs, so the riskiest work —
+stored-data migration and engine behavior — now lands in **4a**, a change with
+no UI in it to distract a reviewer. 4b then builds on a foundation that is
+already correct.
+
+**Phase 5 now depends on 4a**, not on 4b: the customer dashboard reads
+`Employee` rows via `active_departments_for()`, and until 4a lands those rows
+only appear after an application restart.
 
 ---
 
 ## Dependency Graph
 
 ```
-Phase 0 (docs) ─────────────────────────────────────────────────────► (independent, anytime)
+Phase 0 (docs) ──────────────────────────────────────────────────► (independent, anytime)
 
-Phase 1 (registry) ──┬──► Phase 3 (interest) ──┬──► Phase 4 (ops console) ──┐
-                      │                          │                          │
-Phase 2 (notif log) ──┴──────────────────────────┴──► Phase 5 (dashboard) ──┤
-                                                                             ▼
-                                                                        Phase 6 (cutover)
-                                                                             │
-                                                                             ▼
-                                                                        Phase 7 (delete legacy)
-                                                                             │
-                                                                             ▼
-                                                                        Phase 8 (docs closeout)
+Phase 1 (registry) ──┬──► Phase 3 (interest) ─────────────┐
+                     │                                     │
+                     ├──► Phase 4a (deployment ────┬───────┴──► Phase 4b (ops console) ──┐
+                     │     correctness, NO UI)     │                                      │
+Phase 2 (notif log) ─┴─────────────────────────────┴──► Phase 5 (dashboard, unlinked) ────┤
+                                                                                           ▼
+                                                                                    Phase 6 (cutover)
+                                                                                           │
+                                                                                           ▼
+                                                                                    Phase 7 (delete legacy)
+                                                                                           │
+                                                                                           ▼
+                                                                                    Phase 8 (docs closeout)
 ```
 
 **Parallel tracks available to an engineering team:**
 - Track A: Phase 1 → Phase 3 (registry, then the table that validates against it)
 - Track B: Phase 2 (independent from the moment work starts)
-- Once Phases 1–3 are all merged: Phase 4 and Phase 5 can be built by two
-  different engineers simultaneously — they touch disjoint files (`app.py`
-  + `client_detail.html` vs. `portal.py` + new `dashboard_v2/` templates)
-  and serve different consumers (founder vs. customer).
-- Phases 6, 7, 8 are strictly sequential — each is a cutover/cleanup step
-  that must observe the prior one's outcome before proceeding.
+- **Phase 4a needs only Phases 1 and 2** (the registry to validate role keys
+  against, and the notification log to record a deployment in). It does **not**
+  wait for Phase 3.
+- Once 4a is merged: **Phase 4b and Phase 5** can be built simultaneously by
+  two engineers — disjoint files (`app.py` + `client_detail.html` vs.
+  `portal.py` + new `dashboard_v2/` templates), disjoint consumers (founder
+  vs. customer), both reading the same now-correct deployment model.
+- Phases 6, 7, 8 are strictly sequential — each is a cutover/cleanup step that
+  must observe the prior one's outcome before proceeding.
 
 ---
 
@@ -358,114 +383,110 @@ request must not create two open rows.
 
 ---
 
-> **⚠️ Re-audited 2026-07-29** — see
-> `docs/superpowers/specs/2026-07-29-phase-4-deployment-path-audit.md` for the
-> full trace of every `Employee` writer, the 14 invariants Phase 4 must
-> preserve, and the empirical verification that `create_all()` will **not**
-> add an index to an existing table. Six pieces of migration work were added
-> (§5 of that audit), and it **recommends splitting this phase into 4a
-> (deployment correctness, no UI) and 4b (the ops console)** — pending founder
-> decision. The scope below is the un-split version.
+## Phase 4a — Deployment Correctness (migration bug fix, no UI)
 
-## Phase 4 — Ops Console: Department Grouping + Pipeline Stage
+**Objective:** make `Employee` rows a trustworthy record of what is actually
+deployed, before any screen renders from them. Pure correctness work on
+existing behavior — **no new customer or founder UI.**
 
-**Objective:** Build the internal tooling half of the blueprint's §10a —
-group each business's employees by department in the founder-admin view,
-and add the lead → discovery → provisioning → QA → go-live → ongoing-
-management pipeline stage that the blueprint's Contact Us → Internal
-Onboarding journey (§3) depends on.
+**Why this order:** Phases 4b and 5 both read `Employee` rows through
+`active_departments_for()`. Until this phase lands, those rows only appear
+after an application restart (audit F1), duplicates are possible (F3), and
+nothing prevents deploying an employee with no engine (F4). Building UI on
+that foundation would bake the defects into two more surfaces.
 
-**Why this order:** Depends on Phase 1 (grouping helper) and Phase 3 (list
-of open `DepartmentInterest` rows to surface on the business detail page).
-Must land before Phase 6 (cutover) because retiring self-serve onboarding
-without a working founder-side provisioning path first would leave no way
-to onboard anyone. Can be built in parallel with Phase 5 — disjoint files,
-disjoint audience (founder vs. customer).
+**Grounding:** `docs/superpowers/specs/2026-07-29-phase-4-deployment-path-audit.md`
+— every `Employee` writer/reader/deleter, and the 14 invariants (I1–I14).
+
+**Goals (founder, 2026-07-29):**
+- Every deployment path creates `Employee` rows **immediately**.
+- Duplicate `Employee` rows become **impossible** (database-enforced).
+- `runner.is_active()` migrates to `Employee` rows with **no behavioural regression**.
+- The delete cascade is **complete**.
+- Deployment is **idempotent and safely re-runnable**.
+- **Notification ordering** is preserved (rows commit before the alert).
+- Every invariant I1–I14 is **satisfied or explicitly deferred**, each with a regression test.
 
 **Files affected:**
-- Modify: `agent/db_models.py` — add `Business.pipeline_stage` column
-  (`str`, default `"lead"`; values: `lead | discovery | provisioning | qa |
-  live | managed`). Existing seeded/test businesses with `frontdesk_live ==
-  True` are backfilled to `"live"` on migration so nothing existing appears
-  stuck at `"lead"`.
-- Modify: `agent/app.py` —
-  - `/clients` and `/clients/{id}` now group employees by department (via
-    Phase 1's `active_departments_for`) and list open `DepartmentInterest`
-    rows for that business.
-  - `/clients/{id}/employees/deploy` gains an additional accepted input,
-    `department_key` — deploying by department activates every role in it
-    that isn't already active. The existing `role_key`-based call remains
-    valid and unchanged (backward-compatible, additive parameter — this is
-    the plan's one deliberate temporary compatibility layer at the ops
-    layer; see the consolidated list below).
-  - New route: `POST /clients/{id}/pipeline-stage` — advances a business's
-    stage; rejects invalid backward transitions unless explicitly
-    overridden.
-  - `/clients/new` becomes the **single business-creation path in the entire
-    product** (per the one-onboarding-flow constraint — `/signup` is retired
-    outright in Phase 7 with no founder-only replacement). It must therefore
-    capture everything the retired self-serve wizard captured, plus the
-    department(s) the discovery call recommended. This is a hard
-    prerequisite for Phase 6: the moment self-serve closes, this is the only
-    door left.
-  - ⚠️ **`/clients/{id}/employees/deploy` must create `Employee` rows
-    directly** *(found during the Phase 3 audit, 2026-07-29)*. It currently
-    only appends to `requested_roster` and stops — unlike `portal.py`'s
-    `_hire_employee`, it never inserts an `Employee`. Rows appear solely via
-    `db.py:_backfill_employees` on the next boot, so a founder-deployed
-    business would show **zero departments** on its dashboard until the
-    process restarts, because Phase 1's `active_departments_for()` reads
-    `Employee` rows. Phase 5's dashboard depends on this fix.
-  - Surface open expansion requests via Phase 3's
-    `expansion.open_interests_for()`, and close them with
-    `expansion.mark_actioned()` once handled.
-- Modify: `agent/templates/client_detail.html` — department-grouped
-  employee display; pipeline-stage control; open `DepartmentInterest` list.
-- Modify: `agent/templates/new_client.html` — department selection at
-  creation; parity with everything the old onboarding wizard collected.
-- Modify: `agent/templates/clients.html` — list view groups/filters by
-  pipeline stage.
-- Create: `agent/tests/test_pipeline_stage.py`.
+- Create: `agent/deployment.py` — the single deployment path.
+- Modify: `agent/db_models.py` — declare the `employee(business_id, role_key)` unique constraint (for fresh databases).
+- Modify: `agent/db.py` — new index migration: detect duplicates → normalize deterministically → `CREATE UNIQUE INDEX IF NOT EXISTS` (audit F2 — `create_all` will **not** add an index to an existing table; verified empirically).
+- Modify: `agent/activation.py` — `activate_frontdesk` creates the `frontdesk` row (F1).
+- Modify: `agent/app.py` — the deploy route creates rows; delete cascade gains `DepartmentInterest` + `OwnerNotification` (F7).
+- Modify: `agent/portal.py` — `_hire_employee` routes through `deployment.py` (one writer, not three).
+- Modify: `agent/runner.py` — `is_active()` reads `Employee` rows (F6).
+- Modify: `agent/notifications.py` — `KIND_DEPARTMENT_DEPLOYED` / `SOURCE_DEPLOYMENT`.
+- Modify: `agent/departments.py` — expose `canonical_role_key()` and `deployable_employees_for()`.
 
-**What changes:** Founder-admin templates; the deploy route's accepted
-input shape (additively).
+**What stays unchanged:** every template, every webhook, `engine.py`,
+`service.py`, the channel adapters, and the recovery/referral engines.
 
-**What stays unchanged:** Every webhook, `portal.py`, every customer-facing
-route, the HTTP-Basic founder-auth model.
+**Dependencies:** Phases 1 and 2. **Not** Phase 3.
 
-**Dependencies:** Phases 1, 3.
+**Risks:** **Highest of any phase so far** — it is the first to touch stored
+data (de-duplication) and engine behavior (`is_active`). Mitigated by: the
+de-duplication being deterministic and logged, the index migration being its
+own task and its own commit, and `is_active` having explicit before/after
+parity tests. `test_runner.py` is the one place where **pre-existing tests are
+deliberately modified** — its assertions encode the `requested_roster`
+behavior being migrated away from.
 
-**Risks:** Medium — first phase to touch a route real founder workflow
-depends on today (`/clients/{id}/employees/deploy`). Mitigated by keeping
-the existing call shape valid rather than replacing it, and by zero real
-paying customers today (`CUSTOMER.md`) lowering the cost of a mistake here
-to "founder inconvenience," not "customer outage."
+**Required tests:** one per invariant — I1 immediate creation, I2 idempotent
+deployment, I3 duplicate prevention under concurrency, I5 `planned` employees
+cannot deploy, I6 `is_active` parity, I7 delete cascade, I9 notification
+ordering, I10 recovery by re-running, I12 business isolation, I14 frontdesk
+consistency.
 
-**Required tests:**
-- The department-grouping helper renders every active employee under the
-  correct department for a seeded multi-department test business.
-- Deploying by `department_key` activates every role belonging to that
-  department that wasn't already active.
-- Deploying by legacy `role_key` still works exactly as before (regression
-  test against existing `test_employee_deploy.py` behavior).
-- Pipeline-stage transitions reject an invalid skip/backward move (e.g.
-  `live → lead`) without an explicit override flag; accept the documented
-  forward sequence.
-- `/clients/new` creates a business carrying every field the retired
-  self-serve wizard collected (business name, trade, services, hours,
-  pricing/FAQ, escalation phone, answer mode) — a field-by-field parity
-  test, since after Phase 7 there is no other way to create a business and a
-  silently-dropped field becomes an unprovisionable customer.
-- Existing `test_provisioning.py`, `test_employee_deploy.py` pass
-  unmodified.
-
-**Completion criteria:** Full suite green; a founder can manually **create**
-a business via `/clients/new` and walk it through every pipeline stage in
-the admin UI end to end, with a department deployed, without touching
-`/signup` or `/onboarding/*` at any point.
+**Completion criteria:** full suite green; every invariant either has a
+passing regression test or a written deferral; `activate_frontdesk` and the
+deploy route both produce queryable `Employee` rows within the same request.
 
 **Complexity:** Medium.
 
+---
+
+## Phase 4b — Ops Console: Department Grouping + Pipeline Stage
+
+**Objective:** the founder-facing half of blueprint §10a — group each
+business's employees by department, add the lead → discovery → provisioning →
+QA → go-live → ongoing-management pipeline stage, surface expansion requests,
+and deploy **by department**.
+
+**Why this order:** it is the first consumer of Phase 4a's corrected
+deployment model and Phase 3's expansion requests. Must land before Phase 6,
+because retiring self-serve onboarding without a working founder-side
+provisioning path would leave no way to onboard anyone.
+
+**Files affected:**
+- Modify: `agent/db_models.py` — add `Business.pipeline_stage` (`str`, default `"lead"`; `lead | discovery | provisioning | qa | live | managed`), backfilled to `"live"` for existing `frontdesk_live` businesses.
+- Modify: `agent/app.py` —
+  - `/clients` and `/clients/{id}` group employees by department via `active_departments_for`, and list open `DepartmentInterest` rows via `expansion.open_interests_for()`.
+  - `/clients/{id}/employees/deploy` accepts `department_key` as well as `role_key`, deploying every deployable role in that department through Phase 4a's single path. It must **refuse, visibly**, to deploy a department with no deployable employees (audit F4 — Operations, Finance and Marketing have none today).
+  - New: `POST /clients/{id}/pipeline-stage`; `POST /clients/{id}/interests/{id}/actioned` (calls `expansion.mark_actioned`).
+  - `/clients/new` becomes the **single business-creation path in the entire product** (`/signup` is retired outright in Phase 7 with no founder-only replacement), so it must capture everything the retired wizard captured plus the recommended department(s). Hard prerequisite for Phase 6.
+- Modify: `agent/templates/client_detail.html`, `new_client.html`, `clients.html`.
+
+**What stays unchanged:** every webhook, `portal.py`, every customer-facing
+route, the HTTP-Basic founder-auth model.
+
+**Dependencies:** Phase 4a (deployment model) and Phase 3 (expansion requests).
+
+**Risks:** Medium — touches the route the founder's real workflow depends on.
+Mitigated by 4a having already made deployment correct and idempotent, and by
+zero paying customers today lowering the cost of a mistake to founder
+inconvenience.
+
+**Required tests:** department grouping renders correctly for a seeded
+multi-department business; deploy-by-department creates every deployable role
+and skips `planned` ones; a department with no deployable employees is
+refused; pipeline transitions reject invalid moves; `/clients/new` field
+parity with the retired wizard; open interests appear and can be actioned.
+
+**Completion criteria:** full suite green; a founder can create a business via
+`/clients/new`, walk it through every pipeline stage, deploy a department, and
+action an expansion request — without touching `/signup` or `/onboarding/*`.
+
+**Complexity:** Medium.
 ---
 
 ## Phase 5 — New Customer Dashboard, Built Unlinked
