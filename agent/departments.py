@@ -185,6 +185,13 @@ def department_for_role(role_key: str):
     return _BY_KEY.get(department_key)
 
 
+def get_department(key: str):
+    """The Department with this key, or None. The public lookup for callers
+    validating a department key that arrived from outside the system (see
+    expansion.record_interest)."""
+    return _BY_KEY.get(key)
+
+
 def active_departments_for(employees) -> List[Department]:
     """Which departments this business actually has staffed, in display order.
 
