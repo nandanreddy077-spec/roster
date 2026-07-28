@@ -31,7 +31,7 @@ from call_trace import CallTrace
 from channels import get_channel
 import departments
 from db import DATA_DIR, engine, init_db
-from deployment import deploy_role
+from deployment import deploy_department, deploy_role
 from locks import conversation_lock
 from db_models import (
     AccessRequest, Business, Customer, DepartmentInterest, Employee, Event, Job, Message,
@@ -529,27 +529,51 @@ def complete_job(client_id: int, job_id: int):
 
 
 @app.post("/clients/{client_id}/employees/deploy")
-def deploy_employee(client_id: int, role_key: str = Form(...)):
+def deploy_employee(
+    client_id: int,
+    department_key: str = Form(""),
+    role_key: str = Form(""),
+):
     """Founder-admin action: the only place an employee gets deployed for a
     business (platform PRD §11a — Founder Admin configures, Customer Portal
-    only reflects). Reuses the existing requested_roster JSON list — the
-    same mechanism the customer-facing 'Discuss Your Next AI Hire' prompt
-    queues into — so a role deployed here is immediately what runner.is_active
-    checks against. No schema change."""
+    only reflects).
+
+    Takes EITHER a `department_key` (the founder-facing unit, blueprint §1) or
+    the older single `role_key`. Both go through deployment.py, so both are
+    idempotent: a double-submit or a stale re-post creates only what's missing
+    and reaches the same end state.
+
+    A department with nothing deployable raises, and that surfaces as a message
+    on the page via ?deploy_error= — the same mechanism provision-number
+    already uses — never as a 500.
+    """
+    error = None
     with Session(engine) as session:
-        client = session.get(Business, client_id)
-        requested = json.loads(client.requested_roster) if client.requested_roster else []
-        if role_key not in requested:
-            requested.append(role_key)
-            client.requested_roster = json.dumps(requested)
-            session.add(client)
-            session.commit()
-        # The Employee row is the deployment record, created NOW rather than at
-        # the next boot's backfill (audit F1). requested_roster is still written
-        # above until Phase 7 removes it; it is simply no longer what decides
-        # whether an employee is running.
-        deploy_role(session, client_id, role_key)
-    return RedirectResponse(f"/clients/{client_id}", status_code=303)
+        try:
+            if department_key:
+                deploy_department(session, client_id, department_key)
+            elif role_key:
+                client = session.get(Business, client_id)
+                requested = json.loads(client.requested_roster) if client.requested_roster else []
+                if role_key not in requested:
+                    requested.append(role_key)
+                    client.requested_roster = json.dumps(requested)
+                    session.add(client)
+                    session.commit()
+                # The Employee row is the deployment record, created NOW rather
+                # than at the next boot's backfill (audit F1). requested_roster
+                # is still written above until Phase 7 removes it; it is simply
+                # no longer what decides whether an employee is running.
+                deploy_role(session, client_id, role_key)
+        except ValueError as e:
+            error = str(e)
+
+    redirect_url = f"/clients/{client_id}"
+    if error:
+        from urllib.parse import quote
+
+        redirect_url += f"?deploy_error={quote(error)}"
+    return RedirectResponse(redirect_url, status_code=303)
 
 
 @app.post("/clients/{client_id}/delete")

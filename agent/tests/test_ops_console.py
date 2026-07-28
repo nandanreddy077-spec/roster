@@ -110,3 +110,97 @@ def test_the_clients_list_does_not_query_employees_per_business(test_engine, mon
         f"expected ONE grouped employee query, got {len(employee_queries)} "
         "— this is an N+1 over the client list"
     )
+
+
+# --- deploy by department ------------------------------------------------------
+
+
+def _post_deploy(bid, **data):
+    return TestClient(app_module.app, headers=DASH_AUTH).post(
+        f"/clients/{bid}/employees/deploy", data=data, follow_redirects=False
+    )
+
+
+def test_deploying_a_department_creates_every_deployable_role(test_engine, monkeypatch):
+    monkeypatch.setattr(app_module, "engine", test_engine)
+    with Session(test_engine) as s:
+        bid = _business(s).id
+
+    r = _post_deploy(bid, department_key="customer_service")
+
+    assert r.status_code == 303
+    with Session(test_engine) as s:
+        keys = {e.role_key for e in s.exec(
+            select(Employee).where(Employee.business_id == bid)).all()}
+        assert keys == {"frontdesk", "reviews"}
+
+
+def test_deploying_the_same_department_twice_is_a_no_op(test_engine, monkeypatch):
+    """B9: a double-submit must reach the same end state, not error and not
+    duplicate."""
+    monkeypatch.setattr(app_module, "engine", test_engine)
+    with Session(test_engine) as s:
+        bid = _business(s).id
+
+    first = _post_deploy(bid, department_key="customer_service")
+    second = _post_deploy(bid, department_key="customer_service")
+
+    assert first.status_code == 303 and second.status_code == 303
+    with Session(test_engine) as s:
+        assert len(s.exec(select(Employee).where(Employee.business_id == bid)).all()) == 2
+
+
+def test_deploying_a_department_with_nothing_deployable_does_not_500(test_engine, monkeypatch):
+    """B10: deploy_department raises for these. The route must surface it as a
+    message on the page, never as a stack trace."""
+    monkeypatch.setattr(app_module, "engine", test_engine)
+    with Session(test_engine) as s:
+        bid = _business(s).id
+
+    r = _post_deploy(bid, department_key="operations")
+
+    assert r.status_code == 303
+    assert "deploy_error" in r.headers["location"]
+    with Session(test_engine) as s:
+        assert s.exec(select(Employee).where(Employee.business_id == bid)).all() == []
+
+
+def test_the_legacy_role_key_form_still_works(test_engine, monkeypatch):
+    """role_key predates this and is still how a single employee is deployed;
+    it must keep working (test_employee_deploy.py covers it too)."""
+    monkeypatch.setattr(app_module, "engine", test_engine)
+    with Session(test_engine) as s:
+        bid = _business(s).id
+
+    _post_deploy(bid, role_key="quote_chaser")
+
+    with Session(test_engine) as s:
+        assert [e.role_key for e in s.exec(
+            select(Employee).where(Employee.business_id == bid)).all()] == ["quote_chaser"]
+
+
+def test_deploying_a_department_then_following_the_redirect_shows_it_staffed(
+    test_engine, monkeypatch
+):
+    """The founder's actual workflow, end to end: submit the form, follow the
+    303, and see the result. Route-level and template-level tests both passing
+    would still permit a page that renders stale data after a write — this is
+    what catches that."""
+    monkeypatch.setattr(app_module, "engine", test_engine)
+    with Session(test_engine) as s:
+        bid = _business(s).id
+    client = TestClient(app_module.app, headers=DASH_AUTH)
+
+    posted = client.post(
+        f"/clients/{bid}/employees/deploy",
+        data={"department_key": "customer_service"},
+        follow_redirects=False,
+    )
+    assert posted.status_code == 303
+
+    landed = client.get(posted.headers["location"])
+
+    assert landed.status_code == 200
+    assert "Working: Frontdesk, Reviews" in landed.text
+    # and the deploy affordance is gone for that department, not offered again
+    assert "Complete deployment" not in landed.text
