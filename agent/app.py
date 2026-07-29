@@ -343,7 +343,13 @@ def request_access_thanks(request: Request):
 
 @app.get("/clients/new")
 def new_client_form(request: Request):
-    return templates.TemplateResponse(request, "new_client.html", {})
+    return templates.TemplateResponse(
+        request, "new_client.html",
+        {"deployable_departments": [
+            d for d in departments.hireable_departments()
+            if departments.deployable_employees_for(d.key)
+        ]},
+    )
 
 
 @app.post("/clients/new")
@@ -356,7 +362,17 @@ def create_client(
     escalation_phone: str = Form(...),
     answer_mode: str = Form("backup"),
     inbound_number: str = Form(""),
+    business_phone: str = Form(""),
+    department_key: str = Form(""),
 ):
+    """The single business-creation path in the product once Phase 7 retires
+    /signup — so it must capture everything the retired onboarding wizard
+    collected, plus the department the discovery call recommended.
+
+    A department that can't be staffed does NOT lose the business: the
+    business is the valuable thing on this form, and the deploy error is
+    reported on its page instead.
+    """
     service_list = [s.strip() for s in services.split(",") if s.strip()]
     client = Business(
         business_name=business_name,
@@ -367,12 +383,29 @@ def create_client(
         escalation_phone=escalation_phone,
         answer_mode=answer_mode,
         inbound_number=inbound_number.strip() or None,
+        business_phone=business_phone.strip(),
     )
+    error = None
     with Session(engine) as session:
         session.add(client)
         session.commit()
         session.refresh(client)
-    return RedirectResponse(f"/clients/{client.id}", status_code=303)
+        # Read the id BEFORE deploying: deploy_role commits, which expires
+        # every instance in this session, and `client` is detached once the
+        # block exits — touching client.id afterwards would raise.
+        client_id = client.id
+        if department_key:
+            try:
+                deploy_department(session, client_id, department_key)
+            except ValueError as e:
+                error = str(e)
+
+    redirect_url = f"/clients/{client_id}"
+    if error:
+        from urllib.parse import quote
+
+        redirect_url += f"?deploy_error={quote(error)}"
+    return RedirectResponse(redirect_url, status_code=303)
 
 
 @app.post("/clients/{client_id}/referral-incentive")

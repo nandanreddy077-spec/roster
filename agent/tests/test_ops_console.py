@@ -404,3 +404,90 @@ def test_one_business_cannot_action_anothers_request(test_engine, monkeypatch):
     assert r.status_code == 404
     with Session(test_engine) as s:
         assert s.get(DepartmentInterest, theirs).actioned_at is None
+
+
+# --- /clients/new becomes the single door -------------------------------------
+
+WIZARD_FIELDS = {
+    "business_name": "Ridgeline Plumbing",
+    "trade": "Plumbing",
+    "services": "Drain cleaning, Water heaters",
+    "hours": "Mon-Sat 7am-7pm",
+    "pricing_faq": "Diagnostic $89, waived if repaired same day.",
+    "escalation_phone": "+15125550148",
+    "answer_mode": "primary",
+    "business_phone": "+15125550100",
+}
+
+
+def test_clients_new_captures_every_field_the_retired_wizard_collected(test_engine, monkeypatch):
+    """After Phase 7 there is no other way to create a business, so a silently
+    dropped field here becomes an unprovisionable customer. business_phone is
+    the one the wizard collected that this form did not."""
+    monkeypatch.setattr(app_module, "engine", test_engine)
+
+    TestClient(app_module.app, headers=DASH_AUTH).post(
+        "/clients/new", data=WIZARD_FIELDS, follow_redirects=False
+    )
+
+    with Session(test_engine) as s:
+        b = s.exec(select(Business).where(
+            Business.business_name == "Ridgeline Plumbing")).first()
+        assert b.trade == "Plumbing"
+        assert b.services == ["Drain cleaning", "Water heaters"]
+        assert b.hours == "Mon-Sat 7am-7pm"
+        assert b.pricing_faq.startswith("Diagnostic $89")
+        assert b.escalation_phone == "+15125550148"
+        assert b.answer_mode == "primary"
+        assert b.business_phone == "+15125550100"
+
+
+def test_clients_new_can_deploy_the_recommended_department_at_creation(test_engine, monkeypatch):
+    """The discovery call decides the department; creating the business and
+    staffing it shouldn't be two trips through the console."""
+    monkeypatch.setattr(app_module, "engine", test_engine)
+
+    TestClient(app_module.app, headers=DASH_AUTH).post(
+        "/clients/new",
+        data={**WIZARD_FIELDS, "department_key": "customer_service"},
+        follow_redirects=False,
+    )
+
+    with Session(test_engine) as s:
+        b = s.exec(select(Business).where(
+            Business.business_name == "Ridgeline Plumbing")).first()
+        keys = {e.role_key for e in s.exec(
+            select(Employee).where(Employee.business_id == b.id)).all()}
+        assert keys == {"frontdesk", "reviews"}
+
+
+def test_clients_new_without_a_department_deploys_nothing(test_engine, monkeypatch):
+    monkeypatch.setattr(app_module, "engine", test_engine)
+
+    TestClient(app_module.app, headers=DASH_AUTH).post(
+        "/clients/new", data=WIZARD_FIELDS, follow_redirects=False
+    )
+
+    with Session(test_engine) as s:
+        b = s.exec(select(Business).where(
+            Business.business_name == "Ridgeline Plumbing")).first()
+        assert s.exec(select(Employee).where(Employee.business_id == b.id)).all() == []
+
+
+def test_a_bad_department_choice_does_not_lose_the_business(test_engine, monkeypatch):
+    """The business is the valuable thing on this form. A department that
+    can't be staffed yet must not take the whole submission down with it."""
+    monkeypatch.setattr(app_module, "engine", test_engine)
+
+    r = TestClient(app_module.app, headers=DASH_AUTH).post(
+        "/clients/new",
+        data={**WIZARD_FIELDS, "department_key": "operations"},
+        follow_redirects=False,
+    )
+
+    assert r.status_code == 303
+    with Session(test_engine) as s:
+        b = s.exec(select(Business).where(
+            Business.business_name == "Ridgeline Plumbing")).first()
+        assert b is not None
+        assert s.exec(select(Employee).where(Employee.business_id == b.id)).all() == []
