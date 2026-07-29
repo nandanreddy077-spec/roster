@@ -10,6 +10,7 @@ from sqlmodel import Session
 from db import engine, init_db
 from recovery_service import tick
 from referral_service import send_due_referral_asks
+from review_service import send_due_review_requests
 
 
 def run():
@@ -19,6 +20,8 @@ def run():
         print(f"Recovery tick: sent {len(sent)} message(s).")
         referral_sent = send_due_referral_asks(session)
         print(f"Referrals: sent {len(referral_sent)} message(s).")
+        review_sent = send_due_review_requests(session)
+        print(f"Reviews: sent {len(review_sent)} message(s).")
 
 
 if __name__ == "__main__":

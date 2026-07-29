@@ -538,9 +538,11 @@ def set_review_link(client_id: int, review_link: str = Form(...)):
 
 @app.post("/clients/{client_id}/jobs/{job_id}/complete")
 def complete_job(client_id: int, job_id: int):
-    """Marks a job done and, best-effort, texts a review-request link. The SMS
-    send never blocks completion — a failed or skipped send still marks the job
-    done, since the review text is a bonus, not the point of this action."""
+    """Marks a job done. The review-request text is no longer sent here —
+    it moved to review_service.send_due_review_requests, run on a delay via
+    recovery_tick.py (2026-07-29/30 Reviews plan: "wait an appropriate
+    amount of time" before asking, which an instant synchronous send here
+    could never do)."""
     with Session(engine) as session:
         client = session.get(Business, client_id)
         job = session.get(Job, job_id)
@@ -550,20 +552,6 @@ def complete_job(client_id: int, job_id: int):
         job.completed_at = job.completed_at or datetime.utcnow()
         session.add(job)
         session.commit()
-        if not already_completed and client.review_link and job.callback_number:
-            try:
-                sms_channel.send(
-                    from_number=client.inbound_number or "",
-                    to_number=job.callback_number,
-                    body=f"Thanks for choosing {client.business_name}! If we did right by you, a quick review means a lot: {client.review_link}",
-                )
-                # Record the send: "review requests sent" must count real sends,
-                # not infer them from completion (founder, 2026-07-29).
-                job.review_requested_at = datetime.utcnow()
-                session.add(job)
-                session.commit()
-            except Exception as e:
-                print(f"Reviews: failed to send review request for job {job_id}: {e}")
         if not already_completed:
             try:
                 dispatch_job_completed(session, client, job)

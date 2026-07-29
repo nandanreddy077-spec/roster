@@ -7,3 +7,4 @@ def test_run_executes_without_error(monkeypatch, test_engine, capsys):
     captured = capsys.readouterr()
     assert "Recovery tick: sent 0 message(s)." in captured.out
     assert "Referrals: sent 0 message(s)." in captured.out
+    assert "Reviews: sent 0 message(s)." in captured.out
