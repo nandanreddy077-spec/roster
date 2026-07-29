@@ -1,0 +1,60 @@
+{% extends "portal_base.html" %}
+{% block title %}Expand {{ workspace.department.display_name }} — Roster{% endblock %}
+{% block heading %}Expand {{ workspace.department.display_name }}{% endblock %}
+{% block subhead %}
+<a class="back-link" href="/v2/dashboard/departments/{{ department_key }}">&larr; {{ workspace.department.display_name }}</a>
+<p class="portal-lede">{{ workspace.problem }}</p>
+{% endblock %}
+
+{% block content %}
+{# This template renders ONE assembled ExpansionWorkspace (workspace.py) — it
+   never touches DepartmentInterest or deployment state itself (founder,
+   2026-07-29). Educate before asking, in this exact order: what's covered
+   now, what's available, what it unlocks, then the CTA. Reads like hiring
+   the next member of the office — no plan comparison, no price. #}
+{% if requested %}
+<section class="portal-card portal-card-wide">
+  <p class="portal-empty">Thanks — we'll be in touch to talk it through.</p>
+</section>
+{% endif %}
+
+<h2 class="portal-section-title">Currently covered</h2>
+<section class="portal-card portal-card-wide">
+  {% if workspace.current_state %}
+  <ul class="portal-activity-preview">
+    {% for employee in workspace.current_state %}
+    <li>{{ employee.display_name }} is already working here.</li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="portal-empty">Nothing yet — this department isn't staffed.</p>
+  {% endif %}
+</section>
+
+<h2 class="portal-section-title">Who you could add</h2>
+<div class="portal-employee-grid">
+  {% for employee in workspace.available_employees %}
+  <section class="portal-card portal-employee-card">
+    <h3>{{ employee.display_name }}</h3>
+    {% if employee.mission %}<p class="portal-dept-mission">{{ employee.mission }}</p>{% endif %}
+  </section>
+  {% endfor %}
+</div>
+
+{% if workspace.expected_outcomes %}
+<h2 class="portal-section-title">What this unlocks</h2>
+<section class="portal-card portal-card-wide">
+  <ul class="portal-activity-preview">
+    {% for label in workspace.expected_outcomes %}
+    <li>{{ label }}</li>
+    {% endfor %}
+  </ul>
+</section>
+{% endif %}
+
+<section class="portal-card portal-card-wide">
+  <form method="post" action="/v2/dashboard/departments/{{ department_key }}/expand">
+    <button class="btn btn-primary" type="submit">Ask us about {{ workspace.department.display_name }}</button>
+  </form>
+</section>
+{% endblock %}

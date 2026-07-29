@@ -14,9 +14,11 @@
   {% else %}
   {# An inactive department educates rather than just reporting absence
      (blueprint §7) — the copy comes from the department registry, so it
-     stays in one place. Deliberately NOT a link: the "Ask us about" action
-     lands in Task 9; a link with no destination would be worse than the
-     education alone (no dead controls). #}
+     stays in one place. Links to Expansion only when there's actually
+     something to hire (`can_expand`) — Operations/Finance/Marketing today
+     have zero built employees, and a link with no destination is worse than
+     the education alone (no dead controls). #}
+  {% if card.can_expand %}<a class="portal-gateway-card-link" href="/v2/dashboard/departments/{{ card.department.key }}/expand">{% endif %}
   <section class="portal-card portal-dept-card">
     <div class="portal-dept-head">
       <h2>{{ card.department.display_name }}</h2>
@@ -29,6 +31,7 @@
       <dt>Why owners add it</dt><dd>{{ card.department.why_adopt }}</dd>
     </dl>
   </section>
+  {% if card.can_expand %}</a>{% endif %}
   {% endif %}
   {% endfor %}
 </div>

@@ -67,4 +67,15 @@
   <p class="portal-empty">Nothing to show yet.</p>
   {% endif %}
 </section>
+
+{% if can_expand %}
+{# Expansion is an action within this workspace, not a separate destination
+   (founder, 2026-07-29) — appears only when there's somewhere for it to go,
+   using the same builder the /expand route itself calls. #}
+<section class="portal-card portal-card-wide">
+  <a class="btn btn-secondary" href="/v2/dashboard/departments/{{ department_key }}/expand">
+    Expand {{ workspace.department.display_name }}
+  </a>
+</section>
+{% endif %}
 {% endblock %}

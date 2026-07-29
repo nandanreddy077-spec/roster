@@ -519,11 +519,72 @@ education is unchanged.
 
 ---
 
-## Task 9: Ask-us-about → `record_interest`
+## Task 9: Expansion — a third view model, nested under the Department Workspace
 
-Unchanged from the original plan — `POST /v2/dashboard/departments/{key}/interest`
-→ Phase 3's `record_interest`, PRG, 400 on unknown/non-hireable, idempotent by
-the partial index. Now attached to the inactive cards Task 4 already ships.
+### Architectural refinement (founder, 2026-07-29) — permanent
+
+> **Expansion is not a separate destination. It is an action available
+> within the Department Workspace.**
+
+```
+Department Workspace
+├── Employees
+│     └── Employee Workspace
+└── Expand Department
+      └── Expansion Workspace
+              └── (POST) expansion request
+```
+
+```
+ExpansionWorkspace(
+    department,             # departments.Department
+    problem,                # department.problem — the registry copy
+    current_state,          # [EmployeeView] already deployed here, [] if none
+    available_employees,    # [EmployeeDefinition] deployable but not staffed
+    expected_outcomes,      # [str] metric labels those employees would unlock
+)
+```
+
+Reuses the same shared registries as every other page — `department_status_for`
+(the same call `build_department_workspace` makes; both are two view models
+over one shared computation, not two competing ones), `employees.py`'s
+registry, `metrics.EMPLOYEE_RECORDS` + `METRIC_LABELS`. **No template inspects
+`DepartmentInterest` or deployment state directly** — the route calls
+`expansion.record_interest` (Phase 3, unchanged) and nothing else touches it.
+
+**One route serves both directions of growth**, `GET/POST
+/v2/dashboard/departments/{key}/expand`:
+- From an **active** Department Workspace with room left (`partial` state, or
+  `staffed` with a future registry addition) — reached via an "Expand
+  Department" link at the bottom of that page.
+- From a **fully inactive** department's educational card on the Departments
+  grid (no Department Workspace exists to nest under, since
+  `build_department_workspace` 404s for it) — reached directly from that card,
+  which was correctly unlinked until this task gave it a destination.
+
+Both cases render the identical page; only `current_state` differs (empty for
+the inactive case). `build_expansion_workspace` returns `None` — 404 — for an
+unknown department, a non-hireable one, one with nothing ever deployable
+(`unavailable`), or one already fully staffed (nothing left to expand).
+
+**Product requirement — educate before asking, in this exact order:**
+what's currently covered → what's available → what it unlocks → the CTA. The
+page reads as hiring the next member of the office, not a pricing/upgrade
+screen — no plan comparison, no price.
+
+**Files:** `agent/workspace.py`, `agent/portal.py`, `agent/templates/dashboard_v2/expansion.html` (new), `agent/templates/dashboard_v2/department.html`, `agent/templates/dashboard_v2/departments.html`, tests
+
+**Tests:** the view model assembles for both a partial and a fully-inactive
+department; `None`/404 for unknown, non-hireable, unavailable, and
+already-fully-staffed departments; the narrative order is testable in DOM
+order; the Department Workspace's "Expand" link appears only when there's
+room and disappears once fully staffed; the previously-unlinked inactive
+grid card now links here (a deliberate, documented change to the "never a
+link" test Task 8 shipped); the request is idempotent (Phase 3's guarantee,
+exercised through this route); no template imports `expansion.py` or
+`DepartmentInterest`.
+
+**Expected:** `~550 passing`.
 
 ---
 

@@ -166,12 +166,26 @@ def test_an_active_card_shows_at_most_one_headline_outcome(test_engine, monkeypa
     )
 
 
-def test_an_inactive_card_is_never_a_link(test_engine, monkeypatch):
-    """No dead controls: the expansion CTA doesn't exist yet (Task 9), so an
-    inactive card must not link anywhere until it does."""
+def test_an_inactive_card_with_room_now_links_to_expansion(test_engine, monkeypatch):
+    """Task 9 gave it a destination. Rewritten from
+    test_an_inactive_card_is_never_a_link, which correctly documented the
+    absence of a link before that route existed — same lifecycle as Task 7's
+    'not yet links' test being replaced once its target landed.
+
+    Sales, not Finance: Finance has zero deployable employees today
+    (`unavailable`), so it correctly stays unlinked — see the next test."""
     body = _page(test_engine, monkeypatch, path=DEPARTMENTS)
 
-    assert 'href="/v2/dashboard/departments/finance"' not in body
+    assert 'href="/v2/dashboard/departments/sales/expand"' in body
+
+
+def test_an_inactive_card_with_nothing_buildable_stays_unlinked(test_engine, monkeypatch):
+    """Operations/Finance/Marketing have zero live-or-internal employees —
+    build_expansion_workspace correctly 404s for them, so linking to it would
+    be a dead control."""
+    body = _page(test_engine, monkeypatch, path=DEPARTMENTS)
+
+    assert 'href="/v2/dashboard/departments/finance/expand"' not in body
 
 
 def test_a_partially_staffed_department_also_reads_as_working(test_engine, monkeypatch):

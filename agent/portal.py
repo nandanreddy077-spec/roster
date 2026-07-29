@@ -21,6 +21,7 @@ from auth import hash_password, verify_password
 from db import engine
 from db_models import Business, Employee, Job, Message
 from departments import department_status_for, get_department
+from expansion import record_interest
 from deployment import deploy_role
 from google_auth import callback_url, get_oauth, google_enabled
 from locks import conversation_lock
@@ -82,6 +83,7 @@ from workspace import (  # noqa: E402
     METRIC_LABELS,
     build_department_workspace,
     build_employee_workspace,
+    build_expansion_workspace,
     headline_outcome,
 )
 
@@ -474,10 +476,17 @@ def v2_overview(request: Request):
 def v2_departments(request: Request):
     """The whole org, every time. Active departments render as gateway cards
     into their Department Workspace; inactive ones educate rather than just
-    reporting absence (blueprint §7) — and stay unlinked, since the expansion
-    CTA they'd point to doesn't exist until Task 9 (no dead controls).
-    Leadership is excluded: it isn't hireable and comes with every workforce,
-    so it lives in the nav as the executive view."""
+    reporting absence (blueprint §7). Leadership is excluded: it isn't
+    hireable and comes with every workforce, so it lives in the nav as the
+    executive view.
+
+    An inactive card links to Expansion only when `state == "empty"` —
+    Operations/Finance/Marketing today are `unavailable` (zero deployable
+    employees: employees.py's own registry says `planned` means "no engine,
+    no route, no UI"), and build_expansion_workspace correctly 404s for them.
+    Linking every inactive card unconditionally would have been a dead link
+    for exactly those three — caught by a route test, not left to a browser.
+    """
     with Session(engine) as session:
         business = _current_client(request, session)
         if business is None:
@@ -493,6 +502,7 @@ def v2_departments(request: Request):
                     "active": False,
                     "department": status.department,
                     "label": CUSTOMER_STATE_LABELS[status.state],
+                    "can_expand": status.state == "empty",
                 })
         return templates.TemplateResponse(
             request,
@@ -517,12 +527,16 @@ def v2_department_workspace(request: Request, department_key: str):
         ws = build_department_workspace(session, business.id, department_key)
         if ws is None:
             raise HTTPException(status_code=404, detail="No such department")
+        # Existence check only, same builder Task 9's own route calls — the
+        # "Expand" link appears exactly when there's somewhere for it to go,
+        # never a dead control.
+        can_expand = build_expansion_workspace(session, business.id, department_key) is not None
         return templates.TemplateResponse(
             request,
             "dashboard_v2/department.html",
             {
                 "business": business, "active_nav": "departments", "workspace": ws,
-                "department_key": department_key,
+                "department_key": department_key, "can_expand": can_expand,
             },
         )
 
@@ -549,6 +563,56 @@ def v2_employee_workspace(request: Request, department_key: str, role_key: str):
                 "department_display_name": department.display_name if department else department_key,
             },
         )
+
+
+@router.get("/v2/dashboard/departments/{department_key}/expand")
+def v2_expand_department(request: Request, department_key: str, requested: bool = False):
+    """Expansion is not a separate destination — an action nested under the
+    Department Workspace, or (for a department with nothing deployed yet)
+    reached directly from its educational card on the Departments grid.
+    Renders a SINGLE assembled ExpansionWorkspace; this route never inspects
+    DepartmentInterest or deployment state itself."""
+    with Session(engine) as session:
+        business = _current_client(request, session)
+        if business is None:
+            return RedirectResponse("/login", status_code=303)
+        ws = build_expansion_workspace(session, business.id, department_key)
+        if ws is None:
+            raise HTTPException(status_code=404, detail="Nothing to expand here")
+        return templates.TemplateResponse(
+            request,
+            "dashboard_v2/expansion.html",
+            {
+                "business": business, "active_nav": "departments", "workspace": ws,
+                "department_key": department_key, "requested": requested,
+            },
+        )
+
+
+@router.post("/v2/dashboard/departments/{department_key}/expand")
+def v2_request_expansion(request: Request, department_key: str):
+    """Records interest via Phase 3's record_interest — unchanged, and
+    already idempotent, so a double-submit records nothing twice. Deploys
+    nothing: asking is not the same as being staffed (Phase 3's permanent
+    guard).
+
+    Gated on the SAME build_expansion_workspace check the GET route uses,
+    before recording anything — so POST and GET agree on what's requestable,
+    and a submit can never land on a 404 for the page it just redirects to.
+    """
+    with Session(engine) as session:
+        business = _current_client(request, session)
+        if business is None:
+            return RedirectResponse("/login", status_code=303)
+        if build_expansion_workspace(session, business.id, department_key) is None:
+            raise HTTPException(status_code=404, detail="Nothing to expand here")
+        try:
+            record_interest(session, business.id, department_key)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Not a department you can request")
+    return RedirectResponse(
+        f"/v2/dashboard/departments/{department_key}/expand?requested=true", status_code=303
+    )
 
 
 @router.post("/dashboard/test")

@@ -110,6 +110,37 @@ def _labeled(raw: dict) -> List[Tuple[str, int]]:
     return [(METRIC_LABELS[key], value) for key, value in raw.items()]
 
 
+def _status_for(session, business_id: int, department_key: str):
+    """The one DepartmentStatus lookup, shared by every workspace builder
+    that needs it — department_status_for is the single computation; this
+    just finds the row matching one key rather than duplicating its filter."""
+    from sqlmodel import select
+
+    employees = session.exec(
+        select(Employee).where(Employee.business_id == business_id)
+    ).all()
+    return next(
+        (s for s in department_status_for(employees) if s.department.key == department_key),
+        None,
+    )
+
+
+def _employee_views(session, business_id: int, staffed, since=None,
+                    activity_limit: int = 5) -> List[EmployeeView]:
+    """EmployeeView per already-deployed employee — shared by
+    DepartmentWorkspace and ExpansionWorkspace's 'currently covered' section,
+    so 'what this employee has done' is computed exactly once."""
+    return [
+        EmployeeView(
+            role_key=e.key,
+            display_name=e.display_name,
+            outcomes=_labeled(metrics.employee_outcomes(session, business_id, e.key, since=since)),
+            activity=metrics.employee_activity(session, business_id, e.key, limit=activity_limit, since=since),
+        )
+        for e in staffed
+    ]
+
+
 def build_department_workspace(session, business_id: int, department_key: str,
                                since=None) -> Optional[DepartmentWorkspace]:
     """The one assembly point. Returns None for an unknown department key or
@@ -121,28 +152,12 @@ def build_department_workspace(session, business_id: int, department_key: str,
     if department is None:
         return None
 
-    from sqlmodel import select
-
-    employees = session.exec(
-        select(Employee).where(Employee.business_id == business_id)
-    ).all()
-    status = next(
-        (s for s in department_status_for(employees) if s.department.key == department_key),
-        None,
-    )
+    status = _status_for(session, business_id, department_key)
     if status is None or status.state not in ACTIVE_STATES:
         return None
 
     role_keys = [e.key for e in status.staffed]
-    employee_views = [
-        EmployeeView(
-            role_key=e.key,
-            display_name=e.display_name,
-            outcomes=_labeled(metrics.employee_outcomes(session, business_id, e.key, since=since)),
-            activity=metrics.employee_activity(session, business_id, e.key, limit=5, since=since),
-        )
-        for e in status.staffed
-    ]
+    employee_views = _employee_views(session, business_id, status.staffed, since=since)
 
     return DepartmentWorkspace(
         department=department,
@@ -183,4 +198,70 @@ def build_employee_workspace(session, business_id: int, department_key: str,
         # this page IS the drill-down, so it re-fetches the employee's full
         # activity rather than reusing the capped preview in `view`.
         activity=metrics.employee_activity(session, business_id, role_key, limit=50, since=since),
+    )
+
+
+@dataclass(frozen=True)
+class ExpansionWorkspace:
+    """Expansion is not a separate destination — it's an action available
+    within the Department Workspace, or (for a department with nothing
+    deployed at all) reached directly from that department's educational
+    card on the Departments grid (founder, 2026-07-29). Same five-field
+    discipline as every other workspace: educate, then ask.
+
+    `current_state` is [] for the fully-inactive entry point; populated for
+    the 'grow what you already have' entry point. `expected_outcomes` names
+    CAPABILITIES the available employees would add, never fabricated
+    numbers — they haven't done any work yet.
+    """
+    department: object              # departments.Department
+    problem: str
+    current_state: List[EmployeeView]
+    available_employees: List[object]   # employees.EmployeeDefinition, undeployed
+    expected_outcomes: List[str]
+
+
+def build_expansion_workspace(session, business_id: int,
+                              department_key: str) -> Optional[ExpansionWorkspace]:
+    """Two directions of growth, one builder: a partially-staffed department
+    with room left, or a fully-inactive one with nothing deployed yet. Both
+    call the SAME department_status_for computation build_department_workspace
+    uses — two view models over one shared fact, never two independent
+    "is this available" decisions that could disagree.
+
+    Returns None — the route 404s — for an unknown department, a
+    non-hireable one (Leadership), one with nothing ever deployable
+    (`unavailable`), or one already fully staffed: there is nothing left to
+    expand into.
+    """
+    department = get_department(department_key)
+    if department is None or not department.hireable:
+        return None
+
+    status = _status_for(session, business_id, department_key)
+    if status is None or status.state == "unavailable":
+        return None
+    if status.deployed_count >= status.deployable_count:
+        return None  # already fully staffed — nothing left to hire here
+
+    staffed_keys = {e.key for e in status.staffed}
+    available = [e for e in status.deployable if e.key not in staffed_keys]
+
+    outcome_labels: List[str] = []
+    for definition in available:
+        entry = metrics.EMPLOYEE_RECORDS.get(definition.key)
+        if entry is None:
+            continue
+        for source in entry.sources:
+            if source.metric is not None:
+                label = METRIC_LABELS[source.metric]
+                if label not in outcome_labels:
+                    outcome_labels.append(label)
+
+    return ExpansionWorkspace(
+        department=department,
+        problem=department.problem,
+        current_state=_employee_views(session, business_id, status.staffed),
+        available_employees=available,
+        expected_outcomes=outcome_labels,
     )
