@@ -45,6 +45,7 @@ from provisioning import ProvisioningError, attach_number_to_xai_trunk, buy_twil
 from recovery_engine import FACE_DISPLAY_NAMES
 from recovery_service import create_campaign, find_active_recovery_job, handle_recovery_reply
 from referral_service import find_active_referral_ask, handle_referral_reply
+from review_service import find_active_review_ask, handle_review_reply
 from runner import dispatch_job_completed
 from service import handle_customer_message
 from xai_voice_adapter import (
@@ -961,6 +962,9 @@ def _process_inbound_sms(from_number: str, to_number: str, body: str,
             referral_job = find_active_referral_ask(session, client.id, from_number)
             if referral_job is not None:
                 return handle_referral_reply(session, client, referral_job, body)
+            review_job = find_active_review_ask(session, client.id, from_number)
+            if review_job is not None:
+                return handle_review_reply(session, client, review_job, body)
             result = handle_customer_message(session, client, from_number, body,
                                              external_id=message_sid)
             return result["reply"]

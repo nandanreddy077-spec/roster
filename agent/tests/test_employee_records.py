@@ -12,14 +12,20 @@ to be declared rather than implied."""
 from datetime import datetime, timedelta
 
 import metrics
-from db_models import Business, Job, OwnerNotification, RecoveryCampaign, RecoveryJob
+from db_models import (
+    Business, Job, OwnerNotification, RecoveryCampaign, RecoveryJob, ReviewReply,
+)
 from metrics import (
     CALLS_ANSWERED,
     EMPLOYEE_RECORDS,
     ESCALATIONS,
     JOBS_BOOKED,
     QUOTES_CHASED,
+    REVIEW_FOLLOWUPS_SENT,
+    REVIEW_NEGATIVE_REPLIES,
     REVIEW_REQUESTS_SENT,
+    REVIEW_RESPONSES,
+    REVIEWS_SELF_REPORTED,
     employee_activity,
     employee_outcomes,
 )
@@ -131,6 +137,29 @@ def test_reviews_counts_only_requests_actually_sent(session):
     session.commit()
 
     assert employee_outcomes(session, b.id, "reviews")[REVIEW_REQUESTS_SENT] == 1
+
+
+def test_reviews_counts_followups_responses_self_reported_and_negative(session):
+    b = _business(session, "er4b@test.io")
+    other = _business(session, "er4c@test.io")
+    session.add(Job(business_id=b.id, customer_phone="+1", service_type="x",
+                    urgency="routine", review_followup_sent_at=datetime.utcnow()))
+    session.add(ReviewReply(business_id=b.id, source_job_id=1, customer_phone="+1",
+                            outcome="left_review", raw_reply_text="left a review!"))
+    session.add(ReviewReply(business_id=b.id, source_job_id=1, customer_phone="+2",
+                            outcome="negative", raw_reply_text="not happy"))
+    session.add(ReviewReply(business_id=b.id, source_job_id=1, customer_phone="+3",
+                            outcome="neutral", raw_reply_text="ok"))
+    # a reply on a DIFFERENT business must never bleed into b's counts
+    session.add(ReviewReply(business_id=other.id, source_job_id=1, customer_phone="+4",
+                            outcome="left_review", raw_reply_text="great job!"))
+    session.commit()
+
+    outcomes = employee_outcomes(session, b.id, "reviews")
+    assert outcomes[REVIEW_FOLLOWUPS_SENT] == 1
+    assert outcomes[REVIEW_RESPONSES] == 3
+    assert outcomes[REVIEWS_SELF_REPORTED] == 1
+    assert outcomes[REVIEW_NEGATIVE_REPLIES] == 1
 
 
 # --- scoping, windows and drill-down ------------------------------------------

@@ -6,9 +6,10 @@ than once a day since review_requested_at gates re-sending.
 """
 from datetime import datetime, timedelta
 
-from sqlmodel import Session
+from sqlmodel import Session, select
 
-from db_models import Business, Job
+from conftest import StubAgent
+from db_models import Business, Job, OwnerNotification, ReviewReply
 import review_service
 
 
@@ -294,3 +295,287 @@ def test_send_due_review_followups_survives_a_send_failure(session, monkeypatch)
     assert sent == []
     session.refresh(job)
     assert job.review_followup_sent_at is None
+
+
+# ---- PR #3: follow-up suppression once a ReviewReply exists -----------------
+#
+# "unclear" is the ONE outcome that leaves the scheduled follow-up logic to
+# continue (the plan's explicit behavior table) — every other outcome stops
+# it, the same way an "already resolved" ReferralLead stops re-routing.
+
+def _job_due_for_followup(session, client) -> Job:
+    job = Job(
+        business_id=client.id, service_type="AC repair", urgency="routine",
+        callback_number="+15551234567",
+        completed_at=datetime.utcnow() - timedelta(days=10),
+        review_requested_at=datetime.utcnow() - timedelta(days=5),
+    )
+    session.add(job)
+    session.commit()
+    session.refresh(job)
+    return job
+
+
+def test_send_due_review_followups_fires_when_reply_outcome_is_unclear(session, monkeypatch):
+    fake_channel = FakeSMSChannel()
+    monkeypatch.setattr(review_service, "sms_channel", fake_channel)
+    client = make_client(session, review_link="https://g.page/r/test")
+    job = _job_due_for_followup(session, client)
+    session.add(ReviewReply(business_id=client.id, source_job_id=job.id,
+                           customer_phone="+15551234567", outcome="unclear",
+                           raw_reply_text="huh?"))
+    session.commit()
+
+    sent = review_service.send_due_review_followups(session)
+
+    assert len(sent) == 1
+
+
+def test_send_due_review_followups_is_suppressed_for_every_other_outcome(session, monkeypatch):
+    fake_channel = FakeSMSChannel()
+    monkeypatch.setattr(review_service, "sms_channel", fake_channel)
+    client = make_client(session, review_link="https://g.page/r/test")
+
+    for outcome in ("left_review", "positive", "neutral", "negative", "declined"):
+        job = _job_due_for_followup(session, client)
+        session.add(ReviewReply(business_id=client.id, source_job_id=job.id,
+                                customer_phone="+15551234567", outcome=outcome,
+                                raw_reply_text="whatever they said"))
+        session.commit()
+
+    sent = review_service.send_due_review_followups(session)
+
+    assert sent == [], "every non-unclear outcome must suppress the scheduled follow-up"
+
+
+# ---- find_active_review_ask: the reply-routing window -----------------------
+
+def test_find_active_review_ask_matches_within_window(session):
+    client = make_client(session, review_link="https://g.page/r/test")
+    job = Job(
+        business_id=client.id, service_type="AC repair", urgency="routine",
+        callback_number="+1", completed_at=datetime.utcnow() - timedelta(days=6),
+        review_requested_at=datetime.utcnow() - timedelta(days=1),
+    )
+    session.add(job)
+    session.commit()
+    session.refresh(job)
+
+    found = review_service.find_active_review_ask(session, client.id, "+1")
+    assert found is not None
+    assert found.id == job.id
+
+
+def test_find_active_review_ask_ignores_expired_window(session):
+    client = make_client(session, review_link="https://g.page/r/test")
+    job = Job(
+        business_id=client.id, service_type="AC repair", urgency="routine",
+        callback_number="+1", completed_at=datetime.utcnow() - timedelta(days=20),
+        review_requested_at=datetime.utcnow() - timedelta(days=15),  # outside the reply window
+    )
+    session.add(job)
+    session.commit()
+
+    assert review_service.find_active_review_ask(session, client.id, "+1") is None
+
+
+def test_find_active_review_ask_ignores_already_replied(session):
+    """Duplicate-reply protection: once ANY ReviewReply exists for a job, a
+    second inbound text from the same customer must not re-route to Reviews
+    (matching find_active_referral_ask's exact precedent — one classified
+    reply per ask, no re-classification attempts)."""
+    client = make_client(session, review_link="https://g.page/r/test")
+    job = Job(
+        business_id=client.id, service_type="AC repair", urgency="routine",
+        callback_number="+1", completed_at=datetime.utcnow() - timedelta(days=6),
+        review_requested_at=datetime.utcnow() - timedelta(days=1),
+    )
+    session.add(job)
+    session.commit()
+    session.refresh(job)
+    session.add(ReviewReply(business_id=client.id, source_job_id=job.id,
+                            customer_phone="+1", outcome="unclear", raw_reply_text="already replied"))
+    session.commit()
+
+    assert review_service.find_active_review_ask(session, client.id, "+1") is None
+
+
+# ---- handle_review_reply: classification, one per outcome -------------------
+
+def _stub_reply_outcome(outcome: str, reply_text: str = "ok") -> StubAgent:
+    return StubAgent({
+        "reply": reply_text,
+        "jobs": [],
+        "new_messages": [],
+        "pending_tool_call": {"name": "record_review_reply", "input": {"outcome": outcome}},
+    })
+
+
+def _job_awaiting_reply(session, client) -> Job:
+    job = Job(
+        business_id=client.id, service_type="AC repair", urgency="routine",
+        customer_name="Mike", callback_number="+15551234567",
+        completed_at=datetime.utcnow() - timedelta(days=6),
+        review_requested_at=datetime.utcnow() - timedelta(days=1),
+    )
+    session.add(job)
+    session.commit()
+    session.refresh(job)
+    return job
+
+
+def test_handle_review_reply_left_review_records_and_stops_followups(session, monkeypatch):
+    client = make_client(session, review_link="https://g.page/r/test")
+    job = _job_awaiting_reply(session, client)
+    monkeypatch.setattr(review_service, "agent", _stub_reply_outcome("left_review"))
+
+    reply = review_service.handle_review_reply(session, client, job, "just left you a great review!")
+
+    saved = session.exec(select(ReviewReply).where(ReviewReply.source_job_id == job.id)).first()
+    assert saved is not None
+    assert saved.outcome == "left_review"
+    assert saved.raw_reply_text == "just left you a great review!"
+    assert reply is not None
+    # Never claims the review is verified/seen — no wording implying we
+    # checked Google, just a thank-you.
+    assert "google" not in reply.lower()
+
+
+def test_handle_review_reply_positive_records_and_stops_followups(session, monkeypatch):
+    client = make_client(session, review_link="https://g.page/r/test")
+    job = _job_awaiting_reply(session, client)
+    monkeypatch.setattr(review_service, "agent", _stub_reply_outcome("positive"))
+
+    review_service.handle_review_reply(session, client, job, "you guys were great, thanks!")
+
+    saved = session.exec(select(ReviewReply).where(ReviewReply.source_job_id == job.id)).first()
+    assert saved.outcome == "positive"
+
+
+def test_handle_review_reply_neutral_records_and_stops_followups(session, monkeypatch):
+    client = make_client(session, review_link="https://g.page/r/test")
+    job = _job_awaiting_reply(session, client)
+    monkeypatch.setattr(review_service, "agent", _stub_reply_outcome("neutral"))
+
+    review_service.handle_review_reply(session, client, job, "ok, got it")
+
+    saved = session.exec(select(ReviewReply).where(ReviewReply.source_job_id == job.id)).first()
+    assert saved.outcome == "neutral"
+
+
+def test_handle_review_reply_declined_records_and_stops_followups(session, monkeypatch):
+    client = make_client(session, review_link="https://g.page/r/test")
+    job = _job_awaiting_reply(session, client)
+    monkeypatch.setattr(review_service, "agent", _stub_reply_outcome("declined"))
+
+    review_service.handle_review_reply(session, client, job, "not really my thing, sorry")
+
+    saved = session.exec(select(ReviewReply).where(ReviewReply.source_job_id == job.id)).first()
+    assert saved.outcome == "declined"
+
+
+def test_handle_review_reply_unclear_records_outcome(session, monkeypatch):
+    client = make_client(session, review_link="https://g.page/r/test")
+    job = _job_awaiting_reply(session, client)
+    monkeypatch.setattr(review_service, "agent", _stub_reply_outcome("unclear"))
+
+    review_service.handle_review_reply(session, client, job, "????")
+
+    saved = session.exec(select(ReviewReply).where(ReviewReply.source_job_id == job.id)).first()
+    assert saved.outcome == "unclear"
+
+
+def test_handle_review_reply_negative_records_and_notifies_the_owner(session, monkeypatch):
+    client = make_client(session, review_link="https://g.page/r/test")
+    job = _job_awaiting_reply(session, client)
+    monkeypatch.setattr(review_service, "agent", _stub_reply_outcome("negative"))
+    calls = []
+    monkeypatch.setattr(review_service, "notify_owner_of_escalation",
+                        lambda business, caller, reason, **k: calls.append((caller, reason)) or True)
+
+    reply = review_service.handle_review_reply(
+        session, client, job, "honestly the technician was late and rude"
+    )
+
+    saved = session.exec(select(ReviewReply).where(ReviewReply.source_job_id == job.id)).first()
+    assert saved.outcome == "negative"
+    assert len(calls) == 1
+    assert calls[0][0] == "+15551234567"
+    # The reply sent back to the customer must never point at the review
+    # link again once they've expressed real dissatisfaction.
+    assert "https://g.page/r/test" not in reply
+
+    notifications = session.exec(
+        select(OwnerNotification).where(OwnerNotification.business_id == client.id)
+    ).all()
+    assert len(notifications) == 1
+    assert notifications[0].kind == "escalation"
+    assert notifications[0].source == "negative_review_reply"
+
+
+def test_handle_review_reply_only_negative_triggers_an_owner_notification(session, monkeypatch):
+    """Regression: left_review/positive/neutral/declined/unclear must never
+    page the owner — only genuine dissatisfaction does."""
+    client = make_client(session, review_link="https://g.page/r/test")
+    calls = []
+    monkeypatch.setattr(review_service, "notify_owner_of_escalation",
+                        lambda business, caller, reason, **k: calls.append(1) or True)
+
+    for outcome in ("left_review", "positive", "neutral", "declined", "unclear"):
+        job = _job_awaiting_reply(session, client)
+        monkeypatch.setattr(review_service, "agent", _stub_reply_outcome(outcome))
+        review_service.handle_review_reply(session, client, job, "some reply")
+
+    assert calls == []
+
+
+def test_handle_review_reply_is_never_called_twice_for_the_same_ask(session, monkeypatch):
+    """Duplicate-reply protection at the routing layer (find_active_review_ask
+    already covers this — this test proves it end to end): a second inbound
+    text after a reply is already recorded must not reach handle_review_reply
+    again via the normal routing chain."""
+    client = make_client(session, review_link="https://g.page/r/test")
+    job = _job_awaiting_reply(session, client)
+    monkeypatch.setattr(review_service, "agent", _stub_reply_outcome("declined"))
+
+    review_service.handle_review_reply(session, client, job, "no thanks")
+    still_active = review_service.find_active_review_ask(session, client.id, "+15551234567")
+
+    assert still_active is None
+    replies = session.exec(select(ReviewReply).where(ReviewReply.source_job_id == job.id)).all()
+    assert len(replies) == 1
+
+
+def test_handle_review_reply_skips_paid_call_past_trial_cap(session, monkeypatch):
+    """Mirrors handle_referral_reply's own trial-cap fallback: past the soft
+    buffer, skip the paid classification call but still persist the raw
+    reply — recorded as unclear, since nothing classified it."""
+    client = make_client(session, review_link="https://g.page/r/test")
+    client.trial_spend_cents = client.trial_cap_cents + client.trial_soft_buffer_cents + 1
+    session.add(client)
+    session.commit()
+    job = _job_awaiting_reply(session, client)
+
+    reply = review_service.handle_review_reply(session, client, job, "left a review!")
+
+    assert reply is None
+    saved = session.exec(select(ReviewReply).where(ReviewReply.source_job_id == job.id)).first()
+    assert saved is not None
+    assert saved.outcome == "unclear"
+    assert saved.raw_reply_text == "left a review!"
+
+
+def test_handle_review_reply_business_isolation(session, monkeypatch):
+    client_a = make_client(session, review_link="https://g.page/r/a")
+    client_b = Business(business_name="Other Co", trade="HVAC", hours="9-5",
+                        pricing_faq="n/a", escalation_phone="+15550009999",
+                        inbound_number="+15559991111", review_link="https://g.page/r/b")
+    session.add(client_b)
+    session.commit()
+    session.refresh(client_b)
+
+    job_a = _job_awaiting_reply(session, client_a)
+    monkeypatch.setattr(review_service, "agent", _stub_reply_outcome("left_review"))
+    review_service.handle_review_reply(session, client_a, job_a, "left a review")
+
+    assert review_service.find_active_review_ask(session, client_b.id, "+15551234567") is None

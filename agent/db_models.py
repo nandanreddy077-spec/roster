@@ -211,6 +211,16 @@ class ReferralLead(SQLModel, table=True):
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
 
+class ReviewReply(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    business_id: int = Field(foreign_key="business.id")
+    source_job_id: int = Field(foreign_key="job.id")  # which review ask this replies to
+    customer_phone: str
+    outcome: str  # "left_review" | "positive" | "neutral" | "negative" | "declined" | "unclear"
+    raw_reply_text: str  # always stored, regardless of classification outcome
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+
+
 class Employee(SQLModel, table=True):
     __table_args__ = (
         # Index, NOT UniqueConstraint: a table-level UNIQUE becomes part of

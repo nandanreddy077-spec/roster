@@ -33,6 +33,7 @@ from sqlmodel import func, select
 
 from db_models import (
     Job, Message, OwnerNotification, RecoveryCampaign, RecoveryJob, ReferralLead,
+    ReviewReply,
 )
 from notifications import (
     KIND_CALL_DROPPED, KIND_ESCALATION, is_test_thread,
@@ -47,6 +48,10 @@ JOBS_BOOKED = "jobs_booked"
 CALLS_ANSWERED = "calls_answered"
 ESCALATIONS = "escalations"
 REVIEW_REQUESTS_SENT = "review_requests_sent"
+REVIEW_FOLLOWUPS_SENT = "review_followups_sent"
+REVIEW_RESPONSES = "review_responses"
+REVIEWS_SELF_REPORTED = "reviews_self_reported"
+REVIEW_NEGATIVE_REPLIES = "review_negative_replies"
 QUOTES_CHASED = "quotes_chased"
 QUOTES_RECOVERED = "quotes_recovered"
 CUSTOMERS_REACHED = "customers_reached"
@@ -58,6 +63,10 @@ METRIC_RECORDS = {
     CALLS_ANSWERED: "distinct message.customer_phone starting 'xai-voice:'",
     ESCALATIONS: "ownernotification where kind in ('escalation', 'call_dropped')",
     REVIEW_REQUESTS_SENT: "job where review_requested_at is not null",
+    REVIEW_FOLLOWUPS_SENT: "job where review_followup_sent_at is not null",
+    REVIEW_RESPONSES: "reviewreply (any outcome)",
+    REVIEWS_SELF_REPORTED: "reviewreply where outcome == 'left_review' (self-reported, never verified)",
+    REVIEW_NEGATIVE_REPLIES: "reviewreply where outcome == 'negative'",
     QUOTES_CHASED: "recoveryjob via recoverycampaign.face == 'quote'",
     QUOTES_RECOVERED: "recoveryjob via recoverycampaign.face == 'quote', current_status == 'booked'",
     CUSTOMERS_REACHED: "recoveryjob via recoverycampaign.face in ('reactivation', 'membership')",
@@ -149,6 +158,29 @@ def _review_requests(session, business_id, since=None):
             for j in session.exec(q).all()]
 
 
+def _review_followups(session, business_id, since=None):
+    q = select(Job).where(
+        Job.business_id == business_id, Job.review_followup_sent_at.is_not(None)
+    )
+    if since is not None:
+        q = q.where(Job.review_followup_sent_at >= since)
+    return [ActivityRow(j.review_followup_sent_at, "review_followup",
+                        f"Follow-up nudge after {j.service_type}")
+            for j in session.exec(q).all()]
+
+
+def _review_replies(outcomes=None, kind="review_reply"):
+    def _fetch(session, business_id, since=None):
+        q = select(ReviewReply).where(ReviewReply.business_id == business_id)
+        if outcomes is not None:
+            q = q.where(ReviewReply.outcome.in_(outcomes))
+        if since is not None:
+            q = q.where(ReviewReply.created_at >= since)
+        return [ActivityRow(r.created_at, kind, f"Review reply: {r.outcome}")
+                for r in session.exec(q).all()]
+    return _fetch
+
+
 def _recovery(faces, only_booked=False, kind="recovery"):
     def _fetch(session, business_id, since=None):
         q = (
@@ -191,9 +223,19 @@ EMPLOYEE_RECORDS = {
     "reviews": EmployeeRecords("reviews", (
         RecordSource("review_requests", METRIC_RECORDS[REVIEW_REQUESTS_SENT],
                      REVIEW_REQUESTS_SENT, _review_requests),
-        # Reviews RECEIVED is deliberately absent: unknowable without a
-        # Google/Yelp integration, and inventing it would be the dashboard's
-        # first fabricated number (founder, 2026-07-29).
+        RecordSource("review_followups", METRIC_RECORDS[REVIEW_FOLLOWUPS_SENT],
+                     REVIEW_FOLLOWUPS_SENT, _review_followups),
+        RecordSource("review_responses", METRIC_RECORDS[REVIEW_RESPONSES],
+                     REVIEW_RESPONSES, _review_replies()),
+        RecordSource("reviews_self_reported", METRIC_RECORDS[REVIEWS_SELF_REPORTED],
+                     REVIEWS_SELF_REPORTED, _review_replies(("left_review",), kind="review_self_reported")),
+        RecordSource("review_negative_replies", METRIC_RECORDS[REVIEW_NEGATIVE_REPLIES],
+                     REVIEW_NEGATIVE_REPLIES, _review_replies(("negative",), kind="review_negative")),
+        # Reviews RECEIVED (a verified Google/Yelp count) is deliberately
+        # absent: unknowable without that integration, and inventing it would
+        # be the dashboard's first fabricated number (founder, 2026-07-29).
+        # reviews_self_reported is NOT that number — it's what the customer
+        # told us, never presented as verified.
     )),
     "quote_chaser": EmployeeRecords("quote_chaser", (
         RecordSource("recovery_jobs", METRIC_RECORDS[QUOTES_CHASED], QUOTES_CHASED,

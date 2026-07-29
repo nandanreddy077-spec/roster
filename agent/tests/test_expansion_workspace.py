@@ -95,13 +95,22 @@ def test_expected_outcomes_are_metric_labels_not_fabricated_numbers(session):
 
 def test_expected_outcomes_only_reflect_available_employees(session):
     """A department that already has Frontdesk must not claim 'Jobs booked'
-    as something expansion would unlock — it's already happening."""
+    as something expansion would unlock — it's already happening. Reviews
+    (still available, not yet hired) now exposes 4 metric labels rather than
+    1 — PR #3 (2026-07-30) added follow-up/response/self-reported/negative
+    tracking alongside the original review-requests-sent metric."""
     b = _business(session, "xw8@test.io")
     deploy_role(session, b.id, "frontdesk")
 
     ws = build_expansion_workspace(session, b.id, "customer_service")
 
-    assert ws.expected_outcomes == ["Review requests sent"]
+    assert ws.expected_outcomes == [
+        "Review requests sent",
+        "Follow-up reminders sent",
+        "Customers who replied",
+        "Told us they left a review",
+        "Unhappy replies flagged to you",
+    ]
 
 
 def test_workspace_never_crosses_businesses(session):
