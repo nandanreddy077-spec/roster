@@ -211,18 +211,53 @@ marks test jobs; both surfaces report the same number for the same business.
 
 ## Task 3: The customer base layout and navigation
 
-**Files:** `agent/templates/portal_base.html` (new), `agent/portal.py`, tests
+### Design principle (founder, 2026-07-29) — permanent
 
-Five nav items exactly — **Overview / Departments / The Briefing /
-Notifications / Settings** (blueprint §5). No "Grow Your Workforce" item:
-expansion is contextual content, never navigation. Mobile bottom tab bar.
-Routes registered under `/v2/` so the live dashboard is untouched.
+> **Navigation represents stable customer concepts, never implementation
+> structure.**
 
-**Tests:** all five items render; no sixth; expansion is not a nav item; the
-live `/dashboard` is byte-identical to before (a regression guard on the
-whole phase).
+The nav names things an owner already thinks about — their whole operation,
+their departments, what happened, what needs them, their account. It never
+names Roster's internals: no "Employees", no "Jobs", no "Campaigns", no
+"Recovery", no "Agents". Those are how the work is built, not how the owner
+thinks about their business — and a nav built from implementation structure
+must be renamed every time the implementation changes, which is exactly what
+this migration is undoing. Enforced by a test, not by convention.
 
-**Expected:** `451 passing`.
+It is also why **expansion is not a nav item**: "Grow Your Workforce" is a
+storefront concept, not something an owner does daily. Expansion appears
+contextually (blueprint §5) — an Overview recommendation, an inactive
+department card, a Briefing nudge.
+
+**Files:** `agent/templates/portal_base.html` (new), `agent/templates/dashboard_v2/overview.html` (new), `agent/portal.py`, `agent/static/portal.css`, tests
+
+**Order of work (founder-specified):** build `portal_base.html` first →
+migrate exactly **one** page onto it → verify responsive behaviour in a real
+browser → only then create the remaining pages in Tasks 4-7.
+
+Five nav items exactly - **Overview / Departments / {briefing_label} /
+Notifications / Settings** (blueprint SS5), every visible label centralized in
+`portal.NAV_ITEMS` so no template hardcodes one. Mobile bottom tab bar. Routes
+under `/v2/` so the live dashboard is untouched.
+
+`DESIGN.md` compliance: existing `portal.css` tokens only, no new palette,
+dashboard type scale (H1 28 / H2 18 / body 14 / small 12-13), 8px base unit,
+radius sm 6 / md 10 / lg 12, hover-and-focus motion only at 150-200ms, no dark
+mode.
+
+**Access decision:** `/v2/*` requires a session but does **not** require
+`frontdesk_live`. The old dashboard bounced un-activated businesses into
+onboarding; the new one shows honest empty states instead, per blueprint SS4's
+empty-state table - and after Phase 6 there is no onboarding wizard to bounce
+them to.
+
+**Tests:** all five items render in order; no sixth; no implementation-
+structure word appears in the nav (the design principle, as a test); labels
+come from the centralized constant; the Briefing's label is `BRIEFING_LABEL`;
+`/v2/*` requires login; the active item is marked; the mobile bar exists; the
+live `/dashboard` still renders unchanged.
+
+**Expected:** `~468 passing`.
 
 ---
 

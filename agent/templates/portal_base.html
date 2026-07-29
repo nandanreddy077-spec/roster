@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{% block title %}{{ business.business_name or "Your workforce" }} — Roster{% endblock %}</title>
+<meta name="robots" content="noindex">
+<link rel="stylesheet" href="/static/portal.css?v={{ portal_css_version }}">
+</head>
+<body class="portal-shell">
+
+{# Navigation names stable CUSTOMER concepts, never implementation structure
+   (founder, 2026-07-29). Labels live in portal.NAV_ITEMS so renaming one —
+   including the provisional Briefing name — is a one-line change. #}
+<nav class="portal-nav" aria-label="Your workforce">
+  <a class="logo portal-nav-logo" href="/v2/dashboard">Roster</a>
+  <ul class="portal-nav-list">
+    {% for item in nav_items %}
+    <li>
+      <a href="{{ item.href }}"
+         class="portal-nav-link{{ ' is-active' if item.key == active_nav }}"
+         {% if item.key == active_nav %}aria-current="page"{% endif %}>{{ item.label }}</a>
+    </li>
+    {% endfor %}
+  </ul>
+  <form method="post" action="/logout" class="portal-nav-logout">
+    <button type="submit" class="btn btn-secondary btn-small">Log out</button>
+  </form>
+</nav>
+
+<main class="portal-main">
+  <header class="portal-head">
+    <h1>{% block heading %}{% endblock %}</h1>
+    {% block subhead %}{% endblock %}
+  </header>
+  {% block content %}{% endblock %}
+</main>
+
+{# The owner is on a phone in a truck (platform PRD P1), so the same five
+   concepts get a thumb-reachable bar rather than a hidden hamburger. #}
+<nav class="portal-tabbar" aria-label="Your workforce">
+  {% for item in nav_items %}
+  <a href="{{ item.href }}"
+     class="portal-tab{{ ' is-active' if item.key == active_nav }}"
+     {% if item.key == active_nav %}aria-current="page"{% endif %}>{{ item.label }}</a>
+  {% endfor %}
+</nav>
+
+</body>
+</html>

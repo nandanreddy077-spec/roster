@@ -19,7 +19,8 @@ from authlib.integrations.starlette_client import OAuthError
 from activation import activate_frontdesk
 from auth import hash_password, verify_password
 from db import engine
-from db_models import Business, Job, Message
+from db_models import Business, Employee, Job, Message
+from departments import active_departments_for
 from deployment import deploy_role
 from google_auth import callback_url, get_oauth, google_enabled
 from locks import conversation_lock
@@ -48,6 +49,27 @@ templates.env.globals["portal_css_version"] = PORTAL_CSS_VERSION
 # test_briefing_label.py fails if a template hardcodes the words instead.
 BRIEFING_LABEL = "The Briefing"
 templates.env.globals["briefing_label"] = BRIEFING_LABEL
+
+# Navigation represents stable CUSTOMER concepts, never implementation
+# structure (founder design principle, 2026-07-29). These name things an owner
+# already thinks about — never "Employees", "Jobs", "Campaigns" or "Agents",
+# which are how the work is built, not how they think about their business.
+#
+# Expansion is deliberately absent: a permanent "grow your workforce" tab would
+# make the product read as a storefront. It appears contextually instead
+# (blueprint §5) — an Overview recommendation, an inactive department card, a
+# Briefing nudge.
+#
+# Every visible label lives here so renaming one — including the provisional
+# Briefing name — never means editing templates.
+NAV_ITEMS = (
+    {"key": "overview", "label": "Overview", "href": "/v2/dashboard"},
+    {"key": "departments", "label": "Departments", "href": "/v2/dashboard/departments"},
+    {"key": "briefing", "label": BRIEFING_LABEL, "href": "/v2/dashboard/briefing"},
+    {"key": "notifications", "label": "Notifications", "href": "/v2/dashboard/notifications"},
+    {"key": "settings", "label": "Settings", "href": "/v2/dashboard/settings"},
+)
+templates.env.globals["nav_items"] = NAV_ITEMS
 
 router = APIRouter()
 
@@ -364,6 +386,37 @@ def dashboard(request: Request):
                 "coming_later": coming_later,
                 "requested": requested,
                 "show_source_banner": show_source_banner,
+            },
+        )
+
+
+# ---- The department-first dashboard (Phase 5) ------------------------------
+# Built at /v2/* alongside the live /dashboard, which stays untouched until
+# Phase 6 repoints it — the same pattern the landing rebuild used with
+# /preview. Deployment state comes from departments.department_status_for over
+# Employee rows, never from requested_roster or a hardcoded badge (the
+# blueprint's permanent state-derivation invariant).
+
+
+@router.get("/v2/dashboard")
+def v2_overview(request: Request):
+    """Requires a session but NOT frontdesk_live: the old dashboard bounced
+    un-activated businesses into onboarding, and after Phase 6 there is no
+    onboarding wizard to bounce them to. They see honest empty states."""
+    with Session(engine) as session:
+        business = _current_client(request, session)
+        if business is None:
+            return RedirectResponse("/login", status_code=303)
+        employees = session.exec(
+            select(Employee).where(Employee.business_id == business.id)
+        ).all()
+        return templates.TemplateResponse(
+            request,
+            "dashboard_v2/overview.html",
+            {
+                "business": business,
+                "active_nav": "overview",
+                "staffed_departments": active_departments_for(employees),
             },
         )
 

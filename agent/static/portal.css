@@ -108,3 +108,75 @@ h1, h2, .logo { font-family: var(--serif); font-weight: 600; color: var(--ink); 
   border-bottom: 1px solid var(--border);
 }
 .or-divider span { padding: 0 12px; }
+
+/* ---- Department-first dashboard shell (Phase 5) --------------------------
+   DESIGN.md: existing tokens only, no new palette; dashboard type scale
+   (H1 28 / H2 18 / body 14 / small 12-13); 8px base unit; radius sm 6 / md 10
+   / lg 12; hover+focus motion only at 150-200ms; no dark mode. */
+
+.portal-shell { padding-bottom: 72px; }               /* clears the mobile bar */
+
+.portal-nav {
+  display: flex; align-items: center; gap: 24px; flex-wrap: wrap;
+  background: var(--card); border-bottom: 1px solid var(--border);
+  padding: 16px 24px;
+}
+.portal-nav-logo { margin-right: 8px; }
+.portal-nav-list { display: none; list-style: none; gap: 8px; flex: 1; }
+.portal-nav-link {
+  display: block; padding: 8px 12px; border-radius: 10px;
+  font-size: 14px; color: var(--text-dim); text-decoration: none;
+  transition: background 160ms ease, color 160ms ease;
+}
+.portal-nav-link:hover, .portal-nav-link:focus-visible {
+  background: var(--bg-alt); color: var(--text);
+}
+.portal-nav-link.is-active { background: var(--accent-dim); color: var(--accent-dark); font-weight: 600; }
+.portal-nav-logout { margin-left: auto; }
+
+.portal-main { max-width: 1040px; margin: 0 auto; padding: 32px 24px; }
+.portal-head { margin-bottom: 24px; }
+.portal-head h1 { font-size: 28px; }
+.portal-lede { color: var(--text-dim); font-size: 14px; margin-top: 4px; }
+
+.portal-card-wide { max-width: 100%; margin: 0 0 24px; }
+.portal-eyebrow {
+  font-size: 12px; letter-spacing: .08em; text-transform: uppercase;
+  color: var(--text-dim); margin-bottom: 8px;
+}
+.portal-empty { color: var(--text-dim); font-size: 14px; }
+.portal-dept-list { list-style: none; display: flex; flex-wrap: wrap; gap: 8px; }
+.portal-dept-list a {
+  display: block; padding: 8px 12px; border: 1px solid var(--border);
+  border-radius: 10px; font-size: 14px; color: var(--text); text-decoration: none;
+  transition: background 160ms ease;
+}
+.portal-dept-list a:hover, .portal-dept-list a:focus-visible { background: var(--bg-alt); }
+
+/* Thumb-reachable bar for the owner in a truck (platform PRD P1) rather than
+   a hamburger that hides the whole IA behind one tap. */
+.portal-tabbar {
+  position: fixed; bottom: 0; left: 0; right: 0; z-index: 10;
+  display: flex; background: var(--card); border-top: 1px solid var(--border);
+}
+.portal-tab {
+  flex: 1; min-height: 56px;                            /* large tap target */
+  display: flex; align-items: center; justify-content: center; text-align: center;
+  padding: 8px 4px; font-size: 12px; line-height: 1.25;
+  color: var(--text-dim); text-decoration: none;
+  transition: color 160ms ease;
+}
+/* The longest label ("The Briefing", itself provisional) wrapped to two lines
+   on a 375px phone, leaving the bar ragged and taller than the others. Scaled
+   down at the narrowest widths rather than truncating, so a future longer
+   label degrades the same way instead of being cut off. */
+@media (max-width: 430px) {
+  .portal-tab { font-size: 11px; padding: 8px 2px; }
+}
+.portal-tab.is-active { color: var(--accent-dark); font-weight: 600; }
+
+@media (min-width: 768px) {
+  .portal-nav-list { display: flex; }
+  .portal-tabbar { display: none; }
+  .portal-shell { padding-bottom: 0; }
+}

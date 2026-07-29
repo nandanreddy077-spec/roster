@@ -1,0 +1,23 @@
+{% extends "portal_base.html" %}
+{% block heading %}Overview{% endblock %}
+{% block subhead %}
+<p class="portal-lede">{{ business.business_name or "Your business" }}</p>
+{% endblock %}
+
+{% block content %}
+{# Deliberately thin: Task 4 builds the outcomes strip, digest and contextual
+   expansion prompt on top of this shell. What's here now is the honest empty
+   state, so the page never claims work that hasn't happened. #}
+<section class="portal-card portal-card-wide">
+  {% if staffed_departments %}
+  <p class="portal-eyebrow">Working for you</p>
+  <ul class="portal-dept-list">
+    {% for d in staffed_departments %}
+    <li><a href="/v2/dashboard/departments">{{ d.display_name }}</a></li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="portal-empty">Your workforce is being set up — you'll see activity here once it's live.</p>
+  {% endif %}
+</section>
+{% endblock %}
