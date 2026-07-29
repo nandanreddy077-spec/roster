@@ -196,6 +196,7 @@
     <div class="job-card">
       <div class="job-urgency {{ j.urgency }}">{{ j.urgency }}</div>
       <strong>{{ j.service_type }}</strong>
+      {% if is_test_thread(j.customer_phone) %}<span class="agent-badge agent-badge-off">test</span>{% endif %}
       {% if j.customer_name %}<div>{{ j.customer_name }}</div>{% endif %}
       {% if j.address %}<div>{{ j.address }}</div>{% endif %}
       {% if j.callback_number %}<div>{{ j.callback_number }}</div>{% endif %}

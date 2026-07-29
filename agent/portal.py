@@ -23,7 +23,8 @@ from db_models import Business, Job, Message
 from deployment import deploy_role
 from google_auth import callback_url, get_oauth, google_enabled
 from locks import conversation_lock
-from notifications import _TEST_THREADS
+import metrics
+from notifications import is_test_thread
 from roles import ROSTER_DESCRIPTIONS, coming_later_after, next_hire, receptionist_display_name, role_key_for
 from service import handle_customer_message
 
@@ -38,6 +39,15 @@ templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
 # param built from it forces a fresh fetch without hand-bumping a version.
 PORTAL_CSS_VERSION = str(int((BASE_DIR / "static" / "portal.css").stat().st_mtime))
 templates.env.globals["portal_css_version"] = PORTAL_CSS_VERSION
+
+# The executive-view page's VISIBLE name. Provisional by founder decision
+# (blueprint §4a: "safe to build against, not safe to consider final"), so
+# routes, modules and template filenames stay `briefing` permanently and only
+# this constant changes when the name does. Registered as a Jinja global so
+# every template reads it without any route having to pass it — and
+# test_briefing_label.py fails if a template hardcodes the words instead.
+BRIEFING_LABEL = "The Briefing"
+templates.env.globals["briefing_label"] = BRIEFING_LABEL
 
 router = APIRouter()
 
@@ -320,11 +330,13 @@ def dashboard(request: Request):
                 "customer_name": j.customer_name,
                 "callback_number": j.callback_number,
                 "created_at": j.created_at,
-                "is_test": j.customer_phone in _TEST_THREADS,
+                "is_test": is_test_thread(j.customer_phone),
             }
             for j in jobs
         ]
-        real_job_count = sum(1 for j in job_rows if not j["is_test"])
+        # One definition, shared with every other surface (metrics.py) — not a
+        # second count that can drift from the founder console's.
+        real_job_count = metrics.booked_jobs(session, client.id)
 
         requested = json.loads(client.requested_roster) if client.requested_roster else []
         next_role = next_hire(requested)

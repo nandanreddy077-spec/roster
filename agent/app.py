@@ -33,6 +33,7 @@ import departments
 from db import DATA_DIR, engine, init_db
 from deployment import deploy_department, deploy_role
 from expansion import mark_actioned, open_interests_for
+from notifications import is_test_thread
 from locks import conversation_lock
 from db_models import (
     AccessRequest, Business, Customer, DepartmentInterest, Employee, Event, Job, Message,
@@ -121,6 +122,10 @@ app.add_middleware(
 )
 app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="static")
 templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
+# The founder's job list showed test bookings as real work while the customer's
+# tagged them (audit C4). Same public predicate both surfaces use, exposed to
+# the template rather than reaching for notifications' private set.
+templates.env.globals["is_test_thread"] = is_test_thread
 sms_channel = get_channel()
 app.include_router(portal_router)
 
