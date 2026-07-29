@@ -74,6 +74,26 @@ what it rules in and out:
 > Departments are the hero. Business outcomes are second. Employee activity
 > is third. Customers should never feel like they are managing AI agents.
 
+### Permanent architectural invariant (founder, 2026-07-29)
+
+> **Every customer-visible deployment state must derive from `Employee` rows
+> through the shared deployment helpers — never from duplicated template
+> logic.**
+
+The customer dashboard and the founder ops console must answer "what is
+deployed for this business?" by calling the *same* code over the *same* rows.
+Any surface that recomputes deployment state from its own fields — a
+`requested_roster` string, a `tested_at` timestamp, a hardcoded template
+badge — will drift from the truth, and the two surfaces will tell the
+customer and the Roster team different things about the same business.
+
+This is not hypothetical: the founder console's roster was hardcoded for its
+entire life before Phase 4b, and the customer dashboard's "Your office" card
+derives its state from `requested_roster` and `tested_at` rather than from
+deployment. Phase 5 exists in part to end that.
+
+---
+
 This is added at the same level of permanence as the core abstraction above
 — every section from here on is a specific application of it, and any future
 feature or screen gets checked against it before it ships. Two direct
