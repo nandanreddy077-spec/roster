@@ -256,3 +256,14 @@ h1, h2, .logo { font-family: var(--serif); font-weight: 600; color: var(--ink); 
 .portal-employee-card-link:hover, .portal-employee-card-link:focus-visible {
   box-shadow: 0 2px 10px rgba(31, 27, 22, 0.08);
 }
+
+/* Gateway cards (Overview, Departments grid) — navigation, not reporting.
+   DESIGN.md: existing tokens, dashboard type scale, 8px rhythm. */
+.portal-gateway-card-link {
+  display: block; text-decoration: none; color: inherit;
+  border-radius: 12px; transition: box-shadow 160ms ease;
+}
+.portal-gateway-card-link:hover, .portal-gateway-card-link:focus-visible {
+  box-shadow: 0 2px 10px rgba(31, 27, 22, 0.08);
+}
+.portal-gateway-card { max-width: 100%; margin: 0; }

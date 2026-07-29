@@ -82,6 +82,7 @@ from workspace import (  # noqa: E402
     METRIC_LABELS,
     build_department_workspace,
     build_employee_workspace,
+    headline_outcome,
 )
 
 templates.env.globals["metric_labels"] = METRIC_LABELS
@@ -431,11 +432,28 @@ def _outcomes(session, business_id: int, department_key: str, staffed) -> list:
     return [(METRIC_LABELS[key], value) for key, value in outcomes.items()]
 
 
+def _gateway_card(session, business_id: int, status) -> dict:
+    """A GATEWAY, not a report (founder, 2026-07-29): the department's
+    question and at most one headline number, with the whole card navigating
+    into the Department Workspace — which is where the full outcomes list and
+    the employee roster live now. Used by both Overview and the Departments
+    grid so the two pages can never show a staffed department differently."""
+    outcomes = _outcomes(session, business_id, status.department.key, status.staffed)
+    return {
+        "department": status.department,
+        "health_label": CUSTOMER_STATE_LABELS[status.state],
+        "headline": headline_outcome(outcomes),
+    }
+
+
 @router.get("/v2/dashboard")
 def v2_overview(request: Request):
     """Requires a session but NOT frontdesk_live: the old dashboard bounced
     un-activated businesses into onboarding, and after Phase 6 there is no
-    onboarding wizard to bounce them to. They see honest empty states."""
+    onboarding wizard to bounce them to. They see honest empty states.
+
+    Navigation, not reporting: every card here is a gateway into its
+    Department Workspace, never the full outcomes list."""
     with Session(engine) as session:
         business = _current_client(request, session)
         if business is None:
@@ -447,23 +465,19 @@ def v2_overview(request: Request):
             {
                 "business": business,
                 "active_nav": "overview",
-                "working": [
-                    {
-                        "department": s.department,
-                        "outcomes": _outcomes(session, business.id, s.department.key, s.staffed),
-                    }
-                    for s in working
-                ],
+                "gateway_cards": [_gateway_card(session, business.id, s) for s in working],
             },
         )
 
 
 @router.get("/v2/dashboard/departments")
 def v2_departments(request: Request):
-    """The whole org, every time — active departments with real numbers, and
-    inactive ones that educate rather than just reporting absence
-    (blueprint §7). Leadership is excluded: it isn't hireable and comes with
-    every workforce, so it lives in the nav as the executive view."""
+    """The whole org, every time. Active departments render as gateway cards
+    into their Department Workspace; inactive ones educate rather than just
+    reporting absence (blueprint §7) — and stay unlinked, since the expansion
+    CTA they'd point to doesn't exist until Task 9 (no dead controls).
+    Leadership is excluded: it isn't hireable and comes with every workforce,
+    so it lives in the nav as the executive view."""
     with Session(engine) as session:
         business = _current_client(request, session)
         if business is None:
@@ -472,14 +486,14 @@ def v2_departments(request: Request):
         for status in _statuses(session, business.id):
             if not status.department.hireable:
                 continue
-            active = status.state in _ACTIVE_STATES
-            cards.append({
-                "department": status.department,
-                "active": active,
-                "label": CUSTOMER_STATE_LABELS[status.state],
-                "employees": status.staffed,
-                "outcomes": _outcomes(session, business.id, status.department.key, status.staffed) if active else [],
-            })
+            if status.state in _ACTIVE_STATES:
+                cards.append({"active": True, **_gateway_card(session, business.id, status)})
+            else:
+                cards.append({
+                    "active": False,
+                    "department": status.department,
+                    "label": CUSTOMER_STATE_LABELS[status.state],
+                })
         return templates.TemplateResponse(
             request,
             "dashboard_v2/departments.html",

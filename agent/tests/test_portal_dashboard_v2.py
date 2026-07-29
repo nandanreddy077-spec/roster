@@ -4,7 +4,7 @@ Deployment state comes from departments.department_status_for over Employee
 rows, never from requested_roster or a hardcoded badge (the blueprint's
 state-derivation invariant). Numbers come from metrics.py, the same module the
 founder console uses."""
-from sqlmodel import Session
+from sqlmodel import Session, select
 from starlette.testclient import TestClient
 
 import app as app_module
@@ -63,6 +63,54 @@ def test_overview_shows_outcomes_for_an_active_department(test_engine, monkeypat
     assert "3" in body
 
 
+def test_overview_shows_at_most_one_headline_number_per_department(test_engine, monkeypatch):
+    """Task 8 (founder, 2026-07-29): Overview is navigation, not a report —
+    one headline number per department, not the full outcomes list."""
+    from db_models import Message
+
+    monkeypatch.setattr(app_module, "engine", test_engine)
+    monkeypatch.setattr(portal, "engine", test_engine)
+    email = next(_EMAIL)
+    with Session(test_engine) as s:
+        b = Business(business_name="Ridgeline Plumbing", trade="Plumbing",
+                     email=email, password_hash=hash_password("pw12345"))
+        s.add(b)
+        s.commit()
+        s.refresh(b)
+        deploy_department(s, b.id, "customer_service")
+        s.add(Job(business_id=b.id, customer_phone="+15125550100",
+                  service_type="Drain cleaning", urgency="routine"))
+        s.add(Message(business_id=b.id, customer_phone="xai-voice:call1",
+                      role="assistant", content_json='"hi"'))
+        s.commit()
+    client = TestClient(app_module.app)
+    client.post("/login", data={"email": email, "password": "pw12345"})
+
+    body = client.get("/v2/dashboard").text
+
+    # Only ONE metric label may appear per department on this page.
+    assert "Jobs booked" in body
+    assert "Calls answered" not in body
+
+
+def test_every_active_department_on_overview_links_to_its_workspace(test_engine, monkeypatch):
+    """The whole point of Task 8: Overview is a gateway, not a dead end."""
+    body = _page(test_engine, monkeypatch, deploy="customer_service", jobs=1)
+
+    assert 'href="/v2/dashboard/departments/customer_service"' in body
+
+
+def test_overview_shows_the_departments_question_not_its_mission(test_engine, monkeypatch):
+    """Consistent voice with the workspace page, which leads with the
+    question too (Task 6)."""
+    from departments import get_department
+
+    body = _page(test_engine, monkeypatch, deploy="customer_service")
+    department = get_department("customer_service")
+
+    assert department.question in body
+
+
 def test_overview_shows_no_outcomes_for_departments_that_are_not_staffed(test_engine, monkeypatch):
     """Blueprint §4: the strip covers 'only for departments actually active'.
     A Sales number on a business with no Sales department would be an
@@ -98,6 +146,32 @@ def test_a_staffed_department_reads_as_working(test_engine, monkeypatch):
     body = _page(test_engine, monkeypatch, path=DEPARTMENTS, deploy="customer_service")
 
     assert "Working" in body
+
+
+def test_an_active_departments_card_links_into_its_workspace(test_engine, monkeypatch):
+    body = _page(test_engine, monkeypatch, path=DEPARTMENTS, deploy="customer_service")
+
+    assert 'href="/v2/dashboard/departments/customer_service"' in body
+
+
+def test_an_active_card_shows_at_most_one_headline_outcome(test_engine, monkeypatch):
+    """Task 8: the grid card is a gateway, not a report — the full outcomes
+    list (and the employee roster) belongs to the Department Workspace now."""
+    body = _page(test_engine, monkeypatch, path=DEPARTMENTS, deploy="customer_service", jobs=1)
+
+    assert "Jobs booked" in body
+    assert "1" in body
+    assert "Working here:" not in body, (
+        "the employee roster is Department Workspace content now, not the grid's"
+    )
+
+
+def test_an_inactive_card_is_never_a_link(test_engine, monkeypatch):
+    """No dead controls: the expansion CTA doesn't exist yet (Task 9), so an
+    inactive card must not link anywhere until it does."""
+    body = _page(test_engine, monkeypatch, path=DEPARTMENTS)
+
+    assert 'href="/v2/dashboard/departments/finance"' not in body
 
 
 def test_a_partially_staffed_department_also_reads_as_working(test_engine, monkeypatch):

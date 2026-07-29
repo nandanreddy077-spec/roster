@@ -97,6 +97,15 @@ class EmployeeWorkspace:
     activity: List[metrics.ActivityRow]
 
 
+def headline_outcome(outcomes: List[Tuple[str, int]]) -> Optional[Tuple[str, int]]:
+    """The one number a gateway card shows (Overview, the Departments grid —
+    founder, 2026-07-29: 'Overview is navigation, not reporting'). The full
+    list belongs to the Department Workspace, which is what the card links to.
+    Deterministic: the first-declared outcome, in registry order — never a
+    computed 'most important' metric invented for the card."""
+    return outcomes[0] if outcomes else None
+
+
 def _labeled(raw: dict) -> List[Tuple[str, int]]:
     return [(METRIC_LABELS[key], value) for key, value in raw.items()]
 

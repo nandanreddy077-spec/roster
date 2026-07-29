@@ -5,23 +5,14 @@
 {% endblock %}
 
 {% block content %}
-{% if working %}
-{# Outcomes only for departments actually working — a number for a department
-   nobody staffed would assert work that isn't happening (blueprint §4). #}
-{% for row in working %}
-<section class="portal-card portal-card-wide">
-  <p class="portal-eyebrow">{{ row.department.display_name }}</p>
-  {% if row.outcomes %}
-  <ul class="portal-outcomes">
-    {% for label, value in row.outcomes %}
-    <li><span class="portal-outcome-value">{{ value }}</span><span class="portal-outcome-label">{{ label }}</span></li>
-    {% endfor %}
-  </ul>
-  {% else %}
-  <p class="portal-empty">Working — nothing to report yet.</p>
-  {% endif %}
-</section>
-{% endfor %}
+{# Navigation, not reporting (founder, 2026-07-29): every card here is a
+   gateway into its Department Workspace, never the full outcomes list. #}
+{% if gateway_cards %}
+<div class="portal-dept-grid">
+  {% for card in gateway_cards %}
+  {% include "dashboard_v2/_gateway_card.html" %}
+  {% endfor %}
+</div>
 {% else %}
 <section class="portal-card portal-card-wide">
   <p class="portal-empty">Your workforce is being set up — you'll see activity here once it's live.</p>
