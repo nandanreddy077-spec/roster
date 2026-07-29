@@ -921,6 +921,234 @@ def test_supervised_call_task_logs_crash_and_is_released(capsys):
     assert "call_sup" in err and "exploded" in err
 
 
+# ---- Maximum call duration: no session can run forever ----------------------
+#
+# The guarantee: run_call bounds the ENTIRE call session (from connect through
+# close) in one asyncio.wait_for, wrapping _run_call_session's single
+# top-level await from the outside — _run_call_session's own internals are
+# untouched, so the event-dispatch loop, tool handling, and transcript
+# capture built in the earlier priorities are not restructured at all.
+#
+# Chosen there (in run_call, not inside the event loop) because it needs to
+# bound EVERYTHING a call can block on — the initial connect handshake as
+# well as an idle `async for raw in ws`, not just one wait point inside the
+# loop. A per-event timeout would miss a call stuck before its first event.
+#
+# On timeout, asyncio.wait_for cancels the inner coroutine; the resulting
+# CancelledError propagates up through _run_call_session's
+# `async with connect(call_id) as ws:` block, which is what actually closes
+# the websocket — the SAME mechanism that already closes it on a clean
+# return or a crash, not a new one. run_call's own try/except/finally then
+# behaves exactly like the existing crash path: an owner notification (a
+# DIFFERENT message from a crash's, honest about why — "reached the maximum
+# allowed duration", never claimed to be a generic drop) and trace.close()
+# in `finally`, unconditionally.
+
+class HangingWS(FakeWS):
+    """Yields the given events, then blocks forever — simulates an idle or
+    stuck call so the max-duration timeout actually has something to cut
+    off. `closed` records whether __aexit__ ran, proving cleanup happened."""
+    def __init__(self, events=None):
+        super().__init__(events or [])
+        self.closed = False
+
+    async def __aiter__(self):
+        for r in self._raw:
+            yield r
+        await asyncio.sleep(999999)
+
+
+def tracking_connector_for(ws):
+    """Same shape as connector_for, but records whether __aexit__ actually
+    ran — connector_for's own _CM discards that, and this test needs to
+    prove the websocket is closed on timeout, not just assume it."""
+    class _CM:
+        async def __aenter__(self):
+            return ws
+
+        async def __aexit__(self, *a):
+            ws.closed = True
+            return False
+
+    def connect(call_id):
+        return _CM()
+
+    return connect
+
+
+TINY_TIMEOUT = 0.05
+
+
+def test_a_normal_call_under_the_limit_is_unaffected(test_engine):
+    """The new wrapping must not change ordinary behavior at all."""
+    from xai_voice_adapter import run_call
+    from call_trace import CallTrace
+
+    client = _seed_business(test_engine)
+    trace = CallTrace("call_ok")
+    ws = FakeWS([GREETING_DONE, LOG_JOB_EVENT])
+
+    asyncio.run(run_call("call_ok", client, "+15125559999", lambda: Session(test_engine),
+                         connect=connector_for(ws), trace=trace, max_duration_seconds=10))
+
+    stages = [r["stage"] for r in trace.records if r["kind"] == "stage"]
+    assert "call_completed" in stages
+    assert "call_timed_out" not in stages
+
+
+def test_timeout_while_idle_is_recorded_and_ends_the_call(test_engine, monkeypatch):
+    from xai_voice_adapter import run_call
+    from call_trace import CallTrace
+    import xai_voice_adapter as adapter
+
+    monkeypatch.setattr(adapter, "notify_owner_of_escalation", lambda *a, **k: True)
+    client = _seed_business(test_engine)
+    trace = CallTrace("call_idle")
+    ws = HangingWS([])  # nothing ever arrives — an idle/stuck connection
+
+    asyncio.run(run_call("call_idle", client, "+15125559999", lambda: Session(test_engine),
+                         connect=tracking_connector_for(ws), trace=trace,
+                         max_duration_seconds=TINY_TIMEOUT))
+
+    stages = [r["stage"] for r in trace.records if r["kind"] == "stage"]
+    assert "call_timed_out" in stages
+    assert "call_completed" not in stages
+    assert ws.closed is True, "the websocket must be closed on timeout, not left dangling"
+
+
+def test_timeout_during_conversation_ends_the_call_cleanly(test_engine, monkeypatch):
+    """A call that had real back-and-forth, then goes silent past the limit."""
+    from xai_voice_adapter import run_call
+    from call_trace import CallTrace
+    import xai_voice_adapter as adapter
+
+    monkeypatch.setattr(adapter, "notify_owner_of_escalation", lambda *a, **k: True)
+    client = _seed_business(test_engine)
+    trace = CallTrace("call_mid")
+    ws = HangingWS([GREETING_DONE, _transcription_completed("item_1", "hello?")])
+
+    asyncio.run(run_call("call_mid", client, "+15125559999", lambda: Session(test_engine),
+                         connect=tracking_connector_for(ws), trace=trace,
+                         max_duration_seconds=TINY_TIMEOUT))
+
+    stages = [r["stage"] for r in trace.records if r["kind"] == "stage"]
+    assert "first_ai_response" in stages    # the earlier turns were handled normally
+    assert "call_timed_out" in stages
+    assert ws.closed is True
+
+
+def test_timeout_after_a_booking_preserves_the_booked_job(test_engine, monkeypatch):
+    """Partial work already committed before the timeout must survive it —
+    book_job already commits synchronously as each event is processed, so
+    this proves the timeout path doesn't touch or roll back that work."""
+    from xai_voice_adapter import run_call
+    from call_trace import CallTrace
+    from db_models import Message
+
+    import xai_voice_adapter as adapter
+    monkeypatch.setattr(adapter, "notify_owner_of_booking", lambda *a, **k: True)
+    monkeypatch.setattr(adapter, "notify_owner_of_escalation", lambda *a, **k: True)
+    client = _seed_business(test_engine)
+    trace = CallTrace("call_after_book")
+    ws = HangingWS([LOG_JOB_EVENT])
+
+    asyncio.run(run_call("call_after_book", client, "+15125559999", lambda: Session(test_engine),
+                         connect=tracking_connector_for(ws), trace=trace,
+                         max_duration_seconds=TINY_TIMEOUT))
+
+    with Session(test_engine) as s:
+        jobs = s.exec(select(Job).where(Job.business_id == client.id)).all()
+    assert len(jobs) == 1
+    assert jobs[0].service_type == "burst pipe"
+    stages = [r["stage"] for r in trace.records if r["kind"] == "stage"]
+    assert "call_timed_out" in stages
+
+
+def test_timeout_after_an_escalation_still_notifies_once_more_honestly(test_engine, monkeypatch):
+    """Owner notifications must behave correctly across both events: the
+    escalation pages the owner once (Priority 1's guarantee, untouched), and
+    the timeout — a SEPARATE incident, not a re-alert of the same one — adds
+    its own distinct, honest notification on top. Neither suppresses or
+    duplicates the other."""
+    from xai_voice_adapter import run_call
+    from call_trace import CallTrace
+    from db_models import OwnerNotification
+    import xai_voice_adapter as adapter
+
+    monkeypatch.setattr(adapter, "notify_owner_of_escalation", lambda *a, **k: True)
+    client = _seed_business(test_engine)
+    trace = CallTrace("call_after_esc")
+    ws = HangingWS([ALERT_OWNER_EVENT])
+
+    asyncio.run(run_call("call_after_esc", client, "+15125559999", lambda: Session(test_engine),
+                         connect=tracking_connector_for(ws), trace=trace,
+                         max_duration_seconds=TINY_TIMEOUT))
+
+    with Session(test_engine) as s:
+        jobs = s.exec(select(Job).where(Job.business_id == client.id)).all()
+        notifications = s.exec(
+            select(OwnerNotification).where(OwnerNotification.business_id == client.id)
+        ).all()
+    assert len(jobs) == 1
+    assert jobs[0].owner_alerted_at is not None      # the escalation's own page succeeded
+    assert len(notifications) == 2                    # escalation + timeout, not deduped together
+    kinds = sorted(n.kind for n in notifications)
+    assert kinds == sorted(["escalation", "call_dropped"])
+    stages = [r["stage"] for r in trace.records if r["kind"] == "stage"]
+    assert "call_timed_out" in stages
+
+
+def test_cleanup_always_happens_even_on_timeout(test_engine, monkeypatch, tmp_path):
+    """trace.close() runs in `finally` regardless of how the try block
+    exits — proven here by asserting the capture file was actually closed
+    (a second write after run_call returns must still succeed, which would
+    fail if the handle were left in some broken half-open state)."""
+    from xai_voice_adapter import run_call
+    from call_trace import CallTrace
+    import xai_voice_adapter as adapter
+
+    monkeypatch.setattr(adapter, "notify_owner_of_escalation", lambda *a, **k: True)
+    client = _seed_business(test_engine)
+    trace = CallTrace("call_cleanup", capture_dir=tmp_path)
+    ws = HangingWS([])
+
+    asyncio.run(run_call("call_cleanup", client, "+15125559999", lambda: Session(test_engine),
+                         connect=tracking_connector_for(ws), trace=trace,
+                         max_duration_seconds=TINY_TIMEOUT))
+
+    assert trace._fh is None, "the capture file handle must be closed, not left open"
+    capture_file = tmp_path / "call_cleanup.jsonl"
+    assert capture_file.exists()
+
+
+def test_no_task_leaks_after_a_timeout(test_engine, monkeypatch):
+    """The asyncio.Task wrapping a timed-out call must be released, exactly
+    like a crashed or cleanly-completed one — proven through app.py's real
+    supervise_call_task, not a re-implementation of it."""
+    import app as app_module
+    from xai_voice_adapter import run_call
+    from call_trace import CallTrace
+    import xai_voice_adapter as adapter
+
+    monkeypatch.setattr(adapter, "notify_owner_of_escalation", lambda *a, **k: True)
+    client = _seed_business(test_engine)
+    ws = HangingWS([])
+
+    async def scenario():
+        task = asyncio.get_event_loop().create_task(
+            run_call("call_leak", client, "+15125559999", lambda: Session(test_engine),
+                    connect=tracking_connector_for(ws), trace=CallTrace("call_leak"),
+                    max_duration_seconds=TINY_TIMEOUT)
+        )
+        app_module.supervise_call_task(task, "call_leak")
+        await task
+        await asyncio.sleep(0)   # let the done-callback fire
+
+    asyncio.run(scenario())
+
+    assert len(app_module._active_call_tasks) == 0, "a timed-out call's task must be released"
+
+
 # ---- Webhook hardening: fail closed, reject replays --------------------------
 
 def _fresh_signed(body: bytes, secret: str):

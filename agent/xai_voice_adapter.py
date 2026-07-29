@@ -61,6 +61,15 @@ REALTIME_URL = "wss://api.x.ai/v1/realtime"
 VOICE_THREAD_PREFIX = "xai-voice:"
 DEFAULT_VOICE = "eve"
 
+# Hard safety cap on one call's total duration (connect through close) — a
+# stuck/zombie connection (or a caller who never hangs up) must not pin a
+# WebSocket and its asyncio task open forever, or run up unmetered xAI
+# Realtime API cost indefinitely. 10 minutes is generous for a real home-
+# service conversation while still bounding the worst case. Overridable per
+# call via run_call's own `max_duration_seconds` param (tests use a tiny
+# value; this constant is what production actually runs with).
+MAX_CALL_DURATION_SECONDS = 600
+
 # call_id is attacker-supplied (it rides in on the unverified webhook body) and
 # then flows into a capture *filename*, a DB dedup key, and the voice thread id.
 # Constrain it to a filename-safe token right here at the trust boundary so a
@@ -307,7 +316,8 @@ def _default_connect(call_id: str):
 
 
 async def run_call(call_id: str, client: Business, caller_number: str, session_factory,
-                   connect=None, trace: Optional[CallTrace] = None) -> None:
+                   connect=None, trace: Optional[CallTrace] = None,
+                   max_duration_seconds: Optional[float] = None) -> None:
     """Owns one live call end-to-end. Runs as a background task kicked off by
     the /webhook/xai-incoming-call handler — must not block that handler's
     response to xAI.
@@ -315,15 +325,43 @@ async def run_call(call_id: str, client: Business, caller_number: str, session_f
     `connect(call_id)` returns the realtime WebSocket as an async context
     manager (injectable for tests). `trace` records every event and stage with
     a millisecond offset for boundary debugging; a capturing one is created if
-    not supplied."""
+    not supplied. `max_duration_seconds` overrides MAX_CALL_DURATION_SECONDS
+    (tests use a tiny value so they don't actually wait 10 minutes)."""
     connect = connect or _default_connect
     if trace is None:
         from db import DATA_DIR
         trace = CallTrace(call_id, capture_dir=DATA_DIR / "call_captures")
     thread = _thread_id(call_id)
+    max_duration = MAX_CALL_DURATION_SECONDS if max_duration_seconds is None else max_duration_seconds
 
     try:
-        await _run_call_session(connect, call_id, client, caller_number, session_factory, thread, trace)
+        await asyncio.wait_for(
+            _run_call_session(connect, call_id, client, caller_number, session_factory, thread, trace),
+            timeout=max_duration,
+        )
+    except asyncio.TimeoutError:
+        # Bounds the WHOLE session (connect through close) from the outside —
+        # _run_call_session's own internals (the event loop, tool handling,
+        # transcript capture) are untouched. Cancelling this await propagates
+        # a CancelledError up through _run_call_session's
+        # `async with connect(...) as ws:` block, which is what actually
+        # closes the websocket — the same mechanism a clean return or a crash
+        # already goes through, not a new one.
+        trace.stage("call_timed_out", max_duration_seconds=max_duration)
+        # Honest, not a generic "dropped" claim: this was OUR safety cutoff,
+        # not an unexplained failure — say so.
+        timeout_reason = (
+            "the AI call with this customer reached the maximum allowed "
+            "duration and was ended automatically — call them back"
+        )
+        alerted = await asyncio.to_thread(
+            notify_owner_of_escalation, client, caller_number, timeout_reason,
+        )
+        with session_factory() as session:
+            record_owner_notification(
+                session, client.id, KIND_CALL_DROPPED, SOURCE_CALL_DROPPED,
+                build_escalation_message(client, caller_number, timeout_reason), alerted,
+            )
     except Exception as e:
         # A mid-call crash (WS drop, DB error, bad payload) must never vanish
         # silently: record it, and text the owner the caller's number so the
