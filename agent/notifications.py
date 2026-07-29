@@ -18,6 +18,16 @@ from db_models import Business, Job, OwnerNotification
 # we don't text the owner about their own dashboard test message.
 _TEST_THREADS = {"dashboard", "portal-test"}
 
+# The voice equivalent of _TEST_THREADS (2026-07-29, safe voice test mode):
+# xai_voice_adapter.py builds a call's thread as f"{prefix}{call_id}", using
+# this prefix instead of the real VOICE_THREAD_PREFIX when is_test_call=True.
+# A prefix, not a fixed string, because a real call_id still needs to be part
+# of the thread for correct per-call isolation. Deliberately does NOT start
+# with the real prefix ("xai-voice-test:" vs "xai-voice:"), so every existing
+# `.startswith(VOICE_THREAD_PREFIX)` filter (metrics.py's _voice_conversations)
+# already excludes test threads with no changes of its own.
+VOICE_TEST_THREAD_PREFIX = "xai-voice-test:"
+
 # WHAT happened. The semantic axis — what a customer-facing view groups on.
 KIND_JOB_BOOKED = "job_booked"
 KIND_ESCALATION = "escalation"
@@ -106,10 +116,13 @@ def notify_owner_of_escalation(
 
 
 def is_test_thread(customer_phone: str) -> bool:
-    """True for the owner's own test conversations, which never produce a real
-    owner alert. Shares _TEST_THREADS with notify_owner_of_booking so the SMS
-    and the log can't disagree about what counts as real activity."""
-    return customer_phone in _TEST_THREADS
+    """True for the owner's own test conversations (SMS's fixed threads, or a
+    voice test call's `xai-voice-test:{call_id}` thread), which never produce
+    a real owner alert. The ONE shared definition of "test" — every caller
+    that needs this check (notify_owner_of_booking, metrics.py, portal.py,
+    xai_voice_adapter.py) goes through here so none of them can disagree
+    about what counts as real activity."""
+    return customer_phone in _TEST_THREADS or customer_phone.startswith(VOICE_TEST_THREAD_PREFIX)
 
 
 def record_owner_notification(session, business_id: int, kind: str, source: str,
@@ -153,11 +166,12 @@ def notify_owner_of_booking(
     business: Business, job: Job, employee_name: str = "Frontdesk", channel=None
 ) -> bool:
     """Text the owner about a newly booked job. Returns True if a message was
-    sent, False if skipped (no escalation number set, or a dashboard-test
-    booking) or if the send failed. Never raises into the booking path."""
+    sent, False if skipped (no escalation number set, or a test-thread
+    booking — SMS or voice) or if the send failed. Never raises into the
+    booking path."""
     if not business.escalation_phone:
         return False
-    if job.customer_phone in _TEST_THREADS:
+    if is_test_thread(job.customer_phone):
         return False
     ch = _resolve_channel(channel)
     try:

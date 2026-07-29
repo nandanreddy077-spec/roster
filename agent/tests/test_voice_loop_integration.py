@@ -1696,6 +1696,251 @@ def test_malformed_usage_information_is_treated_as_zero(test_engine):
     assert len(jobs) == 1
 
 
+# ---- Safe voice test mode ---------------------------------------------------
+#
+# Closes the eighth priority from the 2026-07-29 voice-loop audit: there was
+# no way to exercise a live number without it producing a real-looking
+# Job/OwnerNotification/dashboard row. run_call gains a single opt-in
+# `is_test_call` parameter (default False — the real production entry point,
+# app.py's xai-incoming-call webhook, never passes it, so this can never
+# activate on its own).
+#
+# The mechanism is NOT a parallel test pipeline: is_test_call only changes
+# which thread PREFIX _thread_id builds (VOICE_TEST_THREAD_PREFIX instead of
+# VOICE_THREAD_PREFIX) and gates the owner-notification call sites — every
+# other line of _run_call_session, _handle_function_call, and _persist_job
+# runs identically regardless. Isolation then falls out of the SAME shared
+# mechanism the SMS path's `portal-test` thread already relies on
+# (notifications.is_test_thread): metrics.py's `_jobs`/`_voice_conversations`
+# already filter on it, so a test call's Job/Message rows are automatically
+# excluded from customer-facing metrics and the dashboard with no changes to
+# those modules at all — the two thread prefixes are non-overlapping
+# strings ("xai-voice-test:" does not start with "xai-voice:"), so existing
+# `.startswith(VOICE_THREAD_PREFIX)` filters already exclude test threads.
+
+TEST_CALLER_NUMBER = "+15125550001"   # a fixed, clearly-non-customer number
+
+
+def test_a_normal_production_call_is_unaffected(test_engine, monkeypatch):
+    """The default (is_test_call omitted) must behave exactly as before —
+    real thread prefix, real owner notification."""
+    from xai_voice_adapter import run_call
+    from call_trace import CallTrace
+    import xai_voice_adapter as adapter
+
+    calls = []
+    monkeypatch.setattr(adapter, "notify_owner_of_booking",
+                        lambda *a, **k: calls.append(1) or True)
+    client = _seed_business(test_engine)
+    ws = FakeWS([LOG_JOB_EVENT])
+
+    asyncio.run(run_call("call_prod", client, "+15125559999", lambda: Session(test_engine),
+                         connect=connector_for(ws), trace=CallTrace("call_prod")))
+
+    assert len(calls) == 1
+    with Session(test_engine) as s:
+        job = s.exec(select(Job).where(Job.business_id == client.id)).first()
+    assert job.customer_phone == "xai-voice:call_prod"
+
+
+def test_test_mode_uses_the_distinct_thread_prefix(test_engine, monkeypatch):
+    from xai_voice_adapter import run_call
+    from call_trace import CallTrace
+    import xai_voice_adapter as adapter
+
+    monkeypatch.setattr(adapter, "notify_owner_of_booking", lambda *a, **k: True)
+    client = _seed_business(test_engine)
+    ws = FakeWS([LOG_JOB_EVENT])
+
+    asyncio.run(run_call("call_test1", client, TEST_CALLER_NUMBER, lambda: Session(test_engine),
+                         connect=connector_for(ws), trace=CallTrace("call_test1"),
+                         is_test_call=True))
+
+    with Session(test_engine) as s:
+        job = s.exec(select(Job).where(Job.business_id == client.id)).first()
+    assert job.customer_phone == "xai-voice-test:call_test1"
+
+
+def test_test_mode_never_calls_notify_owner_of_booking(test_engine, monkeypatch):
+    from xai_voice_adapter import run_call
+    from call_trace import CallTrace
+    import xai_voice_adapter as adapter
+
+    calls = []
+    monkeypatch.setattr(adapter, "notify_owner_of_booking", lambda *a, **k: calls.append(1) or True)
+    client = _seed_business(test_engine)
+    ws = FakeWS([LOG_JOB_EVENT])
+
+    asyncio.run(run_call("call_test2", client, TEST_CALLER_NUMBER, lambda: Session(test_engine),
+                         connect=connector_for(ws), trace=CallTrace("call_test2"),
+                         is_test_call=True))
+
+    assert calls == []
+
+
+def test_test_mode_never_calls_notify_owner_of_escalation(test_engine, monkeypatch):
+    from xai_voice_adapter import run_call
+    from call_trace import CallTrace
+    import xai_voice_adapter as adapter
+
+    calls = []
+    monkeypatch.setattr(adapter, "notify_owner_of_escalation", lambda *a, **k: calls.append(1) or True)
+    client = _seed_business(test_engine)
+    ws = FakeWS([ALERT_OWNER_EVENT])
+
+    asyncio.run(run_call("call_test3", client, TEST_CALLER_NUMBER, lambda: Session(test_engine),
+                         connect=connector_for(ws), trace=CallTrace("call_test3"),
+                         is_test_call=True))
+
+    assert calls == []
+    with Session(test_engine) as s:
+        job = s.exec(select(Job).where(Job.business_id == client.id)).first()
+    assert job.owner_alerted_at is None   # never marked as paged — it never was
+
+
+def test_test_mode_leaves_no_owner_notification_row(test_engine, monkeypatch):
+    """No customer-facing side effects: not even a durable notification-log
+    row is created for test-mode activity."""
+    from xai_voice_adapter import run_call
+    from call_trace import CallTrace
+    import xai_voice_adapter as adapter
+    from db_models import OwnerNotification
+
+    monkeypatch.setattr(adapter, "notify_owner_of_booking", lambda *a, **k: True)
+    client = _seed_business(test_engine)
+    ws = FakeWS([LOG_JOB_EVENT])
+
+    asyncio.run(run_call("call_test4", client, TEST_CALLER_NUMBER, lambda: Session(test_engine),
+                         connect=connector_for(ws), trace=CallTrace("call_test4"),
+                         is_test_call=True))
+
+    with Session(test_engine) as s:
+        notifications = s.exec(
+            select(OwnerNotification).where(OwnerNotification.business_id == client.id)
+        ).all()
+    assert notifications == []
+
+
+def test_test_mode_bookings_are_excluded_from_customer_facing_metrics(test_engine, monkeypatch):
+    """Isolation via the shared is_test_thread mechanism, not a special case
+    invented for voice — metrics.py needed no changes at all."""
+    from xai_voice_adapter import run_call
+    from call_trace import CallTrace
+    import xai_voice_adapter as adapter
+    import metrics
+
+    monkeypatch.setattr(adapter, "notify_owner_of_booking", lambda *a, **k: True)
+    client = _seed_business(test_engine)
+    ws = FakeWS([LOG_JOB_EVENT])
+
+    asyncio.run(run_call("call_test5", client, TEST_CALLER_NUMBER, lambda: Session(test_engine),
+                         connect=connector_for(ws), trace=CallTrace("call_test5"),
+                         is_test_call=True))
+
+    with Session(test_engine) as s:
+        assert metrics.booked_jobs(s, client.id) == 0
+
+
+def test_test_mode_still_generates_a_trace(test_engine, monkeypatch):
+    """Traces are never suppressed — only who gets notified changes."""
+    from xai_voice_adapter import run_call
+    from call_trace import CallTrace
+    import xai_voice_adapter as adapter
+
+    monkeypatch.setattr(adapter, "notify_owner_of_booking", lambda *a, **k: True)
+    client = _seed_business(test_engine)
+    trace = CallTrace("call_test6")
+    ws = FakeWS([GREETING_DONE, LOG_JOB_EVENT])
+
+    asyncio.run(run_call("call_test6", client, TEST_CALLER_NUMBER, lambda: Session(test_engine),
+                         connect=connector_for(ws), trace=trace, is_test_call=True))
+
+    stages = [r["stage"] for r in trace.records if r["kind"] == "stage"]
+    for expected in ("ws_connected", "first_ai_response", "tool_invoked",
+                     "job_persisted", "owner_notification_skipped", "call_completed"):
+        assert expected in stages, f"missing stage {expected}: {stages}"
+
+
+def test_test_mode_still_captures_transcripts(test_engine, monkeypatch):
+    from xai_voice_adapter import run_call
+    from call_trace import CallTrace
+    from db_models import Message
+
+    client = _seed_business(test_engine)
+    ws = FakeWS([_transcription_completed("item_1", "testing the line"), GREETING_DONE])
+
+    asyncio.run(run_call("call_test7", client, TEST_CALLER_NUMBER, lambda: Session(test_engine),
+                         connect=connector_for(ws), trace=CallTrace("call_test7"),
+                         is_test_call=True))
+
+    with Session(test_engine) as s:
+        msgs = s.exec(select(Message).where(Message.business_id == client.id)
+                      .order_by(Message.id)).all()
+    assert [m.role for m in msgs] == ["user", "assistant"]
+    assert all(m.customer_phone == "xai-voice-test:call_test7" for m in msgs)
+
+
+def test_test_mode_actually_books_a_real_job_isolated_not_simulated(test_engine, monkeypatch):
+    """The full pipeline is exercised, not mocked: book_job really runs and
+    really persists a Job — it's isolated (test thread prefix), not faked."""
+    from xai_voice_adapter import run_call
+    from call_trace import CallTrace
+    import xai_voice_adapter as adapter
+
+    monkeypatch.setattr(adapter, "notify_owner_of_booking", lambda *a, **k: True)
+    client = _seed_business(test_engine)
+    ws = FakeWS([LOG_JOB_EVENT])
+
+    asyncio.run(run_call("call_test8", client, TEST_CALLER_NUMBER, lambda: Session(test_engine),
+                         connect=connector_for(ws), trace=CallTrace("call_test8"),
+                         is_test_call=True))
+
+    with Session(test_engine) as s:
+        job = s.exec(select(Job).where(Job.business_id == client.id)).first()
+    assert job is not None
+    assert job.service_type == "burst pipe"   # real booking logic ran, not a stub
+
+
+def test_test_mode_timeout_does_not_notify_a_real_owner(test_engine, monkeypatch):
+    """Timeout behaviour must be exercisable in test mode too, without
+    paging anyone real when it fires."""
+    from xai_voice_adapter import run_call
+    from call_trace import CallTrace
+    import xai_voice_adapter as adapter
+
+    calls = []
+    monkeypatch.setattr(adapter, "notify_owner_of_escalation", lambda *a, **k: calls.append(1) or True)
+    client = _seed_business(test_engine)
+    trace = CallTrace("call_test9")
+    ws = HangingWS([])
+
+    asyncio.run(run_call("call_test9", client, TEST_CALLER_NUMBER, lambda: Session(test_engine),
+                         connect=tracking_connector_for(ws), trace=trace,
+                         max_duration_seconds=TINY_TIMEOUT, is_test_call=True))
+
+    stages = [r["stage"] for r in trace.records if r["kind"] == "stage"]
+    assert "call_timed_out" in stages
+    assert "owner_notification_skipped" in stages
+    assert calls == []
+
+
+def test_test_mode_cleanup_still_happens(test_engine, monkeypatch, tmp_path):
+    from xai_voice_adapter import run_call
+    from call_trace import CallTrace
+    import xai_voice_adapter as adapter
+
+    monkeypatch.setattr(adapter, "notify_owner_of_booking", lambda *a, **k: True)
+    client = _seed_business(test_engine)
+    trace = CallTrace("call_test10", capture_dir=tmp_path)
+    ws = FakeWS([LOG_JOB_EVENT])
+
+    asyncio.run(run_call("call_test10", client, TEST_CALLER_NUMBER, lambda: Session(test_engine),
+                         connect=connector_for(ws), trace=trace, is_test_call=True))
+
+    assert trace._fh is None
+    assert (tmp_path / "call_test10.jsonl").exists()
+
+
 # ---- Webhook hardening: fail closed, reject replays --------------------------
 
 def _fresh_signed(body: bytes, secret: str):

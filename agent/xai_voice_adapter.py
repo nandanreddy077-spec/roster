@@ -49,8 +49,10 @@ from notifications import (
     SOURCE_ALERT_OWNER,
     SOURCE_CALL_DROPPED,
     SOURCE_VOICE_BOOKING,
+    VOICE_TEST_THREAD_PREFIX,
     build_escalation_message,
     build_owner_message,
+    is_test_thread,
     notify_owner_of_booking,
     notify_owner_of_escalation,
     record_owner_notification,
@@ -163,8 +165,13 @@ def build_session_update(client: Business, customer_context: str = "") -> Dict[s
     }
 
 
-def _thread_id(call_id: str) -> str:
-    return f"{VOICE_THREAD_PREFIX}{call_id}"
+def _thread_id(call_id: str, is_test_call: bool = False) -> str:
+    # is_test_call opt-in only, default False. The prefix alone carries the
+    # test/real distinction from here on — every downstream function decides
+    # whether to notify a real owner by checking is_test_thread(thread),
+    # never by threading a second boolean through every signature.
+    prefix = VOICE_TEST_THREAD_PREFIX if is_test_call else VOICE_THREAD_PREFIX
+    return f"{prefix}{call_id}"
 
 
 async def _persist_job(session: Session, client: Business, thread: str, caller_number: str, args: Dict[str, Any]) -> Job:
@@ -183,7 +190,11 @@ async def _persist_job(session: Session, client: Business, thread: str, caller_n
     # detail-merge never re-texts the owner. Offloaded to a thread: this SMS
     # send is a blocking HTTP call, and blocking the event loop here would
     # stall every other in-progress call's audio on the same process.
-    if created:
+    #
+    # Test mode (thread carries VOICE_TEST_THREAD_PREFIX): never notify or
+    # log a real owner alert for test activity — the same guarantee
+    # service.py's SMS path already gives its own portal-test thread.
+    if created and not is_test_thread(thread):
         delivered = await asyncio.to_thread(notify_owner_of_booking, client, job)
         # The log write stays on THIS thread with the session already in
         # scope: a Session is not thread-safe and must never cross the
@@ -250,9 +261,13 @@ async def _handle_function_call(
         if name == LOG_JOB_TOOL["name"]:
             job = await _persist_job(session, client, thread, caller_number, args)
             trace.stage("job_persisted", job_id=job.id)
-            # _persist_job already fired the owner text (best-effort) — mark
-            # the stage here so the latency trace shows when it went out.
-            trace.stage("owner_notified", job_id=job.id)
+            # _persist_job already skipped the owner text for a test-mode
+            # thread (see there) — trace the actual outcome honestly rather
+            # than always claiming "notified".
+            if is_test_thread(thread):
+                trace.stage("owner_notification_skipped", job_id=job.id, reason="test_mode")
+            else:
+                trace.stage("owner_notified", job_id=job.id)
             result = {"status": "logged"}
         elif name == TRANSFER_CALL_TOOL["name"]:
             # Honest escalation: we cannot redirect a live call, so (1) persist
@@ -275,7 +290,14 @@ async def _handle_function_call(
             job, should_notify = record_escalation(
                 session, client, thread, caller_number, reason, customer_id=customer.id)
             trace.stage("job_persisted", job_id=job.id, escalation=True)
-            if should_notify:
+            if is_test_thread(thread):
+                # Test mode: exercise the full escalation path (Job
+                # persisted, idempotency intact) without ever paging a real
+                # owner. Honest to the model too — nothing failed, there's
+                # simply no real owner to page.
+                trace.stage("owner_notification_skipped", job_id=job.id, reason="test_mode")
+                status = "owner_alerted"
+            elif should_notify:
                 alerted = await asyncio.to_thread(notify_owner_of_escalation, client, caller_number, reason)
                 trace.stage("owner_alerted" if alerted else "owner_alert_failed")
                 # Strictly after `alerted` is decided: this must never
@@ -403,7 +425,8 @@ def _default_connect(call_id: str):
 async def run_call(call_id: str, client: Business, caller_number: str, session_factory,
                    connect=None, trace: Optional[CallTrace] = None,
                    max_duration_seconds: Optional[float] = None,
-                   max_call_tokens: Optional[int] = None) -> None:
+                   max_call_tokens: Optional[int] = None,
+                   is_test_call: bool = False) -> None:
     """Owns one live call end-to-end. Runs as a background task kicked off by
     the /webhook/xai-incoming-call handler — must not block that handler's
     response to xAI.
@@ -413,12 +436,24 @@ async def run_call(call_id: str, client: Business, caller_number: str, session_f
     a millisecond offset for boundary debugging; a capturing one is created if
     not supplied. `max_duration_seconds` overrides MAX_CALL_DURATION_SECONDS;
     `max_call_tokens` overrides MAX_CALL_TOKEN_BUDGET (both: tests use small
-    values instead of production's real ceilings)."""
+    values instead of production's real ceilings).
+
+    `is_test_call` (2026-07-29, safe voice test mode) is opt-in only —
+    default False, and the real production entry point (app.py's
+    /webhook/xai-incoming-call handler) never passes it, so a real inbound
+    call can never activate it by accident. When True, the call's thread
+    carries VOICE_TEST_THREAD_PREFIX instead of the real prefix, which is
+    ALL that changes about the event loop, tool handling, or transcript
+    capture below — nothing here is mocked or skipped. Every owner-facing
+    notification this function and _handle_function_call can trigger
+    (booking, escalation, and every "call ended abnormally" path below)
+    checks is_test_thread(thread) and skips the real page, exactly like
+    service.py's SMS path already does for its own portal-test thread."""
     connect = connect or _default_connect
     if trace is None:
         from db import DATA_DIR
         trace = CallTrace(call_id, capture_dir=DATA_DIR / "call_captures")
-    thread = _thread_id(call_id)
+    thread = _thread_id(call_id, is_test_call)
     max_duration = MAX_CALL_DURATION_SECONDS if max_duration_seconds is None else max_duration_seconds
     max_tokens = MAX_CALL_TOKEN_BUDGET if max_call_tokens is None else max_call_tokens
 
@@ -437,20 +472,23 @@ async def run_call(call_id: str, client: Business, caller_number: str, session_f
         # closes the websocket — the same mechanism a clean return or a crash
         # already goes through, not a new one.
         trace.stage("call_timed_out", max_duration_seconds=max_duration)
-        # Honest, not a generic "dropped" claim: this was OUR safety cutoff,
-        # not an unexplained failure — say so.
-        timeout_reason = (
-            "the AI call with this customer reached the maximum allowed "
-            "duration and was ended automatically — call them back"
-        )
-        alerted = await asyncio.to_thread(
-            notify_owner_of_escalation, client, caller_number, timeout_reason,
-        )
-        with session_factory() as session:
-            record_owner_notification(
-                session, client.id, KIND_CALL_DROPPED, SOURCE_CALL_DROPPED,
-                build_escalation_message(client, caller_number, timeout_reason), alerted,
+        if is_test_thread(thread):
+            trace.stage("owner_notification_skipped", reason="test_mode")
+        else:
+            # Honest, not a generic "dropped" claim: this was OUR safety
+            # cutoff, not an unexplained failure — say so.
+            timeout_reason = (
+                "the AI call with this customer reached the maximum allowed "
+                "duration and was ended automatically — call them back"
             )
+            alerted = await asyncio.to_thread(
+                notify_owner_of_escalation, client, caller_number, timeout_reason,
+            )
+            with session_factory() as session:
+                record_owner_notification(
+                    session, client.id, KIND_CALL_DROPPED, SOURCE_CALL_DROPPED,
+                    build_escalation_message(client, caller_number, timeout_reason), alerted,
+                )
     except _CallBudgetExceeded:
         # Detected (and traced, with the exact token count) inside the loop,
         # where the usage numbers actually are — unlike the timeout branch
@@ -459,34 +497,40 @@ async def run_call(call_id: str, client: Business, caller_number: str, session_f
         # Raising from inside `async with connect(...) as ws:` closes the
         # websocket via ordinary exception unwinding — the same mechanism a
         # crash already goes through, not a new one.
-        budget_reason = (
-            "the AI call with this customer reached its usage budget and "
-            "was ended automatically — call them back"
-        )
-        alerted = await asyncio.to_thread(
-            notify_owner_of_escalation, client, caller_number, budget_reason,
-        )
-        with session_factory() as session:
-            record_owner_notification(
-                session, client.id, KIND_CALL_DROPPED, SOURCE_CALL_DROPPED,
-                build_escalation_message(client, caller_number, budget_reason), alerted,
+        if is_test_thread(thread):
+            trace.stage("owner_notification_skipped", reason="test_mode")
+        else:
+            budget_reason = (
+                "the AI call with this customer reached its usage budget and "
+                "was ended automatically — call them back"
             )
+            alerted = await asyncio.to_thread(
+                notify_owner_of_escalation, client, caller_number, budget_reason,
+            )
+            with session_factory() as session:
+                record_owner_notification(
+                    session, client.id, KIND_CALL_DROPPED, SOURCE_CALL_DROPPED,
+                    build_escalation_message(client, caller_number, budget_reason), alerted,
+                )
     except Exception as e:
         # A mid-call crash (WS drop, DB error, bad payload) must never vanish
         # silently: record it, and text the owner the caller's number so the
         # human relationship survives the software failure.
         trace.stage("call_failed", error=repr(e))
-        dropped_reason = "the AI call with this customer dropped mid-call — call them back"
-        alerted = await asyncio.to_thread(
-            notify_owner_of_escalation, client, caller_number, dropped_reason,
-        )
-        # Its own short-lived session: this path has no open one, and the
-        # crashed call's session is not safe to reuse.
-        with session_factory() as session:
-            record_owner_notification(
-                session, client.id, KIND_CALL_DROPPED, SOURCE_CALL_DROPPED,
-                build_escalation_message(client, caller_number, dropped_reason), alerted,
+        if is_test_thread(thread):
+            trace.stage("owner_notification_skipped", reason="test_mode")
+        else:
+            dropped_reason = "the AI call with this customer dropped mid-call — call them back"
+            alerted = await asyncio.to_thread(
+                notify_owner_of_escalation, client, caller_number, dropped_reason,
             )
+            # Its own short-lived session: this path has no open one, and the
+            # crashed call's session is not safe to reuse.
+            with session_factory() as session:
+                record_owner_notification(
+                    session, client.id, KIND_CALL_DROPPED, SOURCE_CALL_DROPPED,
+                    build_escalation_message(client, caller_number, dropped_reason), alerted,
+                )
     finally:
         trace.close()
 
