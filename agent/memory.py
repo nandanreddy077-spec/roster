@@ -1,10 +1,18 @@
 import re
+from datetime import datetime, timedelta
 from typing import List, Optional
 from sqlmodel import Session, or_, select
 from db_models import Business, Customer, Job, Message
 from repositories import get_or_create_customer
 
 _CONTROL_CHARS = re.compile(r"[\x00-\x1f\x7f]")
+
+# A same/related issue reported within this window of a job already on
+# record is treated as a callback on that work, not a new booking (Sprint 2,
+# 2026-07-29 conversation-quality audit). Recency of created_at only —
+# not gated on completed_at, since an owner forgetting to mark a job done
+# shouldn't hide a real callback signal from the model.
+COMEBACK_WINDOW_DAYS = 14
 
 
 def _clean_field(value: Optional[str], limit: int) -> str:
@@ -63,6 +71,20 @@ def build_customer_context(session: Session, business_id: int, phone: str) -> st
             for j in jobs
         )
         parts.append(f"Past jobs with us: {history}.")
+        recent_cutoff = datetime.utcnow() - timedelta(days=COMEBACK_WINDOW_DAYS)
+        if any(j.created_at >= recent_cutoff for j in jobs):
+            parts.append(
+                f"One of these jobs was within the last {COMEBACK_WINDOW_DAYS} days — "
+                "if the caller describes the same or a related problem, treat this as "
+                "a callback on that work, not a new issue, and lean toward higher "
+                "urgency (same_day or emergency, not routine)."
+            )
+    if customer and customer.plan_notes:
+        parts.append(
+            f"Membership/plan: {_clean_field(customer.plan_notes, 200)}. This "
+            "customer is on a plan — recognize that naturally rather than treating "
+            "them as a brand-new lead."
+        )
     parts.append(
         "Use this naturally — greet them like someone you know and don't re-ask "
         "what you already have. Never mention other customers or businesses."

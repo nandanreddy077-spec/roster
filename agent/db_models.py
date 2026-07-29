@@ -15,6 +15,9 @@ class Business(SQLModel, table=True):
     services_json: str = "[]"  # JSON-encoded list[str]
     hours: str = ""
     pricing_faq: str = ""
+    # Free text, e.g. "within 20 miles of Austin, TX" — unset means Frontdesk
+    # asserts no service-area restriction (Sprint 2, 2026-07-29 audit).
+    service_area: str = ""
     escalation_phone: str = ""
     answer_mode: str = Field(default="backup")  # "primary" (AI picks up every call) or "backup" (AI catches only calls the owner misses) - asked during onboarding; drives the call-forwarding instructions
     business_phone: str = ""  # the number customers currently dial; the owner forwards it to inbound_number so calls reach the receptionist
@@ -58,6 +61,7 @@ class Business(SQLModel, table=True):
             escalation_phone=self.escalation_phone,
             answer_mode=self.answer_mode,
             tone=self.tone,
+            service_area=self.service_area,
         )
 
 
@@ -69,6 +73,12 @@ class Customer(SQLModel, table=True):
     phone: str = Field(index=True)
     name: Optional[str] = None
     source: Optional[str] = None
+    # Free text — a recurring plan, membership, or warranty status the owner
+    # sets, e.g. "Quarterly pest plan, renews in Sept." Surfaced in
+    # build_customer_context() so a plan customer isn't treated as a
+    # brand-new lead (Sprint 2, 2026-07-29 conversation-quality audit). No
+    # founder-console field to set it yet — out of this sprint's scope.
+    plan_notes: Optional[str] = None
     tags_json: str = "[]"
     first_seen_at: datetime = Field(default_factory=datetime.utcnow)
     created_at: datetime = Field(default_factory=datetime.utcnow)

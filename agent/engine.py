@@ -175,6 +175,34 @@ _PREFERRED_WINDOW_NOTE = (
     "booked appointment time, since nothing checks real availability yet."
 )
 
+# Shared across both prompts (2026-07-29, Sprint 2): distinguishing a repair
+# from a replacement/estimate call. No new tool or field — "store estimate
+# intent using existing fields" means service_type/notes, exactly like every
+# other detail log_job already captures as free text.
+_ESTIMATE_NOTE = (
+    "If the caller is asking about a replacement or a price estimate rather "
+    "than an active problem, treat it as a different kind of call: ask about "
+    "the age or size of what's being replaced and their rough timeline, "
+    "rather than treating it like an urgent repair. Mention in log_job's "
+    "notes that it's an estimate/replacement request, and set urgency to "
+    "'routine' unless they also describe an active problem."
+)
+
+
+def _service_area_note(service_area: str) -> str:
+    """Only asserts a restriction when the owner actually configured one —
+    unset means no service-area line at all, never a broken empty one
+    (2026-07-29, Sprint 2)."""
+    service_area = (service_area or "").strip()
+    if not service_area:
+        return ""
+    return (
+        f"Service area: {service_area}. Ask for their city or ZIP code early "
+        "in the conversation if it isn't already clear. If they're outside "
+        "this area, say so honestly and don't book the job — don't guess or "
+        "assume everyone is in range."
+    )
+
 
 def build_system_prompt(client: ClientConfig, now: Optional[datetime] = None) -> str:
     return f"""You are the AI front desk for {client.business_name}, a {client.trade} business.
@@ -188,6 +216,7 @@ Services offered: {", ".join(client.services)}
 Hours: {client.hours}
 Pricing & FAQ info: {client.pricing_faq}
 Tone: {client.tone}
+{_service_area_note(client.service_area)}
 
 {_trade_triage_note(client.trade)}
 
@@ -196,6 +225,8 @@ weather), tell the customer you're alerting someone immediately and mark
 urgency='emergency' when you call log_job.
 
 {_RESCHEDULE_NOTE}
+
+{_ESTIMATE_NOTE}
 
 Keep replies short, warm, and text-message length (1-3 sentences). Never make up a
 price or appointment time you don't actually know. {_PREFERRED_WINDOW_NOTE} Once you
@@ -223,6 +254,7 @@ Services offered: {", ".join(client.services)}
 Hours: {client.hours}
 Pricing & FAQ info: {client.pricing_faq}
 Tone: {client.tone}
+{_service_area_note(client.service_area)}
 
 {_trade_triage_note(client.trade)}
 
@@ -246,6 +278,8 @@ to a person, comply immediately the same way — call alert_owner and give them 
 {client.escalation_phone} — rather than trying to keep helping first.
 
 {_RESCHEDULE_NOTE}
+
+{_ESTIMATE_NOTE}
 
 {_PREFERRED_WINDOW_NOTE}
 

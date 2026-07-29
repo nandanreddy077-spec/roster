@@ -291,3 +291,45 @@ def test_log_job_tool_schema_has_preferred_window():
     # Still optional — a caller who won't commit to a window shouldn't block
     # the booking itself.
     assert "preferred_window" not in LOG_JOB_TOOL["input_schema"]["required"]
+
+
+# ---- Sprint 2: customer context & qualification -----------------------------
+# (docs/superpowers/specs/2026-07-29-frontdesk-conversation-quality-audit.md,
+# items 5 and 13)
+
+def test_sms_prompt_mentions_service_area_when_set():
+    config = make_client_config(service_area="within 20 miles of Austin, TX")
+    prompt = build_system_prompt(config, now=FIXED_NOW)
+    assert "within 20 miles of Austin, TX" in prompt
+    assert "outside" in prompt.lower()
+    assert "don't book" in prompt.lower() or "do not book" in prompt.lower()
+
+
+def test_voice_prompt_mentions_service_area_when_set():
+    config = make_client_config(service_area="within 20 miles of Austin, TX")
+    prompt = build_voice_system_prompt(config, now=FIXED_NOW)
+    assert "within 20 miles of Austin, TX" in prompt
+    assert "outside" in prompt.lower()
+
+
+def test_prompt_omits_service_area_language_when_not_configured():
+    """No restriction is asserted when the owner never set one — must not
+    render a broken 'Service area: .' line or imply a limit that doesn't
+    exist."""
+    config = make_client_config(service_area="")
+    prompt = build_system_prompt(config, now=FIXED_NOW)
+    assert "Service area:" not in prompt
+
+
+def test_client_config_service_area_defaults_to_empty():
+    config = make_client_config()
+    assert config.service_area == ""
+
+
+def test_both_prompts_distinguish_repair_replacement_and_estimate_calls():
+    sms = build_system_prompt(make_client_config(), now=FIXED_NOW).lower()
+    voice = build_voice_system_prompt(make_client_config(), now=FIXED_NOW).lower()
+    for prompt in (sms, voice):
+        assert "replacement" in prompt
+        assert "estimate" in prompt
+        assert "routine" in prompt
