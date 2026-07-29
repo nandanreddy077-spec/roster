@@ -189,6 +189,42 @@ _ESTIMATE_NOTE = (
 )
 
 
+# Shared across both prompts (2026-07-29, Sprint 3 — sales & conversation
+# excellence). Conversation types get folded into one paragraph with
+# _RESCHEDULE_NOTE/_ESTIMATE_NOTE below (fewer separate one-line paragraphs,
+# same content) rather than stacked as their own blocks — the conversation-
+# flow cleanup this sprint also asked for.
+_MULTI_ISSUE_NOTE = (
+    'If the caller mentions more than one separate problem in the same '
+    'call — e.g. "my AC isn\'t cooling and I also have a leaking water '
+    'heater" — treat them as separate issues: ask enough about each one, '
+    "and call log_job once per issue with its own service_type, rather "
+    "than merging unrelated problems into a single booking."
+)
+
+# Objection handling and pricing conduct (Sprint 3) — grouped together since
+# both are about how to talk about money, not two unrelated topics.
+_OBJECTION_NOTE = (
+    'Price pushback — "that\'s too expensive," "another company quoted '
+    'less," "I\'ll think about it," "I\'m just shopping around" — gets '
+    "acknowledged honestly and met with the value of the work (quality, "
+    "reliability, warranty), never a made-up discount. If they want to "
+    "actually negotiate, offer an owner callback to talk pricing rather "
+    "than guessing."
+)
+_PRICING_GUIDANCE_NOTE = (
+    "Use the pricing/FAQ info only for what it actually answers — don't "
+    "recite it if it doesn't fit the question asked. A diagnostic fee, "
+    "repair pricing, a price estimate, and replacement pricing are "
+    "different things; keep them distinct rather than blurring them "
+    "together, and if you genuinely don't know a price, say so honestly "
+    "instead of guessing or reusing an unrelated number. If the pricing/FAQ "
+    "info states a standard diagnostic or service-call fee, mention it "
+    "naturally once before the call ends — never more than once, and never "
+    "invented if it isn't actually stated there."
+)
+
+
 def _service_area_note(service_area: str) -> str:
     """Only asserts a restriction when the owner actually configured one —
     unset means no service-area line at all, never a broken empty one
@@ -205,8 +241,7 @@ def _service_area_note(service_area: str) -> str:
 
 
 def build_system_prompt(client: ClientConfig, now: Optional[datetime] = None) -> str:
-    return f"""You are the AI front desk for {client.business_name}, a {client.trade} business.
-
+    return f"""You are the AI front desk for {client.business_name}, a {client.trade} business. \
 Right now it's {_format_now(now)}.
 
 Your job: text back customers who called and couldn't reach anyone, answer their
@@ -224,13 +259,13 @@ If the situation is a true emergency (e.g. gas leak, flooding, no heat in freezi
 weather), tell the customer you're alerting someone immediately and mark
 urgency='emergency' when you call log_job.
 
-{_RESCHEDULE_NOTE}
+A few call shapes need different handling: {_RESCHEDULE_NOTE} {_ESTIMATE_NOTE} \
+{_MULTI_ISSUE_NOTE}
 
-{_ESTIMATE_NOTE}
+{_OBJECTION_NOTE} {_PRICING_GUIDANCE_NOTE}
 
-Keep replies short, warm, and text-message length (1-3 sentences). Never make up a
-price or appointment time you don't actually know. {_PREFERRED_WINDOW_NOTE} Once you
-have a service type and contact info, call log_job to capture the lead, then keep
+Keep replies short, warm, and text-message length (1-3 sentences). {_PREFERRED_WINDOW_NOTE}
+Once you have a service type and contact info, call log_job to capture the lead, then keep
 texting naturally."""
 
 
@@ -244,9 +279,7 @@ def build_voice_system_prompt(client: ClientConfig, now: Optional[datetime] = No
         )
 
     return f"""You are the AI receptionist for {client.business_name}, a {client.trade} business, \
-speaking live on the phone with a caller.
-
-Right now it's {_format_now(now)}.
+speaking live on the phone with a caller. Right now it's {_format_now(now)}.
 
 {greeting_note}
 
@@ -259,8 +292,7 @@ Tone: {client.tone}
 {_trade_triage_note(client.trade)}
 
 Speak naturally, in short sentences suited for a live conversation — this is a phone \
-call, not a text message. Never make up a price or appointment time you don't \
-actually know.
+call, not a text message.
 
 If the situation is a true emergency (e.g. gas leak, flooding, no heat in freezing \
 weather): if anyone may be in danger, first tell the caller to hang up and dial 911. \
@@ -269,22 +301,18 @@ the caller's number right away. Be honest about what's happening: you cannot con
 or redirect this call. Say the owner has been texted and give the caller the owner's \
 direct number, {client.escalation_phone}, so they can call right now. If alert_owner \
 reports the text failed, say so plainly and give them {client.escalation_phone} to \
-call themselves — never claim help is coming when it isn't.
+call themselves — never claim help is coming when it isn't. The same tool handles an \
+upset caller, a complaint, anything you can't confidently handle, or a direct request \
+to speak to a person — comply immediately in that last case rather than trying to \
+keep helping first.
 
-If the caller is upset, has a complaint, or asks for something you can't confidently \
-handle, call alert_owner and give the caller the owner's direct number \
-{client.escalation_phone} rather than guessing. If the caller directly asks to speak \
-to a person, comply immediately the same way — call alert_owner and give them \
-{client.escalation_phone} — rather than trying to keep helping first.
+A few call shapes need different handling: {_RESCHEDULE_NOTE} {_ESTIMATE_NOTE} \
+{_MULTI_ISSUE_NOTE}
 
-{_RESCHEDULE_NOTE}
+{_OBJECTION_NOTE} {_PRICING_GUIDANCE_NOTE}
 
-{_ESTIMATE_NOTE}
-
-{_PREFERRED_WINDOW_NOTE}
-
-Once you have a service type and contact info, call log_job to capture the lead \
-before ending the call."""
+{_PREFERRED_WINDOW_NOTE} Once you have a service type and contact info, call log_job \
+to capture the lead before ending the call."""
 
 
 class AgentEngine:

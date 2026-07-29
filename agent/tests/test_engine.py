@@ -333,3 +333,88 @@ def test_both_prompts_distinguish_repair_replacement_and_estimate_calls():
         assert "replacement" in prompt
         assert "estimate" in prompt
         assert "routine" in prompt
+
+
+# ---- Sprint 3: sales & conversation excellence ------------------------------
+# (docs/superpowers/specs/2026-07-29-frontdesk-conversation-quality-audit.md,
+# items 8, 12, 14, 16 + a conversation-flow cleanup pass)
+
+OBJECTION_FRAGMENTS = [
+    "too expensive", "quoted less", "think about it", "shopping around",
+    "acknowledg",  # matches "acknowledge"/"acknowledged"
+    "value", "discount", "owner callback",
+]
+
+
+def test_both_prompts_cover_every_named_objection():
+    sms = build_system_prompt(make_client_config(), now=FIXED_NOW).lower()
+    voice = build_voice_system_prompt(make_client_config(), now=FIXED_NOW).lower()
+    for prompt in (sms, voice):
+        for fragment in OBJECTION_FRAGMENTS:
+            assert fragment in prompt, f"missing objection-handling fragment {fragment!r}"
+
+
+def test_both_prompts_never_invent_a_discount():
+    sms = build_system_prompt(make_client_config(), now=FIXED_NOW).lower()
+    voice = build_voice_system_prompt(make_client_config(), now=FIXED_NOW).lower()
+    for prompt in (sms, voice):
+        assert "never" in prompt and "discount" in prompt
+
+
+PRICING_GUIDANCE_FRAGMENTS = ["diagnostic", "repair pricing", "estimate", "replacement pricing", "honestly"]
+
+
+def test_both_prompts_distinguish_fee_types_and_are_honest_about_unknown_pricing():
+    sms = build_system_prompt(make_client_config(), now=FIXED_NOW).lower()
+    voice = build_voice_system_prompt(make_client_config(), now=FIXED_NOW).lower()
+    for prompt in (sms, voice):
+        for fragment in PRICING_GUIDANCE_FRAGMENTS:
+            assert fragment in prompt, f"missing pricing-guidance fragment {fragment!r}"
+
+
+def test_both_prompts_disclose_the_service_call_fee_naturally_and_only_once():
+    sms = build_system_prompt(make_client_config(), now=FIXED_NOW).lower()
+    voice = build_voice_system_prompt(make_client_config(), now=FIXED_NOW).lower()
+    for prompt in (sms, voice):
+        assert "service-call fee" in prompt or "service call fee" in prompt
+        assert "once" in prompt
+
+
+def test_both_prompts_recognize_multi_problem_calls():
+    sms = build_system_prompt(make_client_config(), now=FIXED_NOW).lower()
+    voice = build_voice_system_prompt(make_client_config(), now=FIXED_NOW).lower()
+    for prompt in (sms, voice):
+        assert "my ac isn't cooling and i also have a leaking water heater" in prompt
+        assert "separate issues" in prompt
+        assert "once per issue" in prompt
+
+
+# ---- Regression: every Sprint 1/2 fixture must still hold after the
+# conversation-flow cleanup pass --------------------------------------------
+
+def test_regression_date_time_trade_triage_and_preferred_window_still_present():
+    prompt = build_system_prompt(make_client_config(trade="Electrical"), now=FIXED_NOW)
+    assert "Wednesday, July 29" in prompt
+    assert "sparking" in prompt.lower()
+    assert "preferred_window" in prompt.lower()
+
+
+def test_regression_voice_prompt_still_honest_about_escalation():
+    """Mirrors test_voice_loop_integration.py's own
+    test_voice_prompt_is_honest_about_escalation — the cleanup pass must not
+    reintroduce a false "transfer" promise or drop 911/alert_owner/the
+    escalation number."""
+    config = make_client_config(escalation_phone="512-555-0148")
+    prompt = build_voice_system_prompt(config, now=FIXED_NOW)
+    lower = prompt.lower()
+    assert "transfer" not in lower
+    assert "911" in prompt
+    assert "512-555-0148" in prompt
+    assert "alert_owner" in prompt
+
+
+def test_regression_service_area_and_estimate_language_still_present():
+    config = make_client_config(service_area="within 20 miles of Austin, TX")
+    prompt = build_system_prompt(config, now=FIXED_NOW)
+    assert "within 20 miles of Austin, TX" in prompt
+    assert "replacement" in prompt.lower()
