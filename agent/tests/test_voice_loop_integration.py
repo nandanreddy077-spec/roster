@@ -138,6 +138,162 @@ def test_call_trace_writes_jsonl_to_capture_dir(tmp_path):
     assert lines[1]["type"] == "response.done"
 
 
+# ---- Call trace log rotation: the shared quarantine file must not grow
+# without bound -------------------------------------------------------------
+#
+# Only `_inbound.jsonl` — the pre-auth quarantine file EVERY webhook
+# delivery appends to, forever, with no per-call boundary — is rotated. A
+# per-call trace file ({call_id}.jsonl) is deliberately NEVER rotated: it's
+# already scoped to one call's own short lifetime (further bounded by
+# Priority 4's duration cap), and splitting a single call's trace across
+# files would break the exact debugging workflow this instrumentation
+# exists for — a founder opening ONE file to see the WHOLE call.
+#
+# Rotation happens strictly BETWEEN writes: capture_unverified opens,
+# writes ONE complete line, and closes on every call — no long-lived handle
+# to corrupt — so the rotation check runs before that atomic write ever
+# begins. A record can never straddle the rotation boundary.
+#
+# "Concurrent" is scoped to what this codebase's actual deployment model
+# allows: capture_unverified is synchronous with no internal `await`, called
+# directly (never via run_in_threadpool/to_thread) from the webhook route —
+# so within one process, asyncio's cooperative scheduling already guarantees
+# calls run one at a time, never truly interleaved (the same single-process
+# assumption locks.py documents for conversation_lock). Rapid sequential
+# calls are therefore the realistic "concurrent deliveries" scenario here.
+
+BIG_BODY = b"x" * 200   # ~304 bytes once wrapped in the JSONL record
+
+
+def test_log_below_threshold_does_not_rotate(tmp_path):
+    from call_trace import CallTrace
+
+    for i in range(3):
+        CallTrace.capture_unverified(tmp_path, {"webhook-id": f"wh_{i}"}, b"small",
+                                     max_bytes=10_000, max_backups=2)
+
+    assert (tmp_path / "_inbound.jsonl").exists()
+    assert not (tmp_path / "_inbound.jsonl.1").exists()
+    assert len((tmp_path / "_inbound.jsonl").read_text().splitlines()) == 3
+
+
+def test_rotation_at_threshold(tmp_path):
+    from call_trace import CallTrace
+
+    for i in range(3):
+        CallTrace.capture_unverified(tmp_path, {"webhook-id": f"wh_{i}"}, BIG_BODY,
+                                     max_bytes=250, max_backups=2)
+
+    assert (tmp_path / "_inbound.jsonl").exists()
+    assert (tmp_path / "_inbound.jsonl.1").exists()
+
+
+def test_multiple_rotations_shift_the_backup_chain(tmp_path):
+    from call_trace import CallTrace
+
+    for i in range(12):
+        CallTrace.capture_unverified(tmp_path, {"webhook-id": f"wh_{i}"}, BIG_BODY,
+                                     max_bytes=250, max_backups=2)
+
+    files = sorted(p.name for p in tmp_path.glob("_inbound.jsonl*"))
+    assert files == ["_inbound.jsonl", "_inbound.jsonl.1", "_inbound.jsonl.2"]
+
+
+def test_trace_integrity_after_rotation(tmp_path):
+    """Every record ever written is recoverable from SOME file, and every
+    line in every file is complete, valid JSON — proving rotation never
+    splits or corrupts a record. Write count stays within the backup cap so
+    nothing is evicted yet (eviction itself is proven separately by
+    test_old_backups_beyond_the_cap_are_deleted) — this test is only about
+    corruption, not retention."""
+    from call_trace import CallTrace
+
+    for i in range(4):
+        CallTrace.capture_unverified(tmp_path, {"webhook-id": f"wh_{i}"}, BIG_BODY,
+                                     max_bytes=250, max_backups=5)
+
+    all_ids = []
+    for path in tmp_path.glob("_inbound.jsonl*"):
+        for line in path.read_text().splitlines():
+            all_ids.append(json.loads(line)["headers"]["webhook-id"])   # raises on any corrupt line
+
+    assert sorted(all_ids) == sorted(f"wh_{i}" for i in range(4))
+
+
+def test_old_backups_beyond_the_cap_are_deleted(tmp_path):
+    """Rotation alone doesn't prevent unbounded growth — it just reshapes it
+    into many files — unless old backups are actually deleted."""
+    from call_trace import CallTrace
+
+    for i in range(20):
+        CallTrace.capture_unverified(tmp_path, {"webhook-id": f"wh_{i}"}, BIG_BODY,
+                                     max_bytes=250, max_backups=2)
+
+    backups = list(tmp_path.glob("_inbound.jsonl.*"))
+    assert len(backups) == 2
+
+
+def test_rapid_successive_deliveries_do_not_corrupt_the_log(tmp_path):
+    """The realistic 'concurrent deliveries' scenario for this codebase's
+    single-process, no-thread-offload deployment model (see section note).
+    Write count stays within the backup cap — this is about corruption
+    under rapid writes, not retention (covered separately)."""
+    from call_trace import CallTrace
+
+    for i in range(4):
+        CallTrace.capture_unverified(tmp_path, {"webhook-id": f"wh_{i}"}, BIG_BODY,
+                                     max_bytes=300, max_backups=3)
+
+    all_ids = []
+    for path in tmp_path.glob("_inbound.jsonl*"):
+        for line in path.read_text().splitlines():
+            all_ids.append(json.loads(line)["headers"]["webhook-id"])
+
+    assert sorted(all_ids) == sorted(f"wh_{i}" for i in range(4))
+
+
+def test_concurrent_per_call_and_quarantine_writes_do_not_interfere(tmp_path):
+    """Interleaved per-call trace writes (two different calls) and
+    quarantine-file writes must stay fully independent: neither corrupts nor
+    truncates the other, and the per-call files are never touched by
+    quarantine rotation."""
+    from call_trace import CallTrace
+
+    trace_a = CallTrace("call_a", capture_dir=tmp_path)
+    trace_b = CallTrace("call_b", capture_dir=tmp_path)
+    for i in range(10):
+        trace_a.stage(f"stage_a_{i}")
+        CallTrace.capture_unverified(tmp_path, {"webhook-id": f"wh_{i}"}, BIG_BODY,
+                                     max_bytes=250, max_backups=2)
+        trace_b.stage(f"stage_b_{i}")
+    trace_a.close()
+    trace_b.close()
+
+    a_lines = (tmp_path / "call_a.jsonl").read_text().splitlines()
+    b_lines = (tmp_path / "call_b.jsonl").read_text().splitlines()
+    assert len(a_lines) == 10 and len(b_lines) == 10
+    assert [json.loads(ln)["stage"] for ln in a_lines] == [f"stage_a_{i}" for i in range(10)]
+    assert [json.loads(ln)["stage"] for ln in b_lines] == [f"stage_b_{i}" for i in range(10)]
+    # Quarantine rotation happened, but never touched the per-call files.
+    assert (tmp_path / "_inbound.jsonl.1").exists()
+
+
+def test_a_per_call_trace_is_never_rotated_or_split(tmp_path):
+    """The one file per call must stay whole even with a very verbose call
+    that would exceed the same threshold used for the quarantine file — a
+    single call's trace is never a rotation target, by design."""
+    from call_trace import CallTrace
+
+    trace = CallTrace("call_big", capture_dir=tmp_path)
+    for i in range(50):
+        trace.event({"type": "response.audio.delta", "chunk": "x" * 50, "i": i})
+    trace.close()
+
+    assert (tmp_path / "call_big.jsonl").exists()
+    assert not (tmp_path / "call_big.jsonl.1").exists()
+    assert len((tmp_path / "call_big.jsonl").read_text().splitlines()) == 50
+
+
 # ---- run_call orchestration (our half of the loop) -------------------------
 
 def test_run_call_persists_job_from_log_job_event(test_engine):

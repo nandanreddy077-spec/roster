@@ -21,6 +21,19 @@ unauthenticated caller never triggers a disk write keyed on their input; and
 (2) `capture_unverified()` records the raw pre-auth webhook to a single fixed
 filename (`_inbound.jsonl`), never one derived from the caller-supplied
 call_id, so the pre-auth capture can't be steered into a path traversal.
+
+Log rotation (2026-07-29, Frontdesk reliability audit): `_inbound.jsonl` is
+appended to by EVERY webhook delivery forever, with no per-call boundary to
+bound it naturally — unlike a per-call `{call_id}.jsonl` file, which is
+deliberately NEVER rotated (it's already scoped to one call's own short
+lifetime, and splitting a single call's trace across files would break the
+"open one file, see the whole call" debugging workflow this module exists
+for). Rotation is size-based and keeps a bounded number of numbered backups
+(`_inbound.jsonl.1`, `.2`, ...) — rotating without ever deleting old backups
+would just reshape unbounded growth into many files, not prevent it. It
+happens strictly BETWEEN writes: `capture_unverified` opens, writes ONE
+complete line, and closes the file every call (no long-lived handle), so a
+record can never straddle the rotation boundary.
 """
 import json
 import re
@@ -33,6 +46,33 @@ from typing import Any, Dict, Optional
 # filesystem path built from it, so we defensively re-sanitize here as well: a
 # bad call_id must never let a write escape the capture directory (CWE-22).
 _UNSAFE_FILENAME = re.compile(r"[^A-Za-z0-9_-]")
+
+# Rotation defaults for the shared pre-auth quarantine file (_inbound.jsonl)
+# ONLY — see the module docstring for why a per-call file is never rotated.
+# 5 MB keeps a single file comfortably readable; 5 backups bounds total disk
+# use to ~30 MB worst case rather than growing forever. Both are overridable
+# per call (capture_unverified's own params), same injectable-constant
+# pattern as xai_voice_adapter's MAX_CALL_DURATION_SECONDS/MAX_CALL_TOKEN_BUDGET.
+MAX_INBOUND_LOG_BYTES = 5 * 1024 * 1024
+MAX_INBOUND_LOG_BACKUPS = 5
+
+
+def _rotate_if_needed(path: Path, max_bytes: int, max_backups: int) -> None:
+    """If `path` is already at or past `max_bytes`, shift the numbered
+    backup chain (path.N -> path.N+1, oldest deleted) and rename `path` to
+    `path.1` — so the NEXT write always lands in a fresh, empty `path`.
+    Runs before any write begins, never mid-write, so a record can never be
+    split across the rotation boundary."""
+    if not path.exists() or path.stat().st_size < max_bytes:
+        return
+    oldest = path.with_name(f"{path.name}.{max_backups}")
+    if oldest.exists():
+        oldest.unlink()
+    for n in range(max_backups - 1, 0, -1):
+        src = path.with_name(f"{path.name}.{n}")
+        if src.exists():
+            src.rename(path.with_name(f"{path.name}.{n + 1}"))
+    path.rename(path.with_name(f"{path.name}.1"))
 
 
 def _safe_name(call_id: Any) -> str:
@@ -110,19 +150,27 @@ class CallTrace:
         print(f"[call {self.call_id}] +{rec['t_ms']}ms {rec['kind']}: {label}", file=sys.stderr)
 
     @staticmethod
-    def capture_unverified(capture_dir: Optional[Any], headers: Dict[str, Any], body: bytes) -> None:
+    def capture_unverified(capture_dir: Optional[Any], headers: Dict[str, Any], body: bytes,
+                           max_bytes: int = MAX_INBOUND_LOG_BYTES,
+                           max_backups: int = MAX_INBOUND_LOG_BACKUPS) -> None:
         """Append a raw inbound webhook to a single fixed quarantine file,
         BEFORE authentication. Uses a constant filename (never the caller's
         call_id), so an unauthenticated request cannot control the write path —
         this preserves the "capture every inbound webhook" ground-truth log
         without the pre-auth path-traversal / arbitrary-file-append exposure of
-        keying the file on attacker-supplied input."""
+        keying the file on attacker-supplied input.
+
+        Rotated by size (see module docstring) before this write begins, so
+        the record below always lands in a fresh file if rotation just fired
+        — never split across the old and new file."""
         if capture_dir is None:
             return
         capture_dir = Path(capture_dir)
         capture_dir.mkdir(parents=True, exist_ok=True)
+        path = capture_dir / "_inbound.jsonl"
+        _rotate_if_needed(path, max_bytes, max_backups)
         body_text = body.decode("utf-8", "replace") if isinstance(body, (bytes, bytearray)) else str(body)
         rec = {"kind": "unverified_webhook", "ts": time.time(),
                "headers": dict(headers), "body": body_text}
-        with open(capture_dir / "_inbound.jsonl", "a") as f:
+        with open(path, "a") as f:
             f.write(json.dumps(rec, default=str) + "\n")
