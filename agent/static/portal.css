@@ -229,6 +229,12 @@ h1, h2, .logo { font-family: var(--serif); font-weight: 600; color: var(--ink); 
 }
 .portal-activity-preview li { padding: 4px 0; border-top: 1px solid var(--border); }
 .portal-activity-preview li:first-child { border-top: none; }
+.portal-activity-preview li a {
+  color: var(--text); text-decoration: none; font-size: 14px;
+}
+.portal-activity-preview li a:hover, .portal-activity-preview li a:focus-visible {
+  color: var(--accent);
+}
 
 .portal-timeline { list-style: none; }
 .portal-timeline li {

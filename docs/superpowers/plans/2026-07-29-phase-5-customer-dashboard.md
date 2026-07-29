@@ -590,9 +590,72 @@ exercised through this route); no template imports `expansion.py` or
 
 ## Task 10: The Briefing and Notifications
 
-Unchanged from the original plan. Notifications reads Phase 2's
-`recent_notifications()`; the Briefing ships rules-based, narrating across
-workspaces, and records no interest on render.
+Revised (founder, 2026-07-29): the Briefing is not a notification widget or a
+new independent report — it is a **synthesis read model** over the workspaces
+already built. New `BriefingWorkspace(generated_at, summary, highlights,
+departments, notifications)` in `workspace.py`, assembled by
+`build_briefing_workspace()`.
+
+**What it consumes, and why:**
+- `build_department_workspace` — once per active department, for that
+  department's health/headline and its employees' outcomes (escalation
+  counts feed "needs attention"; the headline outcome feeds "working well").
+- `build_expansion_workspace` — once per hireable department, for a "growth"
+  nudge (blueprint §5's "Briefing nudge" — expansion surfaced contextually,
+  never as its own nav item). Reuses the exact same `is not None` gate the
+  Department Workspace's "Expand" link and the Departments grid's
+  `can_expand` already use, so the Briefing can never nudge toward a
+  department with nothing actually available (the same "no dead controls"
+  discipline, applied to a recommendation instead of a link).
+- `recent_notifications` (Phase 2, unchanged) — literally IS "what changed":
+  every row is already a timestamped, business-scoped real event.
+
+**Deliberately NOT called:** `build_employee_workspace` per employee. It
+internally re-derives `build_department_workspace` (hence
+`department_status_for` over a fresh Employee query) for that one employee —
+calling it once per employee inside a department loop would be a duplicate
+computation on top of the department loop's own call. `DepartmentWorkspace`
+already nests `EmployeeView` (role_key, display_name, outcomes, activity),
+which is everything a Briefing highlight needs; there is nothing
+`EmployeeWorkspace` adds (`mission`, a fixed `status` label) that changes a
+one-line highlight.
+
+**Accepted bounded cost:** looping over departments to call
+`build_department_workspace`/`build_expansion_workspace` re-triggers each
+one's internal `_status_for` (a fresh `SELECT employee WHERE business_id`).
+That's at most ~5 redundant small queries per Briefing load (the department
+registry is a fixed constant, never business-scaled) — reusing the shared
+builders as directed costs a handful of trivial queries, not a growing N+1.
+Not worth a plumbing change to shave off.
+
+**Ordering:** highlights are explicitly sorted attention → working well →
+growth (never left to incidental registry order — same "deterministic, never
+invented importance" rule as `headline_outcome`), then capped at 5 so the
+page stays a "less than a minute" read. `departments` lists only *active*
+departments (mirrors Overview's gateway cards) — inactive ones are already
+the Departments page's job; repeating them here would make this a second
+Departments page instead of a synthesis of what's already running.
+
+**Records nothing.** `build_briefing_workspace` and the `/briefing` route are
+GET-only and never call `expansion.record_interest` — a growth nudge is a
+suggestion to read, not an action the page takes on the owner's behalf.
+
+**Notifications** stays a plain list rendering Phase 2's
+`recent_notifications()` — no new view model; the plan never asked for one,
+and there's no synthesis to do over a list that's already exactly what the
+page shows. New `NOTIFICATION_KIND_LABELS` (workspace.py, alongside
+`METRIC_LABELS`) maps `notifications.KIND_*` to customer wording, registered
+as the `notification_kind_labels` Jinja global, so `kind` strings never leak
+into a template unlabeled.
+
+**Audit (hidden entry points / stale reads / idempotency / N+1 / ordering /
+isolation):** no mutation anywhere in this task, so no idempotency risk. No
+new entry point beyond the two GET routes already reserved in `NAV_ITEMS`.
+Business isolation: every call (`build_department_workspace`,
+`build_expansion_workspace`, `recent_notifications`) is already
+business-scoped by the callers that exist; the Briefing introduces no new
+query of its own. N+1 discussed above and accepted as bounded. Ordering
+discussed above and made explicit rather than incidental.
 
 ---
 

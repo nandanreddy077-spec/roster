@@ -13,12 +13,14 @@ there is exactly one copy of the customer's wording, not two maps that can
 drift. portal.py imports them rather than redefining them.
 """
 from dataclasses import dataclass
+from datetime import datetime
 from typing import List, Optional, Tuple
 
 import metrics
 from db_models import Employee
 from departments import department_status_for, get_department
 from employees import REGISTRY as _EMPLOYEE_REGISTRY
+from notifications import recent_notifications
 
 _EMPLOYEE_BY_KEY = {e.key: e for e in _EMPLOYEE_REGISTRY}
 
@@ -56,6 +58,15 @@ METRIC_LABELS = {
     metrics.CUSTOMERS_REACHED: "Past customers contacted",
     metrics.CUSTOMERS_RETURNED: "Customers who came back",
     metrics.REFERRALS_RECEIVED: "Referrals received",
+}
+
+# The CUSTOMER's wording for each notifications.KIND_* — the Notifications
+# page and the Briefing's "what changed" section both read this rather than
+# rendering a raw kind string.
+NOTIFICATION_KIND_LABELS = {
+    "job_booked": "Job booked",
+    "escalation": "Sent to you personally",
+    "call_dropped": "A call was missed",
 }
 
 
@@ -264,4 +275,123 @@ def build_expansion_workspace(session, business_id: int,
         current_state=_employee_views(session, business_id, status.staffed),
         available_employees=available,
         expected_outcomes=outcome_labels,
+    )
+
+
+@dataclass(frozen=True)
+class BriefingHighlight:
+    """One line of the Briefing: what happened, and where to read more. `kind`
+    is one of "attention" | "working_well" | "growth" — it drives ordering,
+    never a template decision."""
+    text: str
+    kind: str
+    href: str
+
+
+@dataclass(frozen=True)
+class BriefingDepartmentRow:
+    """One active department's status inside the Briefing — same shape as the
+    Departments grid's gateway card, so the two surfaces can never disagree
+    about a department's health."""
+    department: object          # departments.Department
+    health_label: str
+    headline: Optional[Tuple[str, int]]
+    href: str
+
+
+@dataclass(frozen=True)
+class BriefingWorkspace:
+    """A synthesis over the workspaces already built — never a second
+    independent report (founder, 2026-07-29). Reads like a morning briefing:
+    what needs attention, then what's working, then somewhere to grow, then
+    links back into the relevant Department or Employee Workspace."""
+    generated_at: datetime
+    summary: str
+    highlights: List[BriefingHighlight]
+    departments: List[BriefingDepartmentRow]
+    notifications: List          # db_models.OwnerNotification
+
+
+_HIGHLIGHT_ORDER = {"attention": 0, "working_well": 1, "growth": 2}
+
+
+def build_briefing_workspace(session, business_id: int,
+                             notification_limit: int = 10) -> BriefingWorkspace:
+    """Consumes build_department_workspace and build_expansion_workspace — the
+    Briefing never queries metrics.py or EMPLOYEE_RECORDS directly, and never
+    calls expansion.record_interest (a growth nudge is a suggestion to read,
+    not an action taken on the owner's behalf).
+
+    Deliberately does NOT call build_employee_workspace: that would re-derive
+    build_department_workspace (hence a fresh Employee query) once per
+    employee inside this function's own department loop. DepartmentWorkspace
+    already nests everything a one-line highlight needs (EmployeeView's
+    role_key, display_name, outcomes) via the same shared computation.
+    """
+    from sqlmodel import select
+
+    employees = session.exec(
+        select(Employee).where(Employee.business_id == business_id)
+    ).all()
+    statuses = [s for s in department_status_for(employees) if s.department.hireable]
+
+    highlights: List[BriefingHighlight] = []
+    department_rows: List[BriefingDepartmentRow] = []
+
+    for status in statuses:
+        key = status.department.key
+        if status.state in ACTIVE_STATES:
+            dept_ws = build_department_workspace(session, business_id, key)
+            href = f"/v2/dashboard/departments/{key}"
+            headline = headline_outcome(dept_ws.outcomes)
+            department_rows.append(BriefingDepartmentRow(
+                department=dept_ws.department, health_label=dept_ws.health_label,
+                headline=headline, href=href,
+            ))
+            if headline is not None:
+                label, value = headline
+                highlights.append(BriefingHighlight(
+                    text=f"{dept_ws.department.display_name}: {value} {label.lower()}",
+                    kind="working_well", href=href,
+                ))
+            escalation_label = METRIC_LABELS[metrics.ESCALATIONS]
+            for employee in dept_ws.employees:
+                count = dict(employee.outcomes).get(escalation_label)
+                if count:
+                    highlights.append(BriefingHighlight(
+                        text=(f"{employee.display_name} sent you {count} thing"
+                              f"{'s' if count != 1 else ''} personally"),
+                        kind="attention",
+                        href=f"/v2/dashboard/departments/{key}/employees/{employee.role_key}",
+                    ))
+
+        expansion = build_expansion_workspace(session, business_id, key)
+        if expansion is not None and expansion.available_employees:
+            first = expansion.available_employees[0]
+            highlights.append(BriefingHighlight(
+                text=(f"{status.department.display_name} isn't staffed yet — "
+                      f"you could add {first.display_name}"
+                      if status.state == "empty" else
+                      f"{status.department.display_name} could also take on {first.display_name}"),
+                kind="growth",
+                href=f"/v2/dashboard/departments/{key}/expand",
+            ))
+
+    highlights.sort(key=lambda h: _HIGHLIGHT_ORDER[h.kind])
+    highlights = highlights[:5]
+
+    attention_count = sum(1 for h in highlights if h.kind == "attention")
+    if department_rows:
+        summary = f"{len(department_rows)} department{'s' if len(department_rows) != 1 else ''} working"
+        summary += (f", {attention_count} thing{'s' if attention_count != 1 else ''} need your attention."
+                    if attention_count else ", nothing urgent.")
+    else:
+        summary = "Nothing staffed yet."
+
+    return BriefingWorkspace(
+        generated_at=datetime.utcnow(),
+        summary=summary,
+        highlights=highlights,
+        departments=department_rows,
+        notifications=recent_notifications(session, business_id, limit=notification_limit),
     )

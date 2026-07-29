@@ -26,7 +26,7 @@ from deployment import deploy_role
 from google_auth import callback_url, get_oauth, google_enabled
 from locks import conversation_lock
 import metrics
-from notifications import is_test_thread
+from notifications import is_test_thread, recent_notifications
 from roles import ROSTER_DESCRIPTIONS, coming_later_after, next_hire, receptionist_display_name, role_key_for
 from service import handle_customer_message
 
@@ -81,6 +81,8 @@ from workspace import (  # noqa: E402
     ACTIVE_STATES as _ACTIVE_STATES,
     CUSTOMER_STATE_LABELS,
     METRIC_LABELS,
+    NOTIFICATION_KIND_LABELS,
+    build_briefing_workspace,
     build_department_workspace,
     build_employee_workspace,
     build_expansion_workspace,
@@ -88,6 +90,7 @@ from workspace import (  # noqa: E402
 )
 
 templates.env.globals["metric_labels"] = METRIC_LABELS
+templates.env.globals["notification_kind_labels"] = NOTIFICATION_KIND_LABELS
 
 router = APIRouter()
 
@@ -613,6 +616,42 @@ def v2_request_expansion(request: Request, department_key: str):
     return RedirectResponse(
         f"/v2/dashboard/departments/{department_key}/expand?requested=true", status_code=303
     )
+
+
+@router.get("/v2/dashboard/briefing")
+def v2_briefing(request: Request):
+    """Renders a SINGLE assembled BriefingWorkspace — a synthesis over the
+    Department/Expansion Workspaces already built, never a second independent
+    report. GET-only: viewing a growth nudge must never itself record
+    interest (Phase 3's guard, upheld here the same way it is on the /expand
+    GET route)."""
+    with Session(engine) as session:
+        business = _current_client(request, session)
+        if business is None:
+            return RedirectResponse("/login", status_code=303)
+        ws = build_briefing_workspace(session, business.id)
+        return templates.TemplateResponse(
+            request,
+            "dashboard_v2/briefing.html",
+            {"business": business, "active_nav": "briefing", "workspace": ws},
+        )
+
+
+@router.get("/v2/dashboard/notifications")
+def v2_notifications(request: Request):
+    """A plain list over Phase 2's recent_notifications() — no view model,
+    since there's no synthesis to do over a list that's already exactly what
+    this page shows."""
+    with Session(engine) as session:
+        business = _current_client(request, session)
+        if business is None:
+            return RedirectResponse("/login", status_code=303)
+        notifications = recent_notifications(session, business.id, limit=50)
+        return templates.TemplateResponse(
+            request,
+            "dashboard_v2/notifications.html",
+            {"business": business, "active_nav": "notifications", "notifications": notifications},
+        )
 
 
 @router.post("/dashboard/test")

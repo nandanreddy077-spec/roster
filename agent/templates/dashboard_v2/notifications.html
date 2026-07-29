@@ -1,0 +1,19 @@
+{% extends "portal_base.html" %}
+{% block heading %}Notifications{% endblock %}
+{% block subhead %}
+<p class="portal-lede">Every alert Roster has sent you, newest first.</p>
+{% endblock %}
+
+{% block content %}
+<section class="portal-card portal-card-wide">
+  {% if notifications %}
+  <ul class="portal-timeline">
+    {% for n in notifications %}
+    <li><span class="portal-timeline-when">{{ n.created_at.strftime('%b %d, %I:%M %p') }}</span>{{ notification_kind_labels[n.kind] }}: {{ n.message }}</li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="portal-empty">Nothing yet.</p>
+  {% endif %}
+</section>
+{% endblock %}

@@ -1,0 +1,60 @@
+{% extends "portal_base.html" %}
+{% block heading %}{{ briefing_label }}{% endblock %}
+{% block subhead %}
+<p class="portal-lede">{{ workspace.summary }}</p>
+{% endblock %}
+
+{% block content %}
+{# Renders ONE assembled BriefingWorkspace (workspace.py) — a synthesis over
+   DepartmentWorkspace/ExpansionWorkspace, never a second independent report
+   (founder, 2026-07-29). Attention first, then what's working, then a
+   growth nudge — the same order the view model already sorted them in. #}
+{% if workspace.highlights %}
+<section class="portal-card portal-card-wide">
+  <ul class="portal-activity-preview">
+    {% for highlight in workspace.highlights %}
+    <li><a href="{{ highlight.href }}">{{ highlight.text }}</a></li>
+    {% endfor %}
+  </ul>
+</section>
+{% else %}
+<section class="portal-card portal-card-wide">
+  <p class="portal-empty">Nothing to report yet.</p>
+</section>
+{% endif %}
+
+{% if workspace.departments %}
+<h2 class="portal-section-title">Your departments</h2>
+<div class="portal-dept-grid">
+  {% for row in workspace.departments %}
+  <a class="portal-gateway-card-link" href="{{ row.href }}">
+  <section class="portal-card portal-dept-card">
+    <div class="portal-dept-head">
+      <h2>{{ row.department.display_name }}</h2>
+      <span class="portal-state">{{ row.health_label }}</span>
+    </div>
+    {% if row.headline %}
+    <ul class="portal-outcomes portal-outcomes-compact">
+      <li><span class="portal-outcome-value">{{ row.headline[1] }}</span><span class="portal-outcome-label">{{ row.headline[0] }}</span></li>
+    </ul>
+    {% endif %}
+  </section>
+  </a>
+  {% endfor %}
+</div>
+{% endif %}
+
+<h2 class="portal-section-title">Recent notifications</h2>
+<section class="portal-card portal-card-wide">
+  {% if workspace.notifications %}
+  <ul class="portal-timeline">
+    {% for n in workspace.notifications[:5] %}
+    <li><span class="portal-timeline-when">{{ n.created_at.strftime('%b %d, %I:%M %p') }}</span>{{ notification_kind_labels[n.kind] }}</li>
+    {% endfor %}
+  </ul>
+  <a class="back-link" href="/v2/dashboard/notifications">See all notifications &rarr;</a>
+  {% else %}
+  <p class="portal-empty">Nothing yet.</p>
+  {% endif %}
+</section>
+{% endblock %}
