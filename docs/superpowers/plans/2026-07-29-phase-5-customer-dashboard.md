@@ -312,54 +312,161 @@ labels are centralized, not hardcoded in templates.
 
 ---
 
-## Task 5: Department detail — outcomes first, employees last
+## IA REVISION (founder, 2026-07-29) — workspaces, not report cards
 
-**Files:** `agent/templates/dashboard_v2/department.html`, `agent/portal.py`, tests
+**The change.** The customer should feel like they are *opening departments
+inside their office*, not reading a report. The hierarchy becomes:
 
-The blueprint's fixed hierarchy: **header → outcomes strip → activity feed →
-your team**. One shared template for all six hireable departments.
+```
+Overview  →  Department workspace  →  Employee  →  Activity
+```
 
-**Tests:** outcome numbers precede employee names in the rendered DOM order
-(the hierarchy is testable, not just intended); a department the business
-doesn't have 404s rather than rendering empty; employees appear as secondary
-detail with no AI-internal metrics anywhere.
+not `Overview → metric cards`. Overview becomes a **gateway** into workspaces
+rather than a container for every metric. Each department answers its own
+question, so each one feels different rather than being the same card with
+different numbers in it.
 
-**Expected:** `467 passing`.
+**What this does NOT change — keep exactly as built:** `DepartmentStatus`
+(presentation-neutral facts), `metrics.py` + `METRIC_RECORDS` (the drill-down
+invariant), `CUSTOMER_STATE_LABELS` / `METRIC_LABELS` (centralized wording),
+`portal_base.html` + the nav shell. Tasks 1–3 stand. Only Task 4's two
+templates get reworked, and only into entry points.
+
+### Pre-revision audit: what per-employee data actually exists
+
+The example in the brief implies per-employee numbers. Checking what records
+exist behind each one, because the drill-down invariant means a number ships
+only if it can name its rows:
+
+| Example number | Records behind it | Ships? |
+|---|---|---|
+| Frontdesk — "6 jobs booked" | `job` rows, test-excluded | ✅ real |
+| Frontdesk — "18 calls answered" | distinct `xai-voice:{call_id}` threads in `message` (the voice adapter does persist turns — `xai_voice_adapter.py:314`) | ✅ real |
+| Quote Chaser — estimates chased / won back | `recoveryjob` via `face == 'quote'` | ✅ real |
+| Retention — customers reached / returned | `recoveryjob` via reactivation + membership | ✅ real |
+| Reviews — **"5 review requests sent"** | **none** — `app.py:553` sends the SMS and records nothing | ❌ **not today** |
+| Reviews — **"2 reviews received"** | **none** — Roster never learns whether a review was left | ❌ **not without a Google/Yelp integration** |
+
+**⚠️ No record in the database carries an employee attribution.** The only
+`employee_id` column anywhere is on `event`, and nothing publishes events in
+the live path (Phase 4 audit F6). So per-employee metrics are necessarily
+**by convention** — "these records belong to this role" — which is fine, but
+the convention has to be *declared*, exactly like `METRIC_RECORDS`, or it
+becomes the untraceable-number problem one level down.
+
+**Two decisions this forces (founder input wanted — see §Decisions below):**
+
+1. **Review requests**: add `Job.review_requested_at`, set where the SMS is
+   already sent. One additive column, and the metric becomes a real record
+   the owner could drill into. **Recommended.**
+2. **Reviews received**: genuinely unknowable without an integration. **Do not
+   render it.** Showing it would be the first fabricated number on the
+   dashboard, and it would break both the drill-down invariant and Roster's
+   standing "real-data-only metrics" rule.
 
 ---
 
-## Task 6: Ask-us-about → `record_interest`
+## Task 5: Department identity + per-employee facts (shared helpers, no UI)
 
-**Files:** `agent/portal.py`, tests
+**Files:** `agent/departments.py`, `agent/metrics.py`, `agent/db_models.py`, `agent/db.py`, `agent/app.py`, tests
 
-`POST /v2/dashboard/departments/{key}/interest` → Phase 3's `record_interest`,
-PRG, 400 on an unknown or non-hireable key (Phase 3 already raises
-`ValueError`; the route turns it into a message, never a 500). Idempotent by
-Phase 3's partial index.
+- Add `question` to `Department` — the one thing that department answers, so
+  each workspace opens differently: *"Are customers being looked after?"* /
+  *"Are we recovering revenue?"* / *"Are today's jobs running smoothly?"* /
+  *"Are invoices being collected?"* / *"Are customers renewing?"* / *"Are we
+  generating new business?"* Registry copy, same category as `mission`.
+- Add `metrics.employee_outcomes(session, business_id, role_key)` plus
+  `EMPLOYEE_METRIC_RECORDS` — the per-employee convention, declared. Every key
+  it can return must appear in `METRIC_RECORDS` too.
+- Add `Job.review_requested_at` (additive column + set at the existing send
+  site) so "review requests sent" counts real rows.
+- Support a `since` window so a workspace can say "today" honestly.
+- **Deliberately absent:** any "reviews received" metric.
 
-**Tests:** the CTA records interest; a double-submit creates one row; an
-already-staffed department offers no CTA; asking is scoped to the session's
-own business.
-
-**Expected:** `473 passing`.
+**Tests:** every department declares a question; `employee_outcomes` keys all
+declare records; Frontdesk's job count matches `booked_jobs`; a role with no
+attributable records returns `{}` not zeros; review requests count only jobs
+where the send actually happened; `since` filters correctly.
 
 ---
 
-## Task 7: The Briefing and Notifications
+## Task 6: The Department Workspace
 
-**Files:** `agent/templates/dashboard_v2/`, `agent/portal.py`, tests
+**Files:** `agent/templates/dashboard_v2/department.html`, `agent/portal.py`, `agent/static/portal.css`, tests
 
-Notifications reads Phase 2's `recent_notifications()` — newest first,
-business-scoped. The Briefing ships **rules-based** (as approved at execution-
-plan review): cross-department narrative from real rows, plus a growth
-recommendation only when the data supports one. **Nothing auto-records
-interest** (blueprint §8 / Phase 3 H6).
+Route `GET /v2/dashboard/departments/{key}`. Structure, top to bottom:
 
-**Tests:** notifications render newest-first and never cross businesses;
-rendering the Briefing creates **no** `DepartmentInterest` row; the Briefing's
-empty state is honest before data exists.
+1. **Department name + question** — what this workspace answers.
+2. **Health** — the shared `DepartmentStatus` state in customer wording.
+3. **Department outcomes** — the existing `department_outcomes`.
+4. **Every employee in the department**, each with: what they do, their
+   status, their own outcomes, and their recent activity — **clickable**
+   through to Task 7.
+5. **Recent activity / timeline** for the department as a whole, from real
+   rows (`job`, `ownernotification`), newest first.
 
-**Expected:** `481 passing`.
+**Tests:** the question renders; employees appear with their own numbers;
+employee cards link to the drill-down; a department the business doesn't have
+404s; an employee with no records shows activity-empty rather than fake
+zeros; no AI-internal term anywhere; outcomes precede employee detail in DOM
+order (blueprint §2's hierarchy is testable).
+
+---
+
+## Task 7: Employee drill-down
+
+**Files:** `agent/templates/dashboard_v2/employee.html`, `agent/portal.py`, tests
+
+Route `GET /v2/dashboard/departments/{key}/employees/{role_key}`. What this
+employee does, its status, its outcomes, and its work history — the "Activity"
+leaf of the hierarchy.
+
+**Tests:** renders for a deployed employee; 404 for one not deployed for this
+business; 404 for a role that isn't in the named department; business-scoped
+(another business's employee is never reachable); history is newest-first.
+
+---
+
+## Task 8: Overview becomes a gateway (reworks Task 4's templates)
+
+**Files:** `agent/templates/dashboard_v2/overview.html`, `dashboard_v2/departments.html`, `agent/portal.py`, tests
+
+Overview stops being a metric wall. It becomes the **door into each
+workspace**: one tile per active department showing its name, the question it
+answers, its health, and at most **one** headline number — then a way in. The
+detail lives in the workspace, not here.
+
+The Departments grid keeps its educational inactive cards (Task 4, unchanged)
+but its active cards become entry points rather than metric displays.
+
+**Tests:** every active department on Overview links to its workspace; Overview
+renders at most one number per department; the empty state survives; inactive
+education is unchanged.
+
+---
+
+## Task 9: Ask-us-about → `record_interest`
+
+Unchanged from the original plan — `POST /v2/dashboard/departments/{key}/interest`
+→ Phase 3's `record_interest`, PRG, 400 on unknown/non-hireable, idempotent by
+the partial index. Now attached to the inactive cards Task 4 already ships.
+
+---
+
+## Task 10: The Briefing and Notifications
+
+Unchanged from the original plan. Notifications reads Phase 2's
+`recent_notifications()`; the Briefing ships rules-based, narrating across
+workspaces, and records no interest on render.
+
+---
+
+## Decisions needed before Task 5 starts
+
+1. **`Job.review_requested_at`** — add it (recommended), or leave Reviews
+   without numbers until an integration exists?
+2. **"Reviews received"** — confirmed dropped? It cannot be sourced today, and
+   inventing it would be the dashboard's first fabricated number.
 
 ---
 
