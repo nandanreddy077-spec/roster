@@ -386,6 +386,115 @@ def test_call_trace_sanitizes_call_id_and_never_escapes_capture_dir(tmp_path):
     assert all(p.parent == capture for p in written)
 
 
+# ---- Customer identity: voice reaches parity with SMS -----------------------
+#
+# service.py's SMS path calls repositories.get_or_create_customer before
+# book_job and passes the resulting customer_id through — every SMS-booked
+# Job is linked to a real Customer row. The voice path never did this (a
+# confirmed, not hypothetical, gap from the 2026-07-29 audit): every
+# voice-booked Job had customer_id=None forever, so any feature that joins on
+# Customer (Retention Manager, Reviews, Customer Success outcomes) silently
+# missed every customer who has only ever called, never texted.
+#
+# Keyed on caller_number (the real phone), never `thread`
+# (`xai-voice:{call_id}`) — a customer's identity must be the same across
+# every call they ever make, and the thread id is unique per call by design.
+
+def test_log_job_creates_a_customer_and_links_the_job(test_engine):
+    from xai_voice_adapter import run_call
+    from call_trace import CallTrace
+
+    client = _seed_business(test_engine)
+    ws = FakeWS([LOG_JOB_EVENT])
+
+    asyncio.run(run_call("call_cust1", client, "+15125559999", lambda: Session(test_engine),
+                         connect=connector_for(ws), trace=CallTrace("call_cust1")))
+
+    with Session(test_engine) as s:
+        from db_models import Customer
+        customer = s.exec(select(Customer).where(
+            Customer.business_id == client.id, Customer.phone == "+15125559999")).first()
+        job = s.exec(select(Job).where(Job.business_id == client.id)).first()
+
+    assert customer is not None
+    assert customer.name == "Jane Doe"          # log_job's customer_name, same as SMS
+    assert job.customer_id == customer.id
+
+
+def test_a_repeat_caller_across_two_separate_calls_reuses_the_same_customer(test_engine):
+    """Two different call_ids (each its own thread) from the same real phone
+    number must resolve to one Customer, not two — identity is the caller's
+    phone number, never the per-call thread id."""
+    from xai_voice_adapter import run_call
+    from call_trace import CallTrace
+
+    client = _seed_business(test_engine)
+
+    asyncio.run(run_call("call_cust2a", client, "+15125559999", lambda: Session(test_engine),
+                         connect=connector_for(FakeWS([LOG_JOB_EVENT])), trace=CallTrace("call_cust2a")))
+    asyncio.run(run_call("call_cust2b", client, "+15125559999", lambda: Session(test_engine),
+                         connect=connector_for(FakeWS([LOG_JOB_EVENT])), trace=CallTrace("call_cust2b")))
+
+    with Session(test_engine) as s:
+        from db_models import Customer
+        customers = s.exec(select(Customer).where(
+            Customer.business_id == client.id, Customer.phone == "+15125559999")).all()
+        jobs = s.exec(select(Job).where(Job.business_id == client.id)).all()
+
+    assert len(customers) == 1
+    assert len(jobs) == 2                       # two calls, two escalation-free jobs
+    assert jobs[0].customer_id == jobs[1].customer_id == customers[0].id
+
+
+def test_a_caller_reuses_the_customer_record_their_sms_conversation_already_created(
+    test_engine, monkeypatch
+):
+    """Cross-channel identity: get_or_create_customer keys on (business_id,
+    phone) alone, so a customer who has already texted this business and
+    then calls must resolve to the SAME Customer row, not a second one."""
+    from xai_voice_adapter import run_call
+    from call_trace import CallTrace
+    from repositories import get_or_create_customer
+
+    client = _seed_business(test_engine)
+    with Session(test_engine) as s:
+        existing = get_or_create_customer(s, client.id, "+15125559999", name="Jane Doe")
+        existing_id = existing.id
+
+    ws = FakeWS([LOG_JOB_EVENT])
+    asyncio.run(run_call("call_cust3", client, "+15125559999", lambda: Session(test_engine),
+                         connect=connector_for(ws), trace=CallTrace("call_cust3")))
+
+    with Session(test_engine) as s:
+        from db_models import Customer
+        customers = s.exec(select(Customer).where(
+            Customer.business_id == client.id, Customer.phone == "+15125559999")).all()
+        job = s.exec(select(Job).where(Job.business_id == client.id)).first()
+
+    assert len(customers) == 1
+    assert job.customer_id == existing_id
+
+
+def test_alert_owner_also_links_a_customer_to_the_escalation_job(test_engine, monkeypatch):
+    """A Job is a Job regardless of which tool created it — an escalation
+    call is from a real, identifiable caller too."""
+    import xai_voice_adapter as adapter
+    monkeypatch.setattr(adapter, "notify_owner_of_escalation", lambda *a, **k: True)
+    client = _seed_business(test_engine)
+    ws = FakeWS([ALERT_OWNER_EVENT])
+
+    _run(client, ws, test_engine)
+
+    with Session(test_engine) as s:
+        from db_models import Customer
+        customer = s.exec(select(Customer).where(
+            Customer.business_id == client.id, Customer.phone == "+15125559999")).first()
+        job = s.exec(select(Job).where(Job.business_id == client.id)).first()
+
+    assert customer is not None
+    assert job.customer_id == customer.id
+
+
 # ---- Escalation: honest emergency path --------------------------------------
 
 ALERT_OWNER_EVENT = {

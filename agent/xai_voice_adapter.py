@@ -55,6 +55,7 @@ from notifications import (
     notify_owner_of_escalation,
     record_owner_notification,
 )
+from repositories import get_or_create_customer
 
 REALTIME_URL = "wss://api.x.ai/v1/realtime"
 VOICE_THREAD_PREFIX = "xai-voice:"
@@ -146,10 +147,17 @@ def _thread_id(call_id: str) -> str:
 
 
 async def _persist_job(session: Session, client: Business, thread: str, caller_number: str, args: Dict[str, Any]) -> Job:
+    # Customer identity, same guarantee the SMS path already gives every
+    # booking (service.py) — keyed on the caller's real phone number, never
+    # `thread` (xai-voice:{call_id} is unique per call, not per customer), so
+    # a repeat caller resolves to the same Customer every time, and reuses
+    # whatever Customer row an SMS conversation with this same number already
+    # created (get_or_create_customer keys on (business_id, phone) alone).
+    customer = get_or_create_customer(session, client.id, caller_number, args.get("customer_name"))
     # Idempotent: the tool description invites re-calls with new details, and
     # webhook/LLM retries can replay this — book_job merges into the existing
     # open job for this call's thread instead of inserting a duplicate.
-    job, created = book_job(session, client, thread, caller_number, args)
+    job, created = book_job(session, client, thread, caller_number, args, customer_id=customer.id)
     # Same owner-text as the SMS path, for a NEW voice-booked job only — a
     # detail-merge never re-texts the owner. Offloaded to a thread: this SMS
     # send is a blocking HTTP call, and blocking the event loop here would
@@ -194,7 +202,12 @@ async def _handle_function_call(
         # retry after a FAILED page must still go through — should_notify
         # tracks exactly that (2026-07-29 voice-loop audit finding).
         reason = args.get("reason") or "caller needs the owner"
-        job, should_notify = record_escalation(session, client, thread, caller_number, reason)
+        # Same identity guarantee as log_job (see _persist_job) — a Job is a
+        # Job regardless of which tool created it, and an escalation call is
+        # from a real, identifiable caller too. alert_owner carries no name.
+        customer = get_or_create_customer(session, client.id, caller_number)
+        job, should_notify = record_escalation(
+            session, client, thread, caller_number, reason, customer_id=customer.id)
         trace.stage("job_persisted", job_id=job.id, escalation=True)
         if should_notify:
             alerted = await asyncio.to_thread(notify_owner_of_escalation, client, caller_number, reason)

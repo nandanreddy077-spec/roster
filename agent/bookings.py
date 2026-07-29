@@ -89,6 +89,7 @@ def record_escalation(
     thread: str,
     caller_number: str,
     reason: str,
+    customer_id: Optional[int] = None,
 ) -> Tuple[Job, bool]:
     """Upsert an emergency-escalation Job — the same idempotency guarantee
     book_job gives log_job, for alert_owner. One call thread gets at most one
@@ -109,10 +110,16 @@ def record_escalation(
         )
     ).first()
     if existing is not None:
+        if customer_id is not None and existing.customer_id is None:
+            existing.customer_id = customer_id
+            session.add(existing)
+            session.commit()
+            session.refresh(existing)
         return existing, existing.owner_alerted_at is None
 
     job = Job(
         business_id=business.id,
+        customer_id=customer_id,
         customer_phone=thread,
         service_type=ESCALATION_SERVICE_TYPE,
         urgency="emergency",
