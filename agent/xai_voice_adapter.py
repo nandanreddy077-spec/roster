@@ -35,7 +35,7 @@ from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 import websockets
-from sqlmodel import Session
+from sqlmodel import Session, select
 
 from bookings import book_job, record_escalation
 from memory import build_customer_context
@@ -256,6 +256,48 @@ def _extract_transcript(response_done_event: Dict[str, Any]) -> str:
     return " ".join(parts).strip()
 
 
+# The caller's side of the conversation. Same OpenAI-Realtime-compatible
+# assumption _extract_transcript already makes for the assistant side —
+# unconfirmed against a real xAI payload until a live call is captured.
+# `.delta` carries the transcript as it's still being recognized (streaming,
+# partial); only `.completed` is durable, same final-only rule the assistant
+# side already follows for response.done.
+USER_TRANSCRIPT_COMPLETED = "conversation.item.input_audio_transcription.completed"
+USER_TRANSCRIPT_DELTA = "conversation.item.input_audio_transcription.delta"
+
+
+def _persist_user_transcript(session: Session, business_id: int, thread: str,
+                             event: Dict[str, Any]) -> None:
+    """Persist the caller's transcribed utterance as a user-role Message.
+
+    Dedup reuses Message.external_id exactly as service.py's SMS path already
+    dedupes a redelivered Twilio MessageSid — here keyed on xAI's own stable
+    item_id, same column, same guarantee, no new mechanism. A missing
+    item_id/transcript, or an empty/non-string transcript, is a silent no-op:
+    a transcription-pipeline hiccup must never crash the call the way an
+    unhandled exception would (run_call's top-level handler would otherwise
+    text the owner "call dropped" over what is really just a missing field).
+    """
+    item_id = event.get("item_id")
+    transcript = event.get("transcript")
+    transcript = transcript.strip() if isinstance(transcript, str) else ""
+    if not item_id or not transcript:
+        return
+    already_stored = session.exec(
+        select(Message).where(Message.business_id == business_id, Message.external_id == item_id)
+    ).first()
+    if already_stored is not None:
+        return
+    session.add(Message(
+        business_id=business_id,
+        customer_phone=thread,
+        role="user",
+        content_json=json.dumps([{"type": "text", "text": transcript}]),
+        external_id=item_id,
+    ))
+    session.commit()
+
+
 def _default_connect(call_id: str):
     """The real xAI realtime connection. Kept separate so run_call can be
     driven in tests with a scripted WebSocket and no XAI_API_KEY."""
@@ -336,6 +378,13 @@ async def _run_call_session(connect, call_id, client, caller_number, session_fac
                             content_json=json.dumps([{"type": "text", "text": transcript}]),
                         ))
                         session.commit()
+
+            elif etype == USER_TRANSCRIPT_COMPLETED:
+                with session_factory() as session:
+                    _persist_user_transcript(session, client.id, thread, event)
+
+            elif etype == USER_TRANSCRIPT_DELTA:
+                pass  # streaming partial text; only the .completed event is durable
 
             else:
                 if etype not in flagged_types:

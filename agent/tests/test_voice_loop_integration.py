@@ -215,6 +215,222 @@ def test_run_call_flags_unexpected_event_type_once(test_engine):
     assert len(deltas) == 2
 
 
+# ---- Caller transcript capture ----------------------------------------------
+#
+# Closes the third gap from the 2026-07-29 voice-loop audit: only the
+# assistant's side of a call was ever persisted (via response.done). The
+# caller's own words were silently dropped into the generic "unexpected
+# event" trace bucket.
+#
+# The event persisted here is `conversation.item.input_audio_transcription.
+# completed` — the OpenAI-Realtime-compatible shape xAI's own docs are
+# written against (the same assumption _extract_transcript already makes for
+# the assistant side, and explicitly flagged there as "confirm against a
+# real payload"). `.delta` carries streaming partial text as the audio is
+# still being transcribed; only `.completed` is durable — the same
+# final-only rule the assistant side already follows (only response.done is
+# persisted, never response.audio_transcript.delta).
+#
+# Dedup reuses Message.external_id exactly as service.py's SMS path already
+# does for Twilio MessageSid retries — here keyed on xAI's own stable
+# item_id instead, same guarantee, same column, no new mechanism.
+
+def _transcription_completed(item_id: str, transcript) -> dict:
+    return {
+        "type": "conversation.item.input_audio_transcription.completed",
+        "item_id": item_id,
+        "transcript": transcript,
+    }
+
+
+def _transcription_delta(item_id: str, delta: str = "burst") -> dict:
+    return {
+        "type": "conversation.item.input_audio_transcription.delta",
+        "item_id": item_id,
+        "delta": delta,
+    }
+
+
+def test_a_single_caller_utterance_is_persisted_as_a_user_message(test_engine):
+    from xai_voice_adapter import run_call
+    from call_trace import CallTrace
+    from db_models import Message
+
+    client = _seed_business(test_engine)
+    ws = FakeWS([_transcription_completed("item_1", "My AC stopped working")])
+
+    asyncio.run(run_call("call_t1", client, "+15125559999", lambda: Session(test_engine),
+                         connect=connector_for(ws), trace=CallTrace("call_t1")))
+
+    with Session(test_engine) as s:
+        msgs = s.exec(select(Message).where(Message.business_id == client.id)).all()
+    assert len(msgs) == 1
+    assert msgs[0].role == "user"
+    assert json.loads(msgs[0].content_json) == [{"type": "text", "text": "My AC stopped working"}]
+    assert msgs[0].external_id == "item_1"
+
+
+def test_a_multi_turn_conversation_preserves_order(test_engine):
+    """User -> assistant -> user, in the order the events actually arrive —
+    the same insertion-order-is-conversation-order rule the SMS path and the
+    existing assistant-transcript branch already rely on."""
+    from xai_voice_adapter import run_call
+    from call_trace import CallTrace
+    from db_models import Message
+
+    client = _seed_business(test_engine)
+    ws = FakeWS([
+        _transcription_completed("item_1", "My AC stopped working"),
+        GREETING_DONE,
+        _transcription_completed("item_2", "It's in the living room"),
+    ])
+
+    asyncio.run(run_call("call_t2", client, "+15125559999", lambda: Session(test_engine),
+                         connect=connector_for(ws), trace=CallTrace("call_t2")))
+
+    with Session(test_engine) as s:
+        msgs = s.exec(select(Message).where(Message.business_id == client.id)
+                      .order_by(Message.id)).all()
+    assert [m.role for m in msgs] == ["user", "assistant", "user"]
+    assert json.loads(msgs[0].content_json)[0]["text"] == "My AC stopped working"
+    assert json.loads(msgs[2].content_json)[0]["text"] == "It's in the living room"
+
+
+def test_a_duplicate_transcript_event_does_not_create_a_second_message(test_engine):
+    """The same item_id delivered twice (a transport-level redelivery, or a
+    correction re-emitting the same completed event) must not double the
+    caller's turn in history — exactly the guarantee service.py already gives
+    a redelivered Twilio MessageSid."""
+    from xai_voice_adapter import run_call
+    from call_trace import CallTrace
+    from db_models import Message
+
+    client = _seed_business(test_engine)
+    ws = FakeWS([
+        _transcription_completed("item_1", "My AC stopped working"),
+        _transcription_completed("item_1", "My AC stopped working"),
+    ])
+
+    asyncio.run(run_call("call_t3", client, "+15125559999", lambda: Session(test_engine),
+                         connect=connector_for(ws), trace=CallTrace("call_t3")))
+
+    with Session(test_engine) as s:
+        msgs = s.exec(select(Message).where(Message.business_id == client.id)).all()
+    assert len(msgs) == 1
+
+
+def test_transcript_followed_by_a_tool_call_persists_both(test_engine, monkeypatch):
+    """The new capture must not interfere with the existing log_job path."""
+    from xai_voice_adapter import run_call
+    from call_trace import CallTrace
+    from db_models import Message
+
+    import xai_voice_adapter as adapter
+    monkeypatch.setattr(adapter, "notify_owner_of_booking", lambda *a, **k: True)
+    client = _seed_business(test_engine)
+    ws = FakeWS([
+        _transcription_completed("item_1", "It's a burst pipe, emergency"),
+        LOG_JOB_EVENT,
+    ])
+
+    asyncio.run(run_call("call_t4", client, "+15125559999", lambda: Session(test_engine),
+                         connect=connector_for(ws), trace=CallTrace("call_t4")))
+
+    with Session(test_engine) as s:
+        msgs = s.exec(select(Message).where(Message.business_id == client.id)).all()
+        jobs = s.exec(select(Job).where(Job.business_id == client.id)).all()
+    assert any(m.role == "user" for m in msgs)
+    assert len(jobs) == 1
+
+
+def test_transcript_followed_by_assistant_response_persists_both_in_order(test_engine):
+    from xai_voice_adapter import run_call
+    from call_trace import CallTrace
+    from db_models import Message
+
+    client = _seed_business(test_engine)
+    ws = FakeWS([
+        _transcription_completed("item_1", "My AC stopped working"),
+        GREETING_DONE,
+    ])
+
+    asyncio.run(run_call("call_t5", client, "+15125559999", lambda: Session(test_engine),
+                         connect=connector_for(ws), trace=CallTrace("call_t5")))
+
+    with Session(test_engine) as s:
+        msgs = s.exec(select(Message).where(Message.business_id == client.id)
+                      .order_by(Message.id)).all()
+    assert [m.role for m in msgs] == ["user", "assistant"]
+
+
+def test_an_empty_transcript_is_not_persisted(test_engine):
+    from xai_voice_adapter import run_call
+    from call_trace import CallTrace
+    from db_models import Message
+
+    client = _seed_business(test_engine)
+    ws = FakeWS([_transcription_completed("item_1", "")])
+
+    asyncio.run(run_call("call_t6", client, "+15125559999", lambda: Session(test_engine),
+                         connect=connector_for(ws), trace=CallTrace("call_t6")))
+
+    with Session(test_engine) as s:
+        msgs = s.exec(select(Message).where(Message.business_id == client.id)).all()
+    assert msgs == []
+
+
+def test_a_malformed_transcript_event_is_ignored_without_crashing_the_call(test_engine):
+    """Missing item_id, missing transcript, and a non-string transcript must
+    all no-op — a transcription-pipeline hiccup must never take down the
+    live call the way an unhandled exception would (run_call's top-level
+    handler would otherwise text the owner "call dropped" over a missing
+    field, which would be a false alarm)."""
+    from xai_voice_adapter import run_call
+    from call_trace import CallTrace
+    from db_models import Message
+
+    client = _seed_business(test_engine)
+    ws = FakeWS([
+        {"type": "conversation.item.input_audio_transcription.completed", "item_id": "item_1"},
+        {"type": "conversation.item.input_audio_transcription.completed", "transcript": "no id"},
+        {"type": "conversation.item.input_audio_transcription.completed",
+         "item_id": "item_2", "transcript": None},
+        GREETING_DONE,
+    ])
+    trace = CallTrace("call_t7")
+
+    asyncio.run(run_call("call_t7", client, "+15125559999", lambda: Session(test_engine),
+                         connect=connector_for(ws), trace=trace))
+
+    with Session(test_engine) as s:
+        msgs = s.exec(select(Message).where(Message.business_id == client.id)).all()
+    assert [m.role for m in msgs] == ["assistant"]   # only the greeting persisted
+    assert "call_failed" not in [r["stage"] for r in trace.records if r["kind"] == "stage"]
+    assert "call_completed" in [r["stage"] for r in trace.records if r["kind"] == "stage"]
+
+
+def test_a_delta_event_is_recognized_and_ignored_not_flagged_unexpected(test_engine):
+    """Partial transcript chunks are expected traffic, not a protocol
+    surprise — they should not pollute the unexpected_event trace the way a
+    genuinely unhandled event type does."""
+    from xai_voice_adapter import run_call
+    from call_trace import CallTrace
+    from db_models import Message
+
+    client = _seed_business(test_engine)
+    trace = CallTrace("call_t8")
+    ws = FakeWS([_transcription_delta("item_1"), GREETING_DONE])
+
+    asyncio.run(run_call("call_t8", client, "+15125559999", lambda: Session(test_engine),
+                         connect=connector_for(ws), trace=trace))
+
+    unexpected = [r for r in trace.records if r.get("stage") == "unexpected_event"]
+    assert unexpected == []
+    with Session(test_engine) as s:
+        msgs = s.exec(select(Message).where(Message.business_id == client.id)).all()
+    assert [m.role for m in msgs] == ["assistant"]
+
+
 # ---- Webhook: routing, signature, raw capture, trace hand-off --------------
 
 import base64
