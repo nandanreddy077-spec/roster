@@ -127,10 +127,17 @@ class Job(SQLModel, table=True):
     created_at: datetime = Field(default_factory=datetime.utcnow)
     completed_at: Optional[datetime] = None  # set by the "Mark done" action; drives the Reviews SMS
     referral_sent_at: Optional[datetime] = None  # set once the referral ask has gone out for this job
-    # Set where the review SMS is actually sent (app.py's complete_job), so
-    # "review requests sent" counts real sends rather than inferring them from
-    # completion. Every review request is a first-class record we can drill into.
+    # Set where the review SMS is actually sent (review_service.
+    # send_due_review_requests), so "review requests sent" counts real sends
+    # rather than inferring them from completion. Every review request is a
+    # first-class record we can drill into.
     review_requested_at: Optional[datetime] = None
+    # Set once the one polite follow-up has gone out (review_service.
+    # send_due_review_followups) — gates re-sending the same way
+    # review_requested_at does for the initial ask. There is never a third
+    # touch: "never spam" is a structural cap of one follow-up, not a
+    # runtime judgment call.
+    review_followup_sent_at: Optional[datetime] = None
     # A stated preference only ("Thursday afternoon"), never a confirmed
     # appointment — Frontdesk has no scheduling/dispatch system to actually
     # book a slot against (Sprint 1, 2026-07-29 conversation-quality audit).

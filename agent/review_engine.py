@@ -20,6 +20,15 @@ REVIEW_MESSAGE_TEMPLATE = (
     "review means a lot: {review_link}"
 )
 
+# The one polite follow-up (PR #2) — distinct wording from the initial ask,
+# not a repeat of it, since it's nudging someone who's already seen the ask
+# once.
+REVIEW_FOLLOWUP_MESSAGE_TEMPLATE = (
+    "Hi again from {business_name} — just a friendly nudge in case you "
+    "missed it: if you have a minute, a review would really help us out: "
+    "{review_link}"
+)
+
 
 class _SafeDict(dict):
     def __missing__(self, key):

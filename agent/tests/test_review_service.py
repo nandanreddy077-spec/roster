@@ -159,3 +159,138 @@ def test_send_due_review_requests_survives_a_send_failure(session, monkeypatch):
     assert sent == []
     session.refresh(job)
     assert job.review_requested_at is None
+
+
+# ---- send_due_review_followups: PR #2, the one polite follow-up ------------
+#
+# Deliberately NOT yet gated on "did the customer reply" — ReviewReply and
+# reply-routing land in PR #3, which will add "no ReviewReply exists" as an
+# additional condition here. Until then this is purely elapsed-time, same
+# as every other new-behavior boundary in this codebase that's been shipped
+# incrementally and documented as such rather than silently left incomplete.
+
+def test_send_due_review_followups_sends_to_an_unanswered_request(session, monkeypatch):
+    fake_channel = FakeSMSChannel()
+    monkeypatch.setattr(review_service, "sms_channel", fake_channel)
+
+    client = make_client(session, review_link="https://g.page/r/test")
+    job = Job(
+        business_id=client.id, service_type="AC repair", urgency="routine",
+        callback_number="+15551234567",
+        completed_at=datetime.utcnow() - timedelta(days=10),
+        review_requested_at=datetime.utcnow() - timedelta(days=5),
+    )
+    session.add(job)
+    session.commit()
+
+    sent = review_service.send_due_review_followups(session)
+
+    assert len(sent) == 1
+    assert "https://g.page/r/test" in fake_channel.sent[0]["body"]
+    session.refresh(job)
+    assert job.review_followup_sent_at is not None
+
+
+def test_send_due_review_followups_skips_a_request_too_recent_to_follow_up_on(session, monkeypatch):
+    fake_channel = FakeSMSChannel()
+    monkeypatch.setattr(review_service, "sms_channel", fake_channel)
+
+    client = make_client(session, review_link="https://g.page/r/test")
+    job = Job(
+        business_id=client.id, service_type="AC repair", urgency="routine",
+        callback_number="+15551234567",
+        completed_at=datetime.utcnow() - timedelta(days=2),
+        review_requested_at=datetime.utcnow() - timedelta(days=1),
+    )
+    session.add(job)
+    session.commit()
+
+    sent = review_service.send_due_review_followups(session)
+
+    assert sent == []
+    session.refresh(job)
+    assert job.review_followup_sent_at is None
+
+
+def test_send_due_review_followups_never_sends_a_second_one(session, monkeypatch):
+    """Never spam: the follow-up is a one-time touch, enforced by
+    review_followup_sent_at gating re-sends — not a runtime "have we
+    already annoyed them" check, an actual structural cap of one."""
+    fake_channel = FakeSMSChannel()
+    monkeypatch.setattr(review_service, "sms_channel", fake_channel)
+
+    client = make_client(session, review_link="https://g.page/r/test")
+    job = Job(
+        business_id=client.id, service_type="AC repair", urgency="routine",
+        callback_number="+15551234567",
+        completed_at=datetime.utcnow() - timedelta(days=10),
+        review_requested_at=datetime.utcnow() - timedelta(days=5),
+    )
+    session.add(job)
+    session.commit()
+
+    review_service.send_due_review_followups(session)
+    second = review_service.send_due_review_followups(session)
+
+    assert second == []
+    assert len(fake_channel.sent) == 1
+
+
+def test_send_due_review_followups_skips_a_job_never_asked_in_the_first_place(session, monkeypatch):
+    """No review_requested_at at all (the request itself hasn't gone out
+    yet, or the business/job was ineligible in PR #1) — nothing to follow
+    up on."""
+    fake_channel = FakeSMSChannel()
+    monkeypatch.setattr(review_service, "sms_channel", fake_channel)
+
+    client = make_client(session, review_link="https://g.page/r/test")
+    job = Job(
+        business_id=client.id, service_type="AC repair", urgency="routine",
+        callback_number="+15551234567",
+        completed_at=datetime.utcnow() - timedelta(days=10),
+    )
+    session.add(job)
+    session.commit()
+
+    sent = review_service.send_due_review_followups(session)
+
+    assert sent == []
+
+
+def test_send_due_review_followups_skips_business_without_review_link(session, monkeypatch):
+    fake_channel = FakeSMSChannel()
+    monkeypatch.setattr(review_service, "sms_channel", fake_channel)
+
+    client = make_client(session, review_link=None)
+    job = Job(
+        business_id=client.id, service_type="AC repair", urgency="routine",
+        callback_number="+15551234567",
+        completed_at=datetime.utcnow() - timedelta(days=10),
+        review_requested_at=datetime.utcnow() - timedelta(days=5),
+    )
+    session.add(job)
+    session.commit()
+
+    sent = review_service.send_due_review_followups(session)
+
+    assert sent == []
+
+
+def test_send_due_review_followups_survives_a_send_failure(session, monkeypatch):
+    monkeypatch.setattr(review_service, "sms_channel", ExplodingSMSChannel())
+
+    client = make_client(session, review_link="https://g.page/r/test")
+    job = Job(
+        business_id=client.id, service_type="AC repair", urgency="routine",
+        callback_number="+15551234567",
+        completed_at=datetime.utcnow() - timedelta(days=10),
+        review_requested_at=datetime.utcnow() - timedelta(days=5),
+    )
+    session.add(job)
+    session.commit()
+
+    sent = review_service.send_due_review_followups(session)  # must not raise
+
+    assert sent == []
+    session.refresh(job)
+    assert job.review_followup_sent_at is None
