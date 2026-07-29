@@ -20,7 +20,7 @@ from activation import activate_frontdesk
 from auth import hash_password, verify_password
 from db import engine
 from db_models import Business, Employee, Job, Message
-from departments import active_departments_for
+from departments import department_status_for
 from deployment import deploy_role
 from google_auth import callback_url, get_oauth, google_enabled
 from locks import conversation_lock
@@ -70,6 +70,35 @@ NAV_ITEMS = (
     {"key": "settings", "label": "Settings", "href": "/v2/dashboard/settings"},
 )
 templates.env.globals["nav_items"] = NAV_ITEMS
+
+# The CUSTOMER's wording for each department state. The founder console keeps
+# its own map over the same states (app.py) — departments.DepartmentStatus is
+# presentation-neutral so neither audience's voice leaks into the other's.
+#
+# `partial` reads as Working on purpose: a half-staffed department IS doing
+# work, and finishing it is Roster's operational problem, not the owner's
+# worry. `unavailable` reads the same as `empty` — the customer doesn't need
+# to know whether a department is unstaffed or unbuilt.
+CUSTOMER_STATE_LABELS = {
+    "staffed": "Working",
+    "partial": "Working",
+    "empty": "Not yet part of your workforce",
+    "unavailable": "Not yet part of your workforce",
+}
+_ACTIVE_STATES = ("staffed", "partial")
+
+# The CUSTOMER's wording for each metric. Centralized so renaming one never
+# means editing a template — and every key in metrics.METRIC_RECORDS must
+# appear here or it would render as a bare number.
+METRIC_LABELS = {
+    metrics.JOBS_BOOKED: "Jobs booked",
+    metrics.QUOTES_CHASED: "Estimates followed up",
+    metrics.QUOTES_RECOVERED: "Estimates won back",
+    metrics.CUSTOMERS_REACHED: "Past customers contacted",
+    metrics.CUSTOMERS_RETURNED: "Customers who came back",
+    metrics.REFERRALS_RECEIVED: "Referrals received",
+}
+templates.env.globals["metric_labels"] = METRIC_LABELS
 
 router = APIRouter()
 
@@ -398,6 +427,25 @@ def dashboard(request: Request):
 # blueprint's permanent state-derivation invariant).
 
 
+def _statuses(session, business_id: int):
+    """This business's real department states, from Employee rows via the ONE
+    shared helper the founder console also uses."""
+    employees = session.exec(
+        select(Employee).where(Employee.business_id == business_id)
+    ).all()
+    return department_status_for(employees)
+
+
+def _outcomes(session, business_id: int, department_key: str) -> list:
+    """[(label, value)] for one department — presentation applied here, facts
+    from metrics.py. Only rendered for departments that are actually working,
+    so a number never implies work nobody is doing."""
+    return [
+        (METRIC_LABELS[key], value)
+        for key, value in metrics.department_outcomes(session, business_id, department_key).items()
+    ]
+
+
 @router.get("/v2/dashboard")
 def v2_overview(request: Request):
     """Requires a session but NOT frontdesk_live: the old dashboard bounced
@@ -407,17 +455,50 @@ def v2_overview(request: Request):
         business = _current_client(request, session)
         if business is None:
             return RedirectResponse("/login", status_code=303)
-        employees = session.exec(
-            select(Employee).where(Employee.business_id == business.id)
-        ).all()
+        working = [s for s in _statuses(session, business.id) if s.state in _ACTIVE_STATES]
         return templates.TemplateResponse(
             request,
             "dashboard_v2/overview.html",
             {
                 "business": business,
                 "active_nav": "overview",
-                "staffed_departments": active_departments_for(employees),
+                "working": [
+                    {
+                        "department": s.department,
+                        "outcomes": _outcomes(session, business.id, s.department.key),
+                    }
+                    for s in working
+                ],
             },
+        )
+
+
+@router.get("/v2/dashboard/departments")
+def v2_departments(request: Request):
+    """The whole org, every time — active departments with real numbers, and
+    inactive ones that educate rather than just reporting absence
+    (blueprint §7). Leadership is excluded: it isn't hireable and comes with
+    every workforce, so it lives in the nav as the executive view."""
+    with Session(engine) as session:
+        business = _current_client(request, session)
+        if business is None:
+            return RedirectResponse("/login", status_code=303)
+        cards = []
+        for status in _statuses(session, business.id):
+            if not status.department.hireable:
+                continue
+            active = status.state in _ACTIVE_STATES
+            cards.append({
+                "department": status.department,
+                "active": active,
+                "label": CUSTOMER_STATE_LABELS[status.state],
+                "employees": status.staffed,
+                "outcomes": _outcomes(session, business.id, status.department.key) if active else [],
+            })
+        return templates.TemplateResponse(
+            request,
+            "dashboard_v2/departments.html",
+            {"business": business, "active_nav": "departments", "cards": cards},
         )
 
 

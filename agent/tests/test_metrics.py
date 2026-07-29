@@ -114,6 +114,30 @@ def test_metric_keys_carry_no_wording(session):
         assert key.islower() and " " not in key, f"{key!r} looks like a label, not a key"
 
 
+def test_every_metric_declares_what_records_it_drills_into(session):
+    """THE drill-down invariant (founder, 2026-07-29): every customer-visible
+    number represents concrete underlying records the owner could one day be
+    shown — never an opaque summary.
+
+    A metric cannot ship without declaring its records, which rules out
+    derived scores by construction: a number that can't name the rows behind
+    it can't be declared, so it can't ship."""
+    from departments import REGISTRY
+
+    b = _business(session, "m11@test.io")
+    for department in REGISTRY:
+        for key in department_outcomes(session, b.id, department.key):
+            assert key in metrics.METRIC_RECORDS, (
+                f"{key!r} is rendered to customers but declares no drill-down "
+                "records — see metrics.METRIC_RECORDS"
+            )
+
+
+def test_no_metric_declares_an_empty_record_source(session):
+    for key, records in metrics.METRIC_RECORDS.items():
+        assert records.strip(), f"{key!r} declares no records"
+
+
 def test_both_surfaces_derive_the_same_count_from_this_module(session, monkeypatch):
     """C4: the customer dashboard's job count must come from here, not from a
     second computation in portal.py that can drift."""

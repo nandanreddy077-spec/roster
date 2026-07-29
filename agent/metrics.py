@@ -25,6 +25,27 @@ CUSTOMERS_REACHED = "customers_reached"
 CUSTOMERS_RETURNED = "customers_returned"
 REFERRALS_RECEIVED = "referrals_received"
 
+# EVERY CUSTOMER-VISIBLE METRIC MUST HAVE A FUTURE DRILL-DOWN PATH (founder,
+# 2026-07-29). A number on the dashboard represents concrete records the owner
+# could one day tap into — never an opaque summary. "12 jobs booked" is 12 rows;
+# "an efficiency score of 84" is an assertion, not a number.
+#
+# This map is that declaration: which records each metric counts. A metric
+# cannot ship without an entry (test_metrics asserts it), which rules out
+# derived scores by construction — a number that can't name the rows behind it
+# can't be declared here, so it can't ship.
+METRIC_RECORDS = {
+    JOBS_BOOKED: "job where not is_test_thread(customer_phone)",
+    QUOTES_CHASED: "recoveryjob via recoverycampaign.face == 'quote'",
+    QUOTES_RECOVERED: "recoveryjob via recoverycampaign.face == 'quote', current_status == 'booked'",
+    CUSTOMERS_REACHED: "recoveryjob via recoverycampaign.face in ('reactivation', 'membership')",
+    CUSTOMERS_RETURNED: (
+        "recoveryjob via recoverycampaign.face in ('reactivation', 'membership'), "
+        "current_status == 'booked'"
+    ),
+    REFERRALS_RECEIVED: "referrallead",
+}
+
 
 def booked_jobs(session, business_id: int) -> int:
     """Real customer jobs booked. Excludes the owner's own dashboard tests —

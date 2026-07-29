@@ -1,0 +1,45 @@
+{% extends "portal_base.html" %}
+{% block heading %}Departments{% endblock %}
+{% block subhead %}
+<p class="portal-lede">Your workforce, and what else it could do.</p>
+{% endblock %}
+
+{% block content %}
+<div class="portal-dept-grid">
+  {% for card in cards %}
+  <section class="portal-card portal-dept-card">
+    <div class="portal-dept-head">
+      <h2>{{ card.department.display_name }}</h2>
+      <span class="portal-state{{ ' is-working' if card.active }}">{{ card.label }}</span>
+    </div>
+    <p class="portal-dept-mission">{{ card.department.mission }}</p>
+
+    {% if card.active %}
+    {% if card.outcomes %}
+    <ul class="portal-outcomes">
+      {% for label, value in card.outcomes %}
+      <li><span class="portal-outcome-value">{{ value }}</span><span class="portal-outcome-label">{{ label }}</span></li>
+      {% endfor %}
+    </ul>
+    {% endif %}
+    {% if card.employees %}
+    {# Employees are secondary detail: outcomes first, who did it second
+       (blueprint §2's hierarchy). #}
+    <p class="portal-dept-team">Working here: {% for e in card.employees %}{{ e.display_name }}{{ ", " if not loop.last }}{% endfor %}</p>
+    {% endif %}
+
+    {% else %}
+    {# An inactive department educates rather than just reporting absence
+       (blueprint §7) — the copy comes from the department registry, so it
+       stays in one place. The "Ask us about" action lands in Task 6; a button
+       that did nothing would be worse than the education alone. #}
+    <dl class="portal-dept-edu">
+      <dt>The problem</dt><dd>{{ card.department.problem }}</dd>
+      <dt>What changes</dt><dd>{{ card.department.outcome }}</dd>
+      <dt>Why owners add it</dt><dd>{{ card.department.why_adopt }}</dd>
+    </dl>
+    {% endif %}
+  </section>
+  {% endfor %}
+</div>
+{% endblock %}

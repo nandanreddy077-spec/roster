@@ -180,3 +180,38 @@ h1, h2, .logo { font-family: var(--serif); font-weight: 600; color: var(--ink); 
   .portal-tabbar { display: none; }
   .portal-shell { padding-bottom: 0; }
 }
+
+/* Department cards + outcome strips. DESIGN.md: existing tokens, dashboard
+   type scale, 8px rhythm, radius lg 12 on cards. */
+.portal-dept-grid { display: grid; grid-template-columns: 1fr; gap: 16px; }
+.portal-dept-card { max-width: 100%; margin: 0; }
+.portal-dept-head {
+  display: flex; align-items: baseline; justify-content: space-between;
+  gap: 12px; flex-wrap: wrap;
+}
+.portal-dept-head h2 { font-size: 18px; }
+.portal-state {
+  font-size: 12px; font-weight: 600; white-space: nowrap;
+  color: var(--text-dim); background: var(--bg-alt);
+  border-radius: 20px; padding: 3px 10px;
+}
+.portal-state.is-working { color: var(--proof); background: var(--proof-dim); }
+.portal-dept-mission { color: var(--text-dim); font-size: 14px; margin-top: 4px; }
+
+/* Outcomes lead; who did the work is secondary (blueprint §2 hierarchy). */
+.portal-outcomes { list-style: none; display: flex; flex-wrap: wrap; gap: 24px; margin-top: 16px; }
+.portal-outcomes li { display: flex; flex-direction: column; }
+.portal-outcome-value { font-family: var(--serif); font-size: 28px; color: var(--ink); line-height: 1.1; }
+.portal-outcome-label { font-size: 12px; color: var(--text-dim); }
+.portal-dept-team { font-size: 13px; color: var(--text-dim); margin-top: 16px; }
+
+.portal-dept-edu { margin-top: 16px; }
+.portal-dept-edu dt {
+  font-size: 12px; letter-spacing: .08em; text-transform: uppercase;
+  color: var(--text-dim); margin-top: 12px;
+}
+.portal-dept-edu dd { font-size: 14px; margin-top: 2px; }
+
+@media (min-width: 768px) {
+  .portal-dept-grid { grid-template-columns: 1fr 1fr; }
+}

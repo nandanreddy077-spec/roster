@@ -263,20 +263,52 @@ live `/dashboard` still renders unchanged.
 
 ## Task 4: Overview and Departments
 
-**Files:** `agent/templates/dashboard_v2/`, `agent/portal.py`, tests
+### Invariant (founder, 2026-07-29) — permanent
 
-Overview: cross-department outcomes strip (active departments only), digest,
-contextual expansion prompt. Departments: the grid, active cards from the
-shared helper, inactive cards **educational by design** (blueprint §7 —
-problem / outcome / why owners add it, straight from the registry copy Phase 1
-already wrote), each with "Ask us about [Department]".
+> **Every customer-visible metric must have a future drill-down path.**
 
-**Tests:** a business with nothing deployed shows the honest empty state, not
-a fake roster; a partially staffed department shows as **active** (C7); every
-inactive card renders all three educational fields; Leadership never appears
-as inactive-and-hireable.
+A number on the dashboard represents **concrete underlying records the owner
+could be shown** — never an opaque summary. "12 jobs booked" is 12 rows they
+could one day tap into; "an efficiency score of 84" is not a number, it is an
+assertion.
 
-**Expected:** `460 passing`.
+Two consequences, both enforced rather than remembered:
+
+- `metrics.METRIC_RECORDS` declares, for every metric key, which records it
+  counts. A metric cannot ship without that declaration — a test fails if any
+  key returned by `department_outcomes` is missing from the map.
+- It rules out composite/derived scores by construction: if a number cannot
+  name the rows behind it, it cannot be declared, so it cannot ship.
+
+This is the metric-layer twin of the state-derivation invariant: facts trace
+to records, presentation stays in templates.
+
+**Files:** `agent/metrics.py`, `agent/portal.py`, `agent/templates/dashboard_v2/`, tests
+
+**Scope note — no dead controls.** Inactive department cards ship fully
+educational here (problem / outcome / why owners add it, straight from the
+Phase 1 registry copy) but **without the "Ask us about" button**: its route
+lands in Task 6. Shipping a button that does nothing would be worse than
+shipping the education alone one task early.
+
+**Customer-facing state mapping** (the founder console keeps its own):
+`staffed` and `partial` both read as **Working** — a partially staffed
+department *is* doing work, and completing it is Roster's operational problem,
+not the owner's worry (audit C7). `empty` and `unavailable` both read as
+**Not yet part of your workforce** — the customer does not need to know which
+of those two reasons applies.
+
+**Leadership never appears as a department card.** It is not hireable and is
+included automatically; it lives in the nav as the executive view.
+
+**Tests:** Overview shows outcomes only for active departments and an honest
+empty state otherwise; the Departments grid lists the six hireable departments
+and never Leadership; a partially staffed department reads as Working; every
+inactive card renders all three educational fields; no AI-internal metric
+appears anywhere; every metric key declares its drill-down records; metric
+labels are centralized, not hardcoded in templates.
+
+**Expected:** `~480 passing`.
 
 ---
 
