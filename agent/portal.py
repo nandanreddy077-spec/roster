@@ -20,7 +20,7 @@ from activation import activate_frontdesk
 from auth import hash_password, verify_password
 from db import engine
 from db_models import Business, Employee, Job, Message
-from departments import department_status_for
+from departments import department_status_for, get_department
 from deployment import deploy_role
 from google_auth import callback_url, get_oauth, google_enabled
 from locks import conversation_lock
@@ -81,6 +81,7 @@ from workspace import (  # noqa: E402
     CUSTOMER_STATE_LABELS,
     METRIC_LABELS,
     build_department_workspace,
+    build_employee_workspace,
 )
 
 templates.env.globals["metric_labels"] = METRIC_LABELS
@@ -505,7 +506,34 @@ def v2_department_workspace(request: Request, department_key: str):
         return templates.TemplateResponse(
             request,
             "dashboard_v2/department.html",
-            {"business": business, "active_nav": "departments", "workspace": ws},
+            {
+                "business": business, "active_nav": "departments", "workspace": ws,
+                "department_key": department_key,
+            },
+        )
+
+
+@router.get("/v2/dashboard/departments/{department_key}/employees/{role_key}")
+def v2_employee_workspace(request: Request, department_key: str, role_key: str):
+    """The drill-down leaf: Overview -> Department -> Employee -> Activity.
+    Renders a SINGLE assembled EmployeeWorkspace — this route never touches
+    EMPLOYEE_RECORDS or metrics.py directly."""
+    with Session(engine) as session:
+        business = _current_client(request, session)
+        if business is None:
+            return RedirectResponse("/login", status_code=303)
+        ws = build_employee_workspace(session, business.id, department_key, role_key)
+        if ws is None:
+            raise HTTPException(status_code=404, detail="No such employee")
+        department = get_department(department_key)
+        return templates.TemplateResponse(
+            request,
+            "dashboard_v2/employee.html",
+            {
+                "business": business, "active_nav": "departments", "workspace": ws,
+                "department_key": department_key,
+                "department_display_name": department.display_name if department else department_key,
+            },
         )
 
 

@@ -18,6 +18,15 @@ from typing import List, Optional, Tuple
 import metrics
 from db_models import Employee
 from departments import department_status_for, get_department
+from employees import REGISTRY as _EMPLOYEE_REGISTRY
+
+_EMPLOYEE_BY_KEY = {e.key: e for e in _EMPLOYEE_REGISTRY}
+
+# Only a staffed (non-fired) employee inside an active department ever reaches
+# an EmployeeWorkspace today. Customer pause/resume controls don't exist yet
+# (Phase 4a's I14 deferral — "customer controls in v1 stay intentionally
+# minimal"), so there is exactly one status label until that changes.
+EMPLOYEE_STATUS_LABEL = "Working"
 
 # The CUSTOMER's wording for each DepartmentStatus state. The founder console
 # keeps its own map over the same states (app.py) — DepartmentStatus is
@@ -74,6 +83,20 @@ class DepartmentWorkspace:
     activity: List[metrics.ActivityRow]
 
 
+@dataclass(frozen=True)
+class EmployeeWorkspace:
+    """Everything the Employee Workspace page renders — the drill-down leaf
+    of Overview -> Department -> Employee -> Activity. Deliberately just five
+    fields: mission and status answer the one question this page opens with,
+    before any raw event (founder, 2026-07-29). No charts, no date range, no
+    pagination — reopen this design before adding a sixth field."""
+    employee: object       # employees.EmployeeDefinition
+    mission: str
+    status: str
+    outcomes: List[Tuple[str, int]]
+    activity: List[metrics.ActivityRow]
+
+
 def _labeled(raw: dict) -> List[Tuple[str, int]]:
     return [(METRIC_LABELS[key], value) for key, value in raw.items()]
 
@@ -120,4 +143,35 @@ def build_department_workspace(session, business_id: int, department_key: str,
         employees=employee_views,
         outcomes=_labeled(metrics.department_outcomes(session, business_id, department_key, role_keys)),
         activity=metrics.department_activity(session, business_id, role_keys, since=since),
+    )
+
+
+def build_employee_workspace(session, business_id: int, department_key: str,
+                             role_key: str, since=None) -> Optional[EmployeeWorkspace]:
+    """DepartmentWorkspace -> EmployeeWorkspace: derived from the parent
+    workspace rather than a second independent lookup, so "is this employee
+    actually working" is decided exactly once, by build_department_workspace.
+    This page can never disagree with the department page it was reached from.
+
+    Returns None for an unknown department, one this business hasn't deployed,
+    a role not staffed in it, or a role that belongs to a DIFFERENT department
+    — the route 404s on any of these.
+    """
+    dept_ws = build_department_workspace(session, business_id, department_key, since=since)
+    if dept_ws is None:
+        return None
+    view = next((e for e in dept_ws.employees if e.role_key == role_key), None)
+    if view is None:
+        return None
+
+    definition = _EMPLOYEE_BY_KEY.get(role_key)
+    return EmployeeWorkspace(
+        employee=definition,
+        mission=definition.mission if definition else "",
+        status=EMPLOYEE_STATUS_LABEL,
+        outcomes=view.outcomes,
+        # The department page's employee card only previews 3-5 rows (Task 6);
+        # this page IS the drill-down, so it re-fetches the employee's full
+        # activity rather than reusing the capped preview in `view`.
+        activity=metrics.employee_activity(session, business_id, role_key, limit=50, since=since),
     )

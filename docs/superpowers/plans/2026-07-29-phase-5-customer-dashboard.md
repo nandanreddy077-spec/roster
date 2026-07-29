@@ -447,19 +447,59 @@ isolation on the whole assembly; outcomes precede employee detail in DOM order.
 
 **Expected:** `~510 passing`.
 
-## Task 7: Employee drill-down
+## Task 7: Employee drill-down — a second view model
 
-**Files:** `agent/templates/dashboard_v2/employee.html`, `agent/portal.py`, tests
+### Architectural refinement (founder, 2026-07-29) — permanent
 
-Route `GET /v2/dashboard/departments/{key}/employees/{role_key}`. What this
-employee does, its status, its outcomes, and its work history — the "Activity"
-leaf of the hierarchy.
+> **A second view model, not a page that composes itself from
+> `EMPLOYEE_RECORDS` and `metrics` directly.**
 
-**Tests:** renders for a deployed employee; 404 for one not deployed for this
-business; 404 for a role that isn't in the named department; business-scoped
-(another business's employee is never reachable); history is newest-first.
+```
+EmployeeWorkspace(
+    employee,   # the EmployeeDefinition itself
+    mission,    # "Is Frontdesk answering customers?" — one question, answered
+    status,     # customer-worded; "Working" until pause/resume ships (I14)
+    outcomes,   # from METRIC_RECORDS, via EMPLOYEE_RECORDS
+    activity,   # from METRIC_RECORDS, via EMPLOYEE_RECORDS
+)
+```
 
----
+Hierarchy: `DepartmentWorkspace → EmployeeWorkspace → Activity`.
+**`build_employee_workspace` derives from `build_department_workspace`**,
+not from a second independent lookup — it locates the matching
+`EmployeeView` inside the parent workspace's `employees` list. This means
+the "is this business, this department, this employee, actually active"
+decision is made exactly **once**, by the department builder; the employee
+builder can never disagree with the page it was reached from.
+
+**Product requirement:** the page answers one question before showing any
+event. `employees.py`'s `EmployeeDefinition` gains a `mission` field — but
+**only for the five employees an engine exists for** (`frontdesk`,
+`quote_chaser`, `retention_manager`, `reviews`, `referral`). Writing mission
+copy for the twelve `planned` entries would be inventing marketing content
+for products that don't exist yet — the same honesty rule that kept "Reviews
+received" off the dashboard.
+
+**Stay focused — deliberately excluded:** no charts, no date-range picker, no
+pagination, no export. `EmployeeWorkspace`'s four fields (beyond `employee`)
+are the entire page; there is nothing else to add without reopening this
+design.
+
+**Files:** `agent/employees.py`, `agent/workspace.py`, `agent/portal.py`, `agent/templates/dashboard_v2/employee.html` (new), `agent/templates/dashboard_v2/department.html`, tests
+
+Route: `GET /v2/dashboard/departments/{department_key}/employees/{role_key}`.
+This is also where the department page's employee cards **stop being
+inert** — Task 6 deliberately shipped them without a link because this
+route didn't exist yet (no dead controls); it exists now.
+
+**Tests:** `EmployeeWorkspace` has exactly its five fields, no more (the same
+guard `DepartmentStatus` and `METRIC_RECORDS` already have); the builder
+returns `None` for an unknown department, an inactive one, a role not staffed
+in it, or a role that belongs to a **different** department; mission and
+status render before any activity row in DOM order; business isolation;
+department cards now link to the real route.
+
+**Expected:** `~525 passing`.
 
 ## Task 8: Overview becomes a gateway (reworks Task 4's templates)
 

@@ -242,3 +242,17 @@ h1, h2, .logo { font-family: var(--serif); font-weight: 600; color: var(--ink); 
 @media (min-width: 768px) {
   .portal-employee-grid { grid-template-columns: 1fr 1fr; }
 }
+
+.back-link {
+  display: inline-block; font-size: 14px; color: var(--text-dim);
+  text-decoration: none; margin-bottom: 4px;
+}
+.back-link:hover, .back-link:focus-visible { color: var(--text); }
+
+.portal-employee-card-link {
+  display: block; text-decoration: none; color: inherit;
+  border-radius: 12px; transition: box-shadow 160ms ease, transform 160ms ease;
+}
+.portal-employee-card-link:hover, .portal-employee-card-link:focus-visible {
+  box-shadow: 0 2px 10px rgba(31, 27, 22, 0.08);
+}

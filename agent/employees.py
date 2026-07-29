@@ -34,21 +34,32 @@ class EmployeeDefinition:
     department: str
     status: Status
     display_name: str
+    # The one question this employee's own workspace page answers immediately,
+    # before any activity row (founder, 2026-07-29) — e.g. "Is Frontdesk
+    # answering customers?" Left "" for every `planned` entry: writing this
+    # copy for an employee with no engine would be inventing marketing content
+    # for a product that doesn't exist yet, the same rule that kept "Reviews
+    # received" off the dashboard. Populated only for the five with a real
+    # engine (frontdesk, quote_chaser, retention_manager, reviews, referral).
+    mission: str = ""
 
 
 REGISTRY: list[EmployeeDefinition] = [
     # Customer Service
-    EmployeeDefinition("frontdesk", "customer_service", "live", "Frontdesk"),
+    EmployeeDefinition("frontdesk", "customer_service", "live", "Frontdesk",
+                       mission="Is Frontdesk answering customers?"),
     EmployeeDefinition("support", "customer_service", "planned", "Support"),
     # Reviews' capability ships today inside the same engine as Retention
     # Manager, but it belongs to the department that owns the outcome
     # (founder, 2026-07-28). roles.ROLE_KEYS already emits this key, so real
     # Employee rows can carry it — it was missing from the registry, not
     # from the product.
-    EmployeeDefinition("reviews", "customer_service", "internal", "Reviews"),
+    EmployeeDefinition("reviews", "customer_service", "internal", "Reviews",
+                       mission="Is Reviews requesting feedback?"),
     # Sales
     EmployeeDefinition("lead_qualifier", "sales", "planned", "Lead Qualifier"),
-    EmployeeDefinition("quote_chaser", "sales", "internal", "Quote Chaser"),
+    EmployeeDefinition("quote_chaser", "sales", "internal", "Quote Chaser",
+                       mission="Is Quote Chaser recovering revenue?"),
     EmployeeDefinition("membership_agent", "sales", "planned", "Membership Agent"),
     EmployeeDefinition("upsell_agent", "sales", "planned", "Upsell Agent"),
     # Operations
@@ -63,10 +74,12 @@ REGISTRY: list[EmployeeDefinition] = [
     # (and Reviews, listed under Customer Service there); roles.py already
     # ships this as one employee, so the registry follows the shipped shape
     # rather than the doc's finer split.
-    EmployeeDefinition("retention_manager", "customer_success", "internal", "Retention Manager"),
+    EmployeeDefinition("retention_manager", "customer_success", "internal", "Retention Manager",
+                       mission="Is Retention Manager bringing customers back?"),
     # Marketing
     EmployeeDefinition("reactivation", "marketing", "planned", "Reactivation"),
-    EmployeeDefinition("referral", "marketing", "planned", "Referral"),
+    EmployeeDefinition("referral", "marketing", "planned", "Referral",
+                       mission="Is Referral bringing in new business?"),
     EmployeeDefinition("campaign_manager", "marketing", "planned", "Campaign Manager"),
     # Leadership
     EmployeeDefinition("business_analyst", "leadership", "planned", "Business Analyst"),

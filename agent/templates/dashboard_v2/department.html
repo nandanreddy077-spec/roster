@@ -27,9 +27,11 @@
 <h2 class="portal-section-title">Who works here</h2>
 <div class="portal-employee-grid">
   {% for employee in workspace.employees %}
-  {# Not yet a link: the drill-down route lands in Task 7. Shipping a link to
-     a page that doesn't exist would repeat the "no dead controls" mistake
-     Phase 4b's audit caught. #}
+  {# Links to the drill-down route Task 7 adds — the department page held
+     these back (no href) until that target existed, per the "no dead
+     controls" precedent set by Phase 4b's audit. #}
+  <a class="portal-employee-card-link"
+     href="/v2/dashboard/departments/{{ workspace.department.key }}/employees/{{ employee.role_key }}">
   <section class="portal-card portal-employee-card">
     <h3>{{ employee.display_name }}</h3>
     {% if employee.outcomes %}
@@ -49,6 +51,7 @@
     <p class="portal-empty">No activity yet.</p>
     {% endif %}
   </section>
+  </a>
   {% endfor %}
 </div>
 

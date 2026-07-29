@@ -1,0 +1,38 @@
+{% extends "portal_base.html" %}
+{% block title %}{{ workspace.employee.display_name }} — Roster{% endblock %}
+{% block heading %}{{ workspace.employee.display_name }}{% endblock %}
+{% block subhead %}
+<a class="back-link" href="/v2/dashboard/departments/{{ department_key }}">&larr; {{ department_display_name }}</a>
+{% endblock %}
+
+{% block content %}
+{# This template renders ONE assembled EmployeeWorkspace (workspace.py) — it
+   never touches EMPLOYEE_RECORDS or metrics.py itself (founder, 2026-07-29).
+   Mission + status answer the page's one question before any raw event. #}
+<section class="portal-card portal-card-wide">
+  <div class="portal-dept-head">
+    <p class="portal-eyebrow">{{ workspace.mission }}</p>
+    <span class="portal-state is-working">{{ workspace.status }}</span>
+  </div>
+  {% if workspace.outcomes %}
+  <ul class="portal-outcomes">
+    {% for label, value in workspace.outcomes %}
+    <li><span class="portal-outcome-value">{{ value }}</span><span class="portal-outcome-label">{{ label }}</span></li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+</section>
+
+<h2 class="portal-section-title">Recent activity</h2>
+<section class="portal-card portal-card-wide">
+  {% if workspace.activity %}
+  <ul class="portal-timeline">
+    {% for row in workspace.activity %}
+    <li><span class="portal-timeline-when">{{ row.when.strftime('%b %d, %I:%M %p') }}</span>{{ row.summary }}</li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="portal-empty">No activity yet.</p>
+  {% endif %}
+</section>
+{% endblock %}

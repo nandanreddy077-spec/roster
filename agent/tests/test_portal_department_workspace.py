@@ -73,14 +73,15 @@ def test_outcomes_precede_employee_detail_in_dom_order(test_engine, monkeypatch)
     assert body.index("Jobs booked") < body.index("Frontdesk")
 
 
-def test_employee_cards_are_not_yet_links(test_engine, monkeypatch):
-    """Task 7 adds the click-through once its route exists. Shipping a link
-    to a 404 now would repeat the Phase 4b 'no dead controls' mistake."""
+def test_employee_cards_link_to_their_workspace(test_engine, monkeypatch):
+    """Task 7 landed the drill-down route, so the department page's cards
+    stop being inert (they deliberately held no href before this)."""
     client = _client_for(test_engine, monkeypatch, deploy="customer_service")
 
     body = client.get("/v2/dashboard/departments/customer_service").text
 
-    assert 'href="/v2/dashboard/departments/customer_service/employees/frontdesk"' not in body
+    assert 'href="/v2/dashboard/departments/customer_service/employees/frontdesk"' in body
+    assert 'href="/v2/dashboard/departments/customer_service/employees/reviews"' in body
 
 
 def test_no_ai_internal_term_appears(test_engine, monkeypatch):
