@@ -262,6 +262,19 @@ def department_outcomes(session, business_id: int, department_key: str,
     return outcomes
 
 
+def department_activity(session, business_id: int, role_keys, since=None,
+                        limit: int = 20) -> list:
+    """The department's whole timeline — the union of its deployed employees'
+    activity, newest first. Derived by unioning employee_activity, the same
+    way department_outcomes unions employee_outcomes: a department's feed can
+    never diverge from the rows behind its employees' own numbers."""
+    rows = []
+    for role_key in role_keys:
+        rows.extend(employee_activity(session, business_id, role_key, since=since))
+    rows.sort(key=lambda r: r.when, reverse=True)
+    return rows[:limit]
+
+
 def booked_jobs(session, business_id: int) -> int:
     """Real customer jobs booked. Excludes the owner's own dashboard tests —
     testing your own AI is not revenue, and both surfaces must agree on that."""

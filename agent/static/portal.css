@@ -215,3 +215,30 @@ h1, h2, .logo { font-family: var(--serif); font-weight: 600; color: var(--ink); 
 @media (min-width: 768px) {
   .portal-dept-grid { grid-template-columns: 1fr 1fr; }
 }
+
+/* Department Workspace: section titles, employee grid, timeline. DESIGN.md:
+   existing tokens, dashboard type scale, 8px rhythm. */
+.portal-section-title { font-size: 18px; margin: 32px 0 12px; }
+.portal-employee-grid { display: grid; grid-template-columns: 1fr; gap: 16px; }
+.portal-employee-card { max-width: 100%; margin: 0; }
+.portal-employee-card h3 { font-size: 16px; }
+.portal-outcomes-compact { gap: 16px; margin-top: 10px; }
+.portal-outcomes-compact .portal-outcome-value { font-size: 20px; }
+.portal-activity-preview {
+  list-style: none; margin-top: 12px; font-size: 13px; color: var(--text-dim);
+}
+.portal-activity-preview li { padding: 4px 0; border-top: 1px solid var(--border); }
+.portal-activity-preview li:first-child { border-top: none; }
+
+.portal-timeline { list-style: none; }
+.portal-timeline li {
+  padding: 10px 0; border-top: 1px solid var(--border); font-size: 14px;
+}
+.portal-timeline li:first-child { border-top: none; }
+.portal-timeline-when {
+  display: inline-block; min-width: 140px; color: var(--text-dim); font-size: 12px;
+}
+
+@media (min-width: 768px) {
+  .portal-employee-grid { grid-template-columns: 1fr 1fr; }
+}

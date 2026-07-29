@@ -8,7 +8,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Optional
 
-from fastapi import APIRouter, Form, Request
+from fastapi import APIRouter, Form, HTTPException, Request
 from fastapi.responses import RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.exc import IntegrityError
@@ -71,36 +71,18 @@ NAV_ITEMS = (
 )
 templates.env.globals["nav_items"] = NAV_ITEMS
 
-# The CUSTOMER's wording for each department state. The founder console keeps
-# its own map over the same states (app.py) — departments.DepartmentStatus is
-# presentation-neutral so neither audience's voice leaks into the other's.
-#
-# `partial` reads as Working on purpose: a half-staffed department IS doing
-# work, and finishing it is Roster's operational problem, not the owner's
-# worry. `unavailable` reads the same as `empty` — the customer doesn't need
-# to know whether a department is unstaffed or unbuilt.
-CUSTOMER_STATE_LABELS = {
-    "staffed": "Working",
-    "partial": "Working",
-    "empty": "Not yet part of your workforce",
-    "unavailable": "Not yet part of your workforce",
-}
-_ACTIVE_STATES = ("staffed", "partial")
+# CUSTOMER_STATE_LABELS, ACTIVE_STATES and METRIC_LABELS now live in
+# workspace.py — the one home for the customer's wording, so there is exactly
+# one copy rather than two maps that can drift (founder, 2026-07-29). Kept as
+# module attributes here too, via the import below, so existing references
+# (portal.METRIC_LABELS, etc.) and templates.env.globals need no other change.
+from workspace import (  # noqa: E402
+    ACTIVE_STATES as _ACTIVE_STATES,
+    CUSTOMER_STATE_LABELS,
+    METRIC_LABELS,
+    build_department_workspace,
+)
 
-# The CUSTOMER's wording for each metric. Centralized so renaming one never
-# means editing a template — and every key in metrics.METRIC_RECORDS must
-# appear here or it would render as a bare number.
-METRIC_LABELS = {
-    metrics.JOBS_BOOKED: "Jobs booked",
-    metrics.CALLS_ANSWERED: "Calls answered",
-    metrics.ESCALATIONS: "Sent to you personally",
-    metrics.REVIEW_REQUESTS_SENT: "Review requests sent",
-    metrics.QUOTES_CHASED: "Estimates followed up",
-    metrics.QUOTES_RECOVERED: "Estimates won back",
-    metrics.CUSTOMERS_REACHED: "Past customers contacted",
-    metrics.CUSTOMERS_RETURNED: "Customers who came back",
-    metrics.REFERRALS_RECEIVED: "Referrals received",
-}
 templates.env.globals["metric_labels"] = METRIC_LABELS
 
 router = APIRouter()
@@ -501,6 +483,29 @@ def v2_departments(request: Request):
             request,
             "dashboard_v2/departments.html",
             {"business": business, "active_nav": "departments", "cards": cards},
+        )
+
+
+@router.get("/v2/dashboard/departments/{department_key}")
+def v2_department_workspace(request: Request, department_key: str):
+    """Open one department. Renders a SINGLE assembled view model
+    (workspace.build_department_workspace) — this route never joins
+    DepartmentStatus, EMPLOYEE_RECORDS and METRIC_RECORDS itself.
+
+    404s for an unknown department key or one this business hasn't deployed:
+    you open your own office, not a directory of ones you might rent.
+    """
+    with Session(engine) as session:
+        business = _current_client(request, session)
+        if business is None:
+            return RedirectResponse("/login", status_code=303)
+        ws = build_department_workspace(session, business.id, department_key)
+        if ws is None:
+            raise HTTPException(status_code=404, detail="No such department")
+        return templates.TemplateResponse(
+            request,
+            "dashboard_v2/department.html",
+            {"business": business, "active_nav": "departments", "workspace": ws},
         )
 
 

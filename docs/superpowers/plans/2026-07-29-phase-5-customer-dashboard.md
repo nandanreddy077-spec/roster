@@ -392,26 +392,60 @@ where the send actually happened; `since` filters correctly.
 
 ## Task 6: The Department Workspace
 
-**Files:** `agent/templates/dashboard_v2/department.html`, `agent/portal.py`, `agent/static/portal.css`, tests
+### Architectural refinement (founder, 2026-07-29) — permanent
 
-Route `GET /v2/dashboard/departments/{key}`. Structure, top to bottom:
+> **One shared view model. The template renders it; it never assembles
+> itself from several helpers.**
 
-1. **Department name + question** — what this workspace answers.
-2. **Health** — the shared `DepartmentStatus` state in customer wording.
-3. **Department outcomes** — the existing `department_outcomes`.
-4. **Every employee in the department**, each with: what they do, their
-   status, their own outcomes, and their recent activity — **clickable**
-   through to Task 7.
-5. **Recent activity / timeline** for the department as a whole, from real
-   rows (`job`, `ownernotification`), newest first.
+```
+DepartmentWorkspace(
+    department,      # from departments.py's registry
+    question,         # department.question
+    is_active,        # from DepartmentStatus
+    health_label,     # from DepartmentStatus, customer-worded
+    employees,        # [EmployeeView], from EMPLOYEE_RECORDS
+    outcomes,         # from METRIC_RECORDS, via department_outcomes
+    activity,         # from METRIC_RECORDS, via a new department_activity
+)
+```
 
-**Tests:** the question renders; employees appear with their own numbers;
-employee cards link to the drill-down; a department the business doesn't have
-404s; an employee with no records shows activity-empty rather than fake
-zeros; no AI-internal term anywhere; outcomes precede employee detail in DOM
-order (blueprint §2's hierarchy is testable).
+This is the same layering the migration has used throughout, made explicit
+as a rule: **shared registries → shared view models → presentation.** The
+template must not join `DepartmentStatus` + `EMPLOYEE_RECORDS` +
+`METRIC_RECORDS` itself — that join is exactly the kind of duplicated
+business logic the invariants exist to prevent. One assembly function,
+`workspace.build_department_workspace`, does it once.
 
----
+**Files:** `agent/workspace.py` (new), `agent/metrics.py`, `agent/portal.py`, `agent/templates/dashboard_v2/department.html` (new), `agent/static/portal.css`, tests
+
+- `metrics.department_activity(session, business_id, role_keys, since, limit)` —
+  the department's whole timeline, derived by unioning `employee_activity`
+  across its deployed employees. Symmetric with `department_outcomes` unioning
+  `employee_outcomes` — a department's feed can never diverge from the rows
+  behind its employees' own numbers.
+- `workspace.py` becomes the **one home** for `CUSTOMER_STATE_LABELS`,
+  `ACTIVE_STATES`, and `METRIC_LABELS` — moved out of `portal.py`, which
+  re-imports them, so there is exactly one copy rather than two maps that can
+  drift.
+- `build_department_workspace(session, business_id, department_key, since=None)`
+  returns `None` for an unknown department key **or** one that isn't active
+  for this business — the route 404s on either, rather than rendering an
+  empty workspace for a department the customer doesn't have.
+- Route: `GET /v2/dashboard/departments/{key}`.
+- **Employee cards are visually distinct but NOT yet links.** The click-through
+  target is Task 7's route, which doesn't exist yet — shipping a link to a
+  404 would repeat the "no dead controls" mistake Phase 4b's audit caught
+  (B2/B10). Task 7 adds the `<a href>` the moment its target exists.
+
+**Tests:** the view model assembles from the three registries with no
+duplicated logic; unknown and inactive department keys both return `None`
+from the builder and 404 from the route; employees appear with their own
+outcomes and activity; department outcomes and activity are the union of its
+employees', never more; a fired employee is absent (proving the workspace
+reuses `DepartmentStatus`'s existing filter, not a second one); business
+isolation on the whole assembly; outcomes precede employee detail in DOM order.
+
+**Expected:** `~510 passing`.
 
 ## Task 7: Employee drill-down
 

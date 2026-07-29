@@ -1,0 +1,67 @@
+{% extends "portal_base.html" %}
+{% block title %}{{ workspace.department.display_name }} — Roster{% endblock %}
+{% block heading %}{{ workspace.department.display_name }}{% endblock %}
+{% block subhead %}
+<p class="portal-lede">{{ workspace.question }}</p>
+{% endblock %}
+
+{% block content %}
+{# This template renders ONE assembled view model (workspace.py) — it never
+   joins DepartmentStatus, EMPLOYEE_RECORDS or METRIC_RECORDS itself
+   (founder, 2026-07-29). Outcomes precede employee detail, per blueprint §2's
+   hierarchy: outcomes first, who did the work second. #}
+<section class="portal-card portal-card-wide">
+  <div class="portal-dept-head">
+    <p class="portal-eyebrow">{{ workspace.department.mission }}</p>
+    <span class="portal-state is-working">{{ workspace.health_label }}</span>
+  </div>
+  {% if workspace.outcomes %}
+  <ul class="portal-outcomes">
+    {% for label, value in workspace.outcomes %}
+    <li><span class="portal-outcome-value">{{ value }}</span><span class="portal-outcome-label">{{ label }}</span></li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+</section>
+
+<h2 class="portal-section-title">Who works here</h2>
+<div class="portal-employee-grid">
+  {% for employee in workspace.employees %}
+  {# Not yet a link: the drill-down route lands in Task 7. Shipping a link to
+     a page that doesn't exist would repeat the "no dead controls" mistake
+     Phase 4b's audit caught. #}
+  <section class="portal-card portal-employee-card">
+    <h3>{{ employee.display_name }}</h3>
+    {% if employee.outcomes %}
+    <ul class="portal-outcomes portal-outcomes-compact">
+      {% for label, value in employee.outcomes %}
+      <li><span class="portal-outcome-value">{{ value }}</span><span class="portal-outcome-label">{{ label }}</span></li>
+      {% endfor %}
+    </ul>
+    {% endif %}
+    {% if employee.activity %}
+    <ul class="portal-activity-preview">
+      {% for row in employee.activity[:3] %}
+      <li>{{ row.summary }}</li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <p class="portal-empty">No activity yet.</p>
+    {% endif %}
+  </section>
+  {% endfor %}
+</div>
+
+<h2 class="portal-section-title">Recent activity</h2>
+<section class="portal-card portal-card-wide">
+  {% if workspace.activity %}
+  <ul class="portal-timeline">
+    {% for row in workspace.activity %}
+    <li><span class="portal-timeline-when">{{ row.when.strftime('%b %d, %I:%M %p') }}</span>{{ row.summary }}</li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="portal-empty">Nothing to show yet.</p>
+  {% endif %}
+</section>
+{% endblock %}
