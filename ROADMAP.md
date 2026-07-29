@@ -33,6 +33,15 @@
 > Revenue / Employee experience), the "default answer is add it to the
 > Deferred table" guardrail, and the Deferred table itself — all now applied
 > at department level.
+>
+> **Phase 5 closed 2026-07-29** — the customer dashboard's architecture is
+> now frozen; see [`ARCHITECTURE.md`](ARCHITECTURE.md) for the invariants
+> checklist. **Founder directive:** the dashboard's workspace hierarchy
+> (Overview → Briefing → Department → Employee → Expansion) is complete.
+> Resist adding new top-level pages — new work should deepen one of those
+> five workspaces or improve the underlying AI employees, not introduce a
+> sixth destination. Engineering effort shifts from dashboard architecture
+> to AI employee capability from here.
 
 **Mission:** make a home-service business owner believe they **hired an
 office**, not installed software. Every feature, screen, notification,
