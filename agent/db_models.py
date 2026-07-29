@@ -117,6 +117,10 @@ class Job(SQLModel, table=True):
     created_at: datetime = Field(default_factory=datetime.utcnow)
     completed_at: Optional[datetime] = None  # set by the "Mark done" action; drives the Reviews SMS
     referral_sent_at: Optional[datetime] = None  # set once the referral ask has gone out for this job
+    # Set where the review SMS is actually sent (app.py's complete_job), so
+    # "review requests sent" counts real sends rather than inferring them from
+    # completion. Every review request is a first-class record we can drill into.
+    review_requested_at: Optional[datetime] = None
 
 
 class RecoveryCampaign(SQLModel, table=True):

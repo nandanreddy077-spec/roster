@@ -92,6 +92,9 @@ _ACTIVE_STATES = ("staffed", "partial")
 # appear here or it would render as a bare number.
 METRIC_LABELS = {
     metrics.JOBS_BOOKED: "Jobs booked",
+    metrics.CALLS_ANSWERED: "Calls answered",
+    metrics.ESCALATIONS: "Sent to you personally",
+    metrics.REVIEW_REQUESTS_SENT: "Review requests sent",
     metrics.QUOTES_CHASED: "Estimates followed up",
     metrics.QUOTES_RECOVERED: "Estimates won back",
     metrics.CUSTOMERS_REACHED: "Past customers contacted",
@@ -436,14 +439,13 @@ def _statuses(session, business_id: int):
     return department_status_for(employees)
 
 
-def _outcomes(session, business_id: int, department_key: str) -> list:
+def _outcomes(session, business_id: int, department_key: str, staffed) -> list:
     """[(label, value)] for one department — presentation applied here, facts
-    from metrics.py. Only rendered for departments that are actually working,
-    so a number never implies work nobody is doing."""
-    return [
-        (METRIC_LABELS[key], value)
-        for key, value in metrics.department_outcomes(session, business_id, department_key).items()
-    ]
+    from metrics.py, derived from the DEPLOYED employees so a department can
+    never report a number for an employee it hasn't deployed."""
+    role_keys = [e.key for e in staffed]
+    outcomes = metrics.department_outcomes(session, business_id, department_key, role_keys)
+    return [(METRIC_LABELS[key], value) for key, value in outcomes.items()]
 
 
 @router.get("/v2/dashboard")
@@ -465,7 +467,7 @@ def v2_overview(request: Request):
                 "working": [
                     {
                         "department": s.department,
-                        "outcomes": _outcomes(session, business.id, s.department.key),
+                        "outcomes": _outcomes(session, business.id, s.department.key, s.staffed),
                     }
                     for s in working
                 ],
@@ -493,7 +495,7 @@ def v2_departments(request: Request):
                 "active": active,
                 "label": CUSTOMER_STATE_LABELS[status.state],
                 "employees": status.staffed,
-                "outcomes": _outcomes(session, business.id, status.department.key) if active else [],
+                "outcomes": _outcomes(session, business.id, status.department.key, status.staffed) if active else [],
             })
         return templates.TemplateResponse(
             request,

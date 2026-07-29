@@ -63,13 +63,22 @@ def test_booked_jobs_on_an_empty_business_is_zero(session):
 
 
 def test_customer_service_outcomes_report_booked_jobs(session):
+    """Frontdesk now declares three metrics (Task 5's EMPLOYEE_RECORDS): jobs,
+    calls, escalations. A true zero count is not a fabricated zero — the
+    honesty rule forbids reporting a metric with NO attributable records at
+    all, not reporting that a real, measurable thing happened zero times."""
     b = _business(session, "m5@test.io")
     _job(session, b.id)
 
-    assert department_outcomes(session, b.id, "customer_service") == {JOBS_BOOKED: 1}
+    outcomes = department_outcomes(session, b.id, "customer_service", ["frontdesk"])
+    assert outcomes[JOBS_BOOKED] == 1
+    assert outcomes[metrics.CALLS_ANSWERED] == 0
+    assert outcomes[metrics.ESCALATIONS] == 0
 
 
 def test_sales_outcomes_report_quotes_chased_and_recovered(session):
+    """department_outcomes derives from the DEPLOYED employees (Task 5) — a
+    department can never report a number for an employee it hasn't deployed."""
     b = _business(session, "m6@test.io")
     camp = RecoveryCampaign(business_id=b.id, face="quote", name="June quotes",
                             customer_list_json="[]")
@@ -84,24 +93,36 @@ def test_sales_outcomes_report_quotes_chased_and_recovered(session):
                             current_status="no_response"))
     session.commit()
 
-    assert department_outcomes(session, b.id, "sales") == {
+    assert department_outcomes(session, b.id, "sales", ["quote_chaser"]) == {
         QUOTES_CHASED: 2, QUOTES_RECOVERED: 1,
     }
 
 
 def test_a_department_with_no_engine_reports_no_metrics_not_zeros(session):
-    """Honesty: Operations has no engine, so it has nothing to report. Showing
-    '0 jobs dispatched' would imply a department that ran and achieved
-    nothing, rather than one that was never built."""
+    """Honesty: Operations has no engine, so it has nothing to report even if
+    (hypothetically) role keys were passed for it. Showing '0 jobs dispatched'
+    would imply a department that ran and achieved nothing, rather than one
+    that was never built."""
     b = _business(session, "m7@test.io")
 
-    assert department_outcomes(session, b.id, "operations") == {}
+    assert department_outcomes(session, b.id, "operations", ["dispatcher"]) == {}
 
 
 def test_outcomes_for_an_unknown_department_are_empty(session):
     b = _business(session, "m8@test.io")
 
-    assert department_outcomes(session, b.id, "not_a_department") == {}
+    assert department_outcomes(session, b.id, "not_a_department", []) == {}
+
+
+def test_department_outcomes_reports_nothing_for_an_undeployed_employee(session):
+    """The Task 5 invariant, directly: passing a role_key that isn't actually
+    deployed must not be how a caller gets numbers — this module trusts its
+    caller to pass only deployed roles, but reports real records for whatever
+    it's given, deployed or not, which is why portal.py passes status.staffed
+    rather than every deployable role."""
+    b = _business(session, "m8b@test.io")
+
+    assert department_outcomes(session, b.id, "sales", []) == {}
 
 
 def test_metric_keys_carry_no_wording(session):
@@ -110,7 +131,8 @@ def test_metric_keys_carry_no_wording(session):
     b = _business(session, "m9@test.io")
     _job(session, b.id)
 
-    for key in department_outcomes(session, b.id, "customer_service"):
+    keys = department_outcomes(session, b.id, "customer_service", ["frontdesk", "reviews"])
+    for key in keys:
         assert key.islower() and " " not in key, f"{key!r} looks like a label, not a key"
 
 
@@ -124,9 +146,12 @@ def test_every_metric_declares_what_records_it_drills_into(session):
     it can't be declared, so it can't ship."""
     from departments import REGISTRY
 
+    from departments import deployable_employees_for
+
     b = _business(session, "m11@test.io")
     for department in REGISTRY:
-        for key in department_outcomes(session, b.id, department.key):
+        role_keys = [e.key for e in deployable_employees_for(department.key)]
+        for key in department_outcomes(session, b.id, department.key, role_keys):
             assert key in metrics.METRIC_RECORDS, (
                 f"{key!r} is rendered to customers but declares no drill-down "
                 "records — see metrics.METRIC_RECORDS"

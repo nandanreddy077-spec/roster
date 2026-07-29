@@ -27,6 +27,9 @@ class Department:
     key: str
     display_name: str
     mission: str      # one line, heads the department page
+    question: str     # the ONE thing this department answers, so each workspace
+                      # opens differently instead of being the same card with
+                      # different numbers in it
     problem: str      # inactive card: what's broken today
     outcome: str      # inactive card: what changes when it's staffed
     why_adopt: str    # inactive card: why an owner eventually wants it
@@ -41,6 +44,7 @@ REGISTRY: List[Department] = [
         key="customer_service",
         display_name="Customer Service",
         mission="Every call answered, every happy customer thanked.",
+        question="Are customers being looked after?",
         problem=(
             "The phone rings while you're under a sink or on a roof. Nobody "
             "picks up, and the job goes to whoever answers next."
@@ -55,6 +59,7 @@ REGISTRY: List[Department] = [
         key="sales",
         display_name="Sales",
         mission="Nobody works a quote, so it goes cold. This department doesn't let it.",
+        question="Are we recovering revenue?",
         problem=(
             "Estimates go out and nobody works them. Most quotes need several "
             "follow-ups before they close, and yours get one."
@@ -72,6 +77,7 @@ REGISTRY: List[Department] = [
         key="operations",
         display_name="Operations",
         mission="The crew runs on schedule, even when nobody's watching it.",
+        question="Are today's jobs running smoothly?",
         problem=(
             "Jobs get booked, then someone has to work out who's going where — "
             "and that someone is you, between jobs."
@@ -89,6 +95,7 @@ REGISTRY: List[Department] = [
         key="finance",
         display_name="Finance",
         mission="The money owed gets collected, not just invoiced.",
+        question="Are invoices being collected?",
         problem=(
             "Invoices go out, and collecting on them means being the bad guy — "
             "or not collecting at all."
@@ -107,6 +114,7 @@ REGISTRY: List[Department] = [
         key="customer_success",
         display_name="Customer Success",
         mission="Old customers become repeat customers.",
+        question="Are customers renewing?",
         problem=(
             "Old customers who'd happily book again are sitting in a list nobody "
             "has time to call, and maintenance plans lapse quietly."
@@ -124,6 +132,7 @@ REGISTRY: List[Department] = [
         key="marketing",
         display_name="Marketing",
         mission="The phone rings without you spending on ads to make it ring.",
+        question="Are we generating new business?",
         problem=(
             "Happy customers would refer you and buy more, but nobody's "
             "consistently asking them to."
@@ -139,6 +148,7 @@ REGISTRY: List[Department] = [
         key="leadership",
         display_name="Leadership",
         mission="Someone's watching the business, even at 11pm.",
+        question="What actually needs my attention?",
         problem=(
             "You find out how the week really went by feel, usually after it's "
             "too late to do anything about it."

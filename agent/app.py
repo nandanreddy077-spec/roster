@@ -557,6 +557,11 @@ def complete_job(client_id: int, job_id: int):
                     to_number=job.callback_number,
                     body=f"Thanks for choosing {client.business_name}! If we did right by you, a quick review means a lot: {client.review_link}",
                 )
+                # Record the send: "review requests sent" must count real sends,
+                # not infer them from completion (founder, 2026-07-29).
+                job.review_requested_at = datetime.utcnow()
+                session.add(job)
+                session.commit()
             except Exception as e:
                 print(f"Reviews: failed to send review request for job {job_id}: {e}")
         if not already_completed:
