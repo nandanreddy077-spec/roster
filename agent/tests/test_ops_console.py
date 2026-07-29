@@ -491,3 +491,37 @@ def test_a_bad_department_choice_does_not_lose_the_business(test_engine, monkeyp
             Business.business_name == "Ridgeline Plumbing")).first()
         assert b is not None
         assert s.exec(select(Employee).where(Employee.business_id == b.id)).all() == []
+
+
+# --- provision-number idempotency (B5 — pre-existing money risk) ---------------
+
+
+def test_provisioning_a_number_twice_does_not_buy_a_second_one(test_engine, monkeypatch):
+    """B5: this route always bought a FRESH Twilio number. POST-redirect-GET
+    protects against refresh-after-response, but not against a double-click
+    while the first request is still in flight — two POSTs, two numbers
+    bought, and the spare is never released. Real money, every time."""
+    monkeypatch.setattr(app_module, "engine", test_engine)
+    purchases = []
+
+    def _fake_buy(area_code=None):
+        purchases.append(area_code)
+        return {"phone_number": f"+1512555{len(purchases):04d}", "sid": f"PN{len(purchases)}"}
+
+    monkeypatch.setattr(app_module, "buy_twilio_number", _fake_buy)
+    monkeypatch.setattr(app_module, "register_number_with_xai",
+                        lambda n: {"signing_secret": "sec"})
+    monkeypatch.setattr(app_module, "attach_number_to_xai_trunk", lambda sid, n: None)
+    with Session(test_engine) as s:
+        bid = _business(s).id
+    client = TestClient(app_module.app, headers=DASH_AUTH)
+
+    client.post(f"/clients/{bid}/provision-number", data={"area_code": "512"})
+    second = client.post(f"/clients/{bid}/provision-number", data={"area_code": "512"},
+                         follow_redirects=False)
+
+    assert len(purchases) == 1, f"bought {len(purchases)} numbers — each one costs money"
+    assert second.status_code == 303
+    assert "provision_error" in second.headers["location"]
+    with Session(test_engine) as s:
+        assert s.get(Business, bid).twilio_number_sid == "PN1"

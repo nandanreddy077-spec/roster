@@ -99,7 +99,8 @@
       {% else %}
       <p class="agent-tile-desc">No number yet — buy one to enable SMS and voice for this client.</p>
       {% endif %}
-      <form method="post" action="/clients/{{ client.id }}/provision-number" class="review-link-form">
+      <form method="post" action="/clients/{{ client.id }}/provision-number" class="review-link-form"
+            onsubmit="this.querySelector('button').disabled = true;">
         <input type="text" name="area_code" placeholder="Area code (optional)" maxlength="3">
         <button class="btn btn-primary btn-small" type="submit">Buy &amp; wire up number</button>
       </form>

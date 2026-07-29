@@ -428,6 +428,22 @@ def provision_number(client_id: int, area_code: str = Form("")):
     error = None
     with Session(engine) as session:
         client = session.get(Business, client_id)
+        # This route BUYS a number every time it runs. POST-redirect-GET stops
+        # a refresh from re-submitting, but not a double-click while the first
+        # request is still in flight — that bought two numbers, and the spare
+        # was never released. Refuse when one is already on file; the xAI half
+        # is retried via retry-xai-registration, which buys nothing.
+        if client is not None and client.twilio_number_sid:
+            from urllib.parse import quote
+
+            already = (
+                f"{client.business_name or 'This business'} already has "
+                f"{client.inbound_number or 'a number'} — not buying another. "
+                "Use 'Retry xAI voice registration' to finish wiring it up."
+            )
+            return RedirectResponse(
+                f"/clients/{client_id}?provision_error={quote(already)}", status_code=303
+            )
         try:
             purchase = buy_twilio_number(area_code.strip() or None)
             client.inbound_number = purchase["phone_number"]
