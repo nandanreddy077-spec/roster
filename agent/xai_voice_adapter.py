@@ -70,6 +70,18 @@ DEFAULT_VOICE = "eve"
 # value; this constant is what production actually runs with).
 MAX_CALL_DURATION_SECONDS = 600
 
+# Hard safety cap on one call's cumulative token usage — a stuck loop, an
+# unusually verbose model, or a caller who keeps a call going without ever
+# hitting the duration cap must still have unmetered xAI cost bounded some
+# other way. TOKENS, not a fabricated cents-per-token rate: trial_cap.py's
+# own per-turn cost estimate is already "not real per-token billing... just
+# deterministic and easy to test" (its own words) — inventing a conversion
+# rate here would be no more honest, so the budget is expressed in the unit
+# the events actually report. 20,000 is a generous ceiling for a real
+# conversation. Overridable per call via run_call's own `max_call_tokens`
+# param, same injectable pattern as `max_duration_seconds`.
+MAX_CALL_TOKEN_BUDGET = 20_000
+
 # call_id is attacker-supplied (it rides in on the unverified webhook body) and
 # then flows into a capture *filename*, a DB dedup key, and the voice thread id.
 # Constrain it to a filename-safe token right here at the trust boundary so a
@@ -308,6 +320,36 @@ def _extract_transcript(response_done_event: Dict[str, Any]) -> str:
     return " ".join(parts).strip()
 
 
+def _extract_response_tokens(response_done_event: Dict[str, Any]) -> int:
+    """Best-effort: pull total token usage out of a response.done event's
+    `usage` field. Same OpenAI-Realtime-compatible assumption as
+    _extract_transcript — unconfirmed against a real payload until one is
+    captured. Malformed or missing usage is treated as zero, never raises:
+    a usage-reporting hiccup must not itself break the call the budget cap
+    exists to protect."""
+    usage = response_done_event.get("response", {}).get("usage")
+    if not isinstance(usage, dict):
+        return 0
+    total = usage.get("total_tokens")
+    if isinstance(total, int) and not isinstance(total, bool) and total >= 0:
+        return total
+    parts = [
+        v for v in (usage.get("input_tokens"), usage.get("output_tokens"))
+        if isinstance(v, int) and not isinstance(v, bool) and v >= 0
+    ]
+    return sum(parts) if parts else 0
+
+
+class _CallBudgetExceeded(Exception):
+    """Internal signal only, raised inside the event loop when cumulative
+    token usage crosses the configured per-call budget. Caught by run_call,
+    which ends the call the same honest way a timeout does — a distinct
+    reason, not a generic crash. Never crosses a module boundary as a public
+    contract; existing solely so the detection point (inside the loop, where
+    the token count is known) and the reaction (owner notification, in
+    run_call) can stay where each naturally belongs."""
+
+
 # The caller's side of the conversation. Same OpenAI-Realtime-compatible
 # assumption _extract_transcript already makes for the assistant side —
 # unconfirmed against a real xAI payload until a live call is captured.
@@ -360,7 +402,8 @@ def _default_connect(call_id: str):
 
 async def run_call(call_id: str, client: Business, caller_number: str, session_factory,
                    connect=None, trace: Optional[CallTrace] = None,
-                   max_duration_seconds: Optional[float] = None) -> None:
+                   max_duration_seconds: Optional[float] = None,
+                   max_call_tokens: Optional[int] = None) -> None:
     """Owns one live call end-to-end. Runs as a background task kicked off by
     the /webhook/xai-incoming-call handler — must not block that handler's
     response to xAI.
@@ -368,18 +411,21 @@ async def run_call(call_id: str, client: Business, caller_number: str, session_f
     `connect(call_id)` returns the realtime WebSocket as an async context
     manager (injectable for tests). `trace` records every event and stage with
     a millisecond offset for boundary debugging; a capturing one is created if
-    not supplied. `max_duration_seconds` overrides MAX_CALL_DURATION_SECONDS
-    (tests use a tiny value so they don't actually wait 10 minutes)."""
+    not supplied. `max_duration_seconds` overrides MAX_CALL_DURATION_SECONDS;
+    `max_call_tokens` overrides MAX_CALL_TOKEN_BUDGET (both: tests use small
+    values instead of production's real ceilings)."""
     connect = connect or _default_connect
     if trace is None:
         from db import DATA_DIR
         trace = CallTrace(call_id, capture_dir=DATA_DIR / "call_captures")
     thread = _thread_id(call_id)
     max_duration = MAX_CALL_DURATION_SECONDS if max_duration_seconds is None else max_duration_seconds
+    max_tokens = MAX_CALL_TOKEN_BUDGET if max_call_tokens is None else max_call_tokens
 
     try:
         await asyncio.wait_for(
-            _run_call_session(connect, call_id, client, caller_number, session_factory, thread, trace),
+            _run_call_session(connect, call_id, client, caller_number, session_factory,
+                             thread, trace, max_tokens),
             timeout=max_duration,
         )
     except asyncio.TimeoutError:
@@ -405,6 +451,26 @@ async def run_call(call_id: str, client: Business, caller_number: str, session_f
                 session, client.id, KIND_CALL_DROPPED, SOURCE_CALL_DROPPED,
                 build_escalation_message(client, caller_number, timeout_reason), alerted,
             )
+    except _CallBudgetExceeded:
+        # Detected (and traced, with the exact token count) inside the loop,
+        # where the usage numbers actually are — unlike the timeout branch
+        # above, whose own trace happens here because wait_for's cancellation
+        # carries no extra data worth recording beyond max_duration itself.
+        # Raising from inside `async with connect(...) as ws:` closes the
+        # websocket via ordinary exception unwinding — the same mechanism a
+        # crash already goes through, not a new one.
+        budget_reason = (
+            "the AI call with this customer reached its usage budget and "
+            "was ended automatically — call them back"
+        )
+        alerted = await asyncio.to_thread(
+            notify_owner_of_escalation, client, caller_number, budget_reason,
+        )
+        with session_factory() as session:
+            record_owner_notification(
+                session, client.id, KIND_CALL_DROPPED, SOURCE_CALL_DROPPED,
+                build_escalation_message(client, caller_number, budget_reason), alerted,
+            )
     except Exception as e:
         # A mid-call crash (WS drop, DB error, bad payload) must never vanish
         # silently: record it, and text the owner the caller's number so the
@@ -425,7 +491,8 @@ async def run_call(call_id: str, client: Business, caller_number: str, session_f
         trace.close()
 
 
-async def _run_call_session(connect, call_id, client, caller_number, session_factory, thread, trace) -> None:
+async def _run_call_session(connect, call_id, client, caller_number, session_factory,
+                            thread, trace, max_tokens: int) -> None:
     with session_factory() as session:
         customer_context = build_customer_context(session, client.id, caller_number)
     async with connect(call_id) as ws:
@@ -435,6 +502,7 @@ async def _run_call_session(connect, call_id, client, caller_number, session_fac
 
         first_response_seen = False
         flagged_types: set = set()
+        total_tokens_used = 0
         async for raw in ws:
             event = json.loads(raw)
             trace.event(event)
@@ -459,6 +527,15 @@ async def _run_call_session(connect, call_id, client, caller_number, session_fac
                             content_json=json.dumps([{"type": "text", "text": transcript}]),
                         ))
                         session.commit()
+                # Checked AFTER persisting this response's own transcript —
+                # the turn that tips the budget over still gets recorded, and
+                # any booking/escalation from an EARLIER tool call this same
+                # loop already committed synchronously is untouched either way.
+                total_tokens_used += _extract_response_tokens(event)
+                if total_tokens_used > max_tokens:
+                    trace.stage("call_budget_exceeded",
+                               total_tokens=total_tokens_used, max_tokens=max_tokens)
+                    raise _CallBudgetExceeded()
 
             elif etype == USER_TRANSCRIPT_COMPLETED:
                 with session_factory() as session:

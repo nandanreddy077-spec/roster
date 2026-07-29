@@ -1336,6 +1336,210 @@ def test_a_transport_send_failure_is_unrecoverable_and_ends_the_call(test_engine
     assert "call_completed" not in stages
 
 
+# ---- Voice cost cap: no call can exceed a token budget ----------------------
+#
+# Closes the sixth priority from the 2026-07-29 voice-loop audit: SMS turns
+# are metered by trial_cap.py; a live voice call had no cost cutoff of any
+# kind. Cost is estimated in TOKENS, read from each response.done event's
+# `response.usage` field — the same OpenAI-Realtime-compatible shape already
+# assumed for _extract_transcript and the caller-transcript event (and
+# equally unconfirmed against a real payload until one is captured). Tokens,
+# not a fabricated cents-per-token rate: trial_cap.py's own flat per-turn
+# cents estimate is deliberately NOT real per-token billing either — a made
+# up conversion rate would be no more honest than the token count itself.
+#
+# Enforced INSIDE the event loop (unlike Priority 4's duration cap, which
+# wraps run_call's outer await): usage numbers only exist attached to a
+# response.done event, so the check has to happen where that event is
+# handled, not from outside. Exceeding budget raises a small internal
+# signal (_CallBudgetExceeded) from inside `async with connect(...) as ws:`,
+# which closes the websocket via ordinary exception unwinding — the same
+# mechanism a crash already goes through, not a new one. run_call catches it
+# in its own except branch, parallel to (and independent of) the timeout
+# branch, and notifies the owner the same honest way.
+
+def _response_done_with_usage(total_tokens: int, transcript: str = "") -> dict:
+    output = [{"content": [{"transcript": transcript}]}] if transcript else []
+    return {
+        "type": "response.done",
+        "response": {"output": output, "usage": {"total_tokens": total_tokens}},
+    }
+
+
+TINY_TOKEN_BUDGET = 100
+
+
+def test_a_normal_inexpensive_call_is_unaffected(test_engine):
+    client = _seed_business(test_engine)
+    from xai_voice_adapter import run_call
+    from call_trace import CallTrace
+    trace = CallTrace("call_cheap")
+    ws = FakeWS([_response_done_with_usage(10, "hi"), LOG_JOB_EVENT])
+
+    asyncio.run(run_call("call_cheap", client, "+15125559999", lambda: Session(test_engine),
+                         connect=connector_for(ws), trace=trace,
+                         max_call_tokens=TINY_TOKEN_BUDGET))
+
+    stages = [r["stage"] for r in trace.records if r["kind"] == "stage"]
+    assert "call_completed" in stages
+    assert "call_budget_exceeded" not in stages
+
+
+def test_budget_exceeded_mid_conversation_ends_the_call(test_engine, monkeypatch):
+    import xai_voice_adapter as adapter
+    from xai_voice_adapter import run_call
+    from call_trace import CallTrace
+
+    monkeypatch.setattr(adapter, "notify_owner_of_escalation", lambda *a, **k: True)
+    client = _seed_business(test_engine)
+    trace = CallTrace("call_budget")
+    ws = FakeWS([
+        _response_done_with_usage(60, "first"),
+        _response_done_with_usage(60, "second"),   # 120 > TINY_TOKEN_BUDGET
+        GREETING_DONE,                              # never reached
+    ])
+
+    asyncio.run(run_call("call_budget", client, "+15125559999", lambda: Session(test_engine),
+                         connect=connector_for(ws), trace=trace,
+                         max_call_tokens=TINY_TOKEN_BUDGET))
+
+    stages = [r["stage"] for r in trace.records if r["kind"] == "stage"]
+    assert "call_budget_exceeded" in stages
+    assert "call_completed" not in stages
+    exceeded = next(r for r in trace.records if r.get("stage") == "call_budget_exceeded")
+    assert exceeded["total_tokens"] == 120
+
+
+def test_booking_completed_before_budget_exceeded_is_preserved(test_engine, monkeypatch):
+    import xai_voice_adapter as adapter
+    from xai_voice_adapter import run_call
+    from call_trace import CallTrace
+
+    monkeypatch.setattr(adapter, "notify_owner_of_booking", lambda *a, **k: True)
+    monkeypatch.setattr(adapter, "notify_owner_of_escalation", lambda *a, **k: True)
+    client = _seed_business(test_engine)
+    trace = CallTrace("call_budget_book")
+    ws = FakeWS([
+        LOG_JOB_EVENT,
+        _response_done_with_usage(60),
+        _response_done_with_usage(60),   # tips over budget after the booking
+    ])
+
+    asyncio.run(run_call("call_budget_book", client, "+15125559999", lambda: Session(test_engine),
+                         connect=connector_for(ws), trace=trace,
+                         max_call_tokens=TINY_TOKEN_BUDGET))
+
+    with Session(test_engine) as s:
+        jobs = s.exec(select(Job).where(Job.business_id == client.id)).all()
+    assert len(jobs) == 1
+    assert jobs[0].service_type == "burst pipe"
+    stages = [r["stage"] for r in trace.records if r["kind"] == "stage"]
+    assert "call_budget_exceeded" in stages
+
+
+def test_escalation_completed_before_budget_exceeded_is_preserved(test_engine, monkeypatch):
+    """Mirrors Priority 4's timeout-after-escalation guarantee: the
+    escalation's own page and the budget cutoff's own notification are two
+    distinct incidents, neither suppresses nor duplicates the other."""
+    import xai_voice_adapter as adapter
+    from db_models import OwnerNotification
+    from xai_voice_adapter import run_call
+    from call_trace import CallTrace
+
+    monkeypatch.setattr(adapter, "notify_owner_of_escalation", lambda *a, **k: True)
+    client = _seed_business(test_engine)
+    trace = CallTrace("call_budget_esc")
+    ws = FakeWS([
+        ALERT_OWNER_EVENT,
+        _response_done_with_usage(60),
+        _response_done_with_usage(60),
+    ])
+
+    asyncio.run(run_call("call_budget_esc", client, "+15125559999", lambda: Session(test_engine),
+                         connect=connector_for(ws), trace=trace,
+                         max_call_tokens=TINY_TOKEN_BUDGET))
+
+    with Session(test_engine) as s:
+        jobs = s.exec(select(Job).where(Job.business_id == client.id)).all()
+        notifications = s.exec(
+            select(OwnerNotification).where(OwnerNotification.business_id == client.id)
+        ).all()
+    assert len(jobs) == 1
+    assert jobs[0].owner_alerted_at is not None
+    assert len(notifications) == 2
+    assert sorted(n.kind for n in notifications) == sorted(["escalation", "call_dropped"])
+
+
+def test_cleanup_after_budget_termination(test_engine, monkeypatch, tmp_path):
+    import xai_voice_adapter as adapter
+    from xai_voice_adapter import run_call
+    from call_trace import CallTrace
+
+    monkeypatch.setattr(adapter, "notify_owner_of_escalation", lambda *a, **k: True)
+    client = _seed_business(test_engine)
+    trace = CallTrace("call_budget_cleanup", capture_dir=tmp_path)
+    ws = FakeWS([_response_done_with_usage(60), _response_done_with_usage(60)])
+
+    asyncio.run(run_call("call_budget_cleanup", client, "+15125559999", lambda: Session(test_engine),
+                         connect=connector_for(ws), trace=trace,
+                         max_call_tokens=TINY_TOKEN_BUDGET))
+
+    assert trace._fh is None, "the capture file handle must be closed, not left open"
+    assert (tmp_path / "call_budget_cleanup.jsonl").exists()
+
+
+def test_budget_and_duration_caps_do_not_interfere(test_engine, monkeypatch):
+    """A cheap call that goes idle must still end via the DURATION cap, not
+    be affected by (or accidentally trip) the separate token-budget check —
+    Priority 4's mechanism is untouched by this change."""
+    import xai_voice_adapter as adapter
+    from xai_voice_adapter import run_call
+    from call_trace import CallTrace
+
+    monkeypatch.setattr(adapter, "notify_owner_of_escalation", lambda *a, **k: True)
+    client = _seed_business(test_engine)
+    trace = CallTrace("call_duration_still_works")
+    ws = HangingWS([_response_done_with_usage(1, "hi")])   # far under any budget
+
+    asyncio.run(run_call("call_duration_still_works", client, "+15125559999",
+                         lambda: Session(test_engine),
+                         connect=tracking_connector_for(ws), trace=trace,
+                         max_duration_seconds=TINY_TIMEOUT,
+                         max_call_tokens=1_000_000))
+
+    stages = [r["stage"] for r in trace.records if r["kind"] == "stage"]
+    assert "call_timed_out" in stages
+    assert "call_budget_exceeded" not in stages
+
+
+def test_malformed_usage_information_is_treated_as_zero(test_engine):
+    """A missing/malformed usage field must never crash the call — the
+    budget cap exists to protect the call, not to become a new way to break
+    it over a reporting hiccup."""
+    from xai_voice_adapter import run_call
+    from call_trace import CallTrace
+
+    client = _seed_business(test_engine)
+    trace = CallTrace("call_bad_usage")
+    ws = FakeWS([
+        {"type": "response.done", "response": {"output": [], "usage": "not a dict"}},
+        {"type": "response.done", "response": {"output": [], "usage": {"total_tokens": "lots"}}},
+        {"type": "response.done", "response": {}},   # no usage key at all
+        LOG_JOB_EVENT,
+    ])
+
+    asyncio.run(run_call("call_bad_usage", client, "+15125559999", lambda: Session(test_engine),
+                         connect=connector_for(ws), trace=trace,
+                         max_call_tokens=TINY_TOKEN_BUDGET))
+
+    stages = [r["stage"] for r in trace.records if r["kind"] == "stage"]
+    assert "call_completed" in stages
+    assert "call_budget_exceeded" not in stages
+    with Session(test_engine) as s:
+        jobs = s.exec(select(Job).where(Job.business_id == client.id)).all()
+    assert len(jobs) == 1
+
+
 # ---- Webhook hardening: fail closed, reject replays --------------------------
 
 def _fresh_signed(body: bytes, secret: str):
