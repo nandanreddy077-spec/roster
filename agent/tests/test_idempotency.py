@@ -55,6 +55,52 @@ def test_book_job_same_thread_and_service_updates_instead_of_duplicating(test_en
     assert jobs[0].customer_name == "Jane"
 
 
+def test_book_job_persists_preferred_window(test_engine):
+    """Sprint 1 (conversation-quality audit): a preference only, never a
+    confirmed appointment — just captured and passed through like every
+    other optional field."""
+    from bookings import book_job
+
+    b = _seed(test_engine)
+    with Session(test_engine) as s:
+        job, created = book_job(s, s.get(Business, b.id), "+15550001111", "+15550001111",
+                                {"service_type": "burst pipe", "urgency": "emergency",
+                                 "preferred_window": "Thursday afternoon"})
+
+    assert created is True
+    assert job.preferred_window == "Thursday afternoon"
+
+
+def test_book_job_merges_preferred_window_on_a_repeat_call(test_engine):
+    from bookings import book_job
+
+    b = _seed(test_engine)
+    with Session(test_engine) as s:
+        job1, _ = book_job(s, s.get(Business, b.id), "+15550001111", "+15550001111",
+                           {"service_type": "burst pipe", "urgency": "emergency"})
+        job2, created2 = book_job(s, s.get(Business, b.id), "+15550001111", "+15550001111",
+                                  {"service_type": "burst pipe", "urgency": "emergency",
+                                   "preferred_window": "tomorrow morning"})
+
+    assert created2 is False
+    assert job1.id == job2.id
+    assert job2.preferred_window == "tomorrow morning"
+
+
+def test_book_job_without_preferred_window_leaves_it_unset(test_engine):
+    """Regression: the existing booking flow (no preferred_window supplied)
+    must behave exactly as before."""
+    from bookings import book_job
+
+    b = _seed(test_engine)
+    with Session(test_engine) as s:
+        job, created = book_job(s, s.get(Business, b.id), "+15550001111", "+15550001111",
+                                {"service_type": "burst pipe", "urgency": "emergency"})
+
+    assert created is True
+    assert job.preferred_window is None
+
+
 def test_book_job_different_service_creates_second_job(test_engine):
     from bookings import book_job
 

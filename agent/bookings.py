@@ -50,7 +50,7 @@ def book_job(
     )
 
     if match is not None:
-        for field in ("customer_name", "address", "notes", "callback_number"):
+        for field in ("customer_name", "address", "notes", "callback_number", "preferred_window"):
             value = args.get(field)
             if value:
                 setattr(match, field, value)
@@ -73,6 +73,7 @@ def book_job(
         address=args.get("address"),
         callback_number=args.get("callback_number") or caller_number,
         notes=args.get("notes"),
+        preferred_window=args.get("preferred_window"),
     )
     session.add(job)
     session.commit()

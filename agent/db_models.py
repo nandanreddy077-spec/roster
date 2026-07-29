@@ -121,6 +121,10 @@ class Job(SQLModel, table=True):
     # "review requests sent" counts real sends rather than inferring them from
     # completion. Every review request is a first-class record we can drill into.
     review_requested_at: Optional[datetime] = None
+    # A stated preference only ("Thursday afternoon"), never a confirmed
+    # appointment — Frontdesk has no scheduling/dispatch system to actually
+    # book a slot against (Sprint 1, 2026-07-29 conversation-quality audit).
+    preferred_window: Optional[str] = None
     # Set only once alert_owner's SMS has actually been delivered for this
     # escalation Job — lets a retry after a FAILED page still go through while
     # a repeat call after a SUCCESSFUL one is deduped (bookings.record_escalation).

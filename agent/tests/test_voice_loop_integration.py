@@ -314,6 +314,28 @@ def test_run_call_persists_job_from_log_job_event(test_engine):
     assert jobs[0].customer_name == "Jane Doe"
 
 
+def test_run_call_persists_preferred_window_from_log_job_event(test_engine):
+    """Sprint 1 (conversation-quality audit): the tool schema's new field
+    flows through the real dispatch path, not just the unit-level
+    bookings.book_job call — end to end through _handle_function_call."""
+    from xai_voice_adapter import run_call
+    from call_trace import CallTrace
+
+    client = _seed_business(test_engine)
+    event_with_window = dict(LOG_JOB_EVENT, arguments=json.dumps({
+        "service_type": "burst pipe", "urgency": "emergency",
+        "customer_name": "Jane Doe", "preferred_window": "Thursday afternoon",
+    }))
+    ws = FakeWS([event_with_window])
+
+    asyncio.run(run_call("call_pw1", client, "+15125559999", lambda: Session(test_engine),
+                         connect=connector_for(ws), trace=CallTrace("call_pw1")))
+
+    with Session(test_engine) as s:
+        job = s.exec(select(Job).where(Job.business_id == client.id)).first()
+    assert job.preferred_window == "Thursday afternoon"
+
+
 def test_run_call_defaults_callback_number_to_caller(test_engine):
     from xai_voice_adapter import run_call
     from call_trace import CallTrace

@@ -155,6 +155,7 @@ def _migrate_add_columns():
         "ALTER TABLE business ADD COLUMN pipeline_stage VARCHAR DEFAULT 'lead'",
         "ALTER TABLE job ADD COLUMN review_requested_at DATETIME",
         "ALTER TABLE job ADD COLUMN owner_alerted_at DATETIME",
+        "ALTER TABLE job ADD COLUMN preferred_window VARCHAR",
     )
     with engine.connect() as conn:
         for ddl in statements:

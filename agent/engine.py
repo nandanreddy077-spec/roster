@@ -1,4 +1,5 @@
 import os
+from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 import anthropic
@@ -31,6 +32,15 @@ LOG_JOB_TOOL = {
             "address": {"type": "string"},
             "callback_number": {"type": "string"},
             "notes": {"type": "string"},
+            "preferred_window": {
+                "type": "string",
+                "description": (
+                    "The day/time the customer says works best for them, in their own "
+                    "words (e.g. 'Thursday afternoon', 'mornings only'). A stated "
+                    "preference only — never a confirmed appointment, since nothing "
+                    "actually checks technician availability yet."
+                ),
+            },
         },
         "required": ["service_type", "urgency"],
     },
@@ -61,8 +71,115 @@ TRANSFER_CALL_TOOL = {
 }
 
 
-def build_system_prompt(client: ClientConfig) -> str:
+# Per-trade triage guidance (2026-07-29, conversation-quality audit, Sprint 1):
+# one generic prompt for all 10 supported trades meant no trade-specific
+# diagnostic questions and no trade-specific emergency examples — Electrical
+# in particular had no hazard example at all, since the hardcoded emergencies
+# (gas leak, flooding, no heat) are HVAC/plumbing-specific. Plain copy, same
+# shape as roles.py's RECEPTIONIST_TRADE_NAMES: a dict keyed on the
+# normalized trade string, no new architecture.
+TRADE_TRIAGE_NOTES: Dict[str, str] = {
+    "hvac": (
+        "For this trade: ask whether the system runs at all and what the "
+        "thermostat is set to. Treat no heat in freezing weather, no AC in "
+        "dangerous heat, or any burning smell from the unit as an emergency."
+    ),
+    "plumbing": (
+        "For this trade: ask whether water is actively leaking right now and "
+        "whether they know where the shutoff valve is. Treat an actively "
+        "leaking pipe, a sewage backup, or no water at all as an emergency."
+    ),
+    "electrical": (
+        "For this trade: ask whether there's any sparking, a burning smell, "
+        "or a breaker that keeps tripping, and whether the power is still on. "
+        "Treat sparking, a burning smell, or exposed wiring as an emergency — "
+        "these are fire risks."
+    ),
+    "roofing": (
+        "For this trade: ask whether it's water actively coming inside right "
+        "now, and whether it's one section or the whole roof. Treat active "
+        "leaking during a storm, or visible structural sagging, as an emergency."
+    ),
+    "landscaping": (
+        "For this trade: ask whether this is routine work or storm/damage "
+        "related, and whether a fallen tree or branch is on a structure, "
+        "vehicle, or power line. Treat anything on a structure, car, or power "
+        "line as an emergency."
+    ),
+    "cleaning": (
+        "For this trade: ask whether this is a one-time or recurring visit, "
+        "and if one-time, whether it's a move-in/move-out clean with a "
+        "deadline. This trade rarely has true emergencies."
+    ),
+    "garage door": (
+        "For this trade: ask whether the door is stuck open or stuck closed, "
+        "and whether it's the spring, cables, or the opener. A door stuck "
+        "open is a security concern and more urgent than one stuck closed."
+    ),
+    "pest control": (
+        "For this trade: ask what kind of pest and how severe, and whether "
+        "anyone has been stung or has a known allergy. Treat a bee or wasp "
+        "swarm, or a sting on someone with a known allergy, as an emergency."
+    ),
+    "painting": (
+        "For this trade: ask whether it's interior or exterior work and "
+        "roughly when they'd like it done. This trade rarely has true "
+        "emergencies."
+    ),
+    "pool service": (
+        "For this trade: ask whether the water is green or cloudy (a "
+        "chemistry issue) versus equipment not working, or a safety issue "
+        "like a broken fence or gate. Treat a broken pool fence or gate, "
+        "especially with children nearby, as an emergency."
+    ),
+}
+DEFAULT_TRIAGE_NOTE = (
+    "Ask enough questions to understand what's actually needed and how "
+    "urgent it is before booking."
+)
+
+
+def _trade_triage_note(trade: str) -> str:
+    """Same normalization as roles.py's receptionist_display_name — trade
+    is free text from onboarding, so casing isn't reliable. Falls back to a
+    safe generic note for a trade outside the 10 supported ones, same
+    DEFAULT-fallback discipline as DEFAULT_RECEPTIONIST_NAME there."""
+    return TRADE_TRIAGE_NOTES.get((trade or "").strip().lower(), DEFAULT_TRIAGE_NOTE)
+
+
+def _format_now(now: Optional[datetime]) -> str:
+    """The current date/time, formatted plainly for a prompt (2026-07-29,
+    conversation-quality audit) — neither prompt injected this before, so
+    the model had no way to reason about "after hours" even though the
+    "backup" answer_mode exists specifically for missed/after-hours calls.
+    Server local time: Business has no stored timezone field, so this is
+    the best available without adding one (out of this sprint's scope)."""
+    return (now or datetime.now()).strftime("%A, %B %d, %I:%M %p")
+
+
+# Shared across both prompts (2026-07-29, Sprint 1): recognizing a
+# reschedule/cancel call, and asking for (never promising) a preferred
+# window. Frontdesk has no scheduling/dispatch system — that's the
+# not-yet-built Operations department — so both instructions are careful to
+# stay honest about what hasn't actually happened yet.
+_RESCHEDULE_NOTE = (
+    "If the caller is asking to change or cancel an appointment they already "
+    "have, don't try to book it as a new job — gather what they want changed "
+    "(and log_job it with a note), and tell them honestly that someone will "
+    "call to confirm the change."
+)
+_PREFERRED_WINDOW_NOTE = (
+    "Before ending the conversation, ask what day or time window generally "
+    "works best for them, and pass it as preferred_window when you call "
+    "log_job. This is only their stated preference — never confirm it as a "
+    "booked appointment time, since nothing checks real availability yet."
+)
+
+
+def build_system_prompt(client: ClientConfig, now: Optional[datetime] = None) -> str:
     return f"""You are the AI front desk for {client.business_name}, a {client.trade} business.
+
+Right now it's {_format_now(now)}.
 
 Your job: text back customers who called and couldn't reach anyone, answer their
 questions, and capture enough detail to book the job.
@@ -72,16 +189,21 @@ Hours: {client.hours}
 Pricing & FAQ info: {client.pricing_faq}
 Tone: {client.tone}
 
+{_trade_triage_note(client.trade)}
+
 If the situation is a true emergency (e.g. gas leak, flooding, no heat in freezing
 weather), tell the customer you're alerting someone immediately and mark
 urgency='emergency' when you call log_job.
 
+{_RESCHEDULE_NOTE}
+
 Keep replies short, warm, and text-message length (1-3 sentences). Never make up a
-price or appointment time you don't actually know. Once you have a service type and
-contact info, call log_job to capture the lead, then keep texting naturally."""
+price or appointment time you don't actually know. {_PREFERRED_WINDOW_NOTE} Once you
+have a service type and contact info, call log_job to capture the lead, then keep
+texting naturally."""
 
 
-def build_voice_system_prompt(client: ClientConfig) -> str:
+def build_voice_system_prompt(client: ClientConfig, now: Optional[datetime] = None) -> str:
     if client.answer_mode == "primary":
         greeting_note = "You are the first point of contact — answer warmly like a normal receptionist."
     else:
@@ -93,12 +215,16 @@ def build_voice_system_prompt(client: ClientConfig) -> str:
     return f"""You are the AI receptionist for {client.business_name}, a {client.trade} business, \
 speaking live on the phone with a caller.
 
+Right now it's {_format_now(now)}.
+
 {greeting_note}
 
 Services offered: {", ".join(client.services)}
 Hours: {client.hours}
 Pricing & FAQ info: {client.pricing_faq}
 Tone: {client.tone}
+
+{_trade_triage_note(client.trade)}
 
 Speak naturally, in short sentences suited for a live conversation — this is a phone \
 call, not a text message. Never make up a price or appointment time you don't \
@@ -115,7 +241,13 @@ call themselves — never claim help is coming when it isn't.
 
 If the caller is upset, has a complaint, or asks for something you can't confidently \
 handle, call alert_owner and give the caller the owner's direct number \
-{client.escalation_phone} rather than guessing.
+{client.escalation_phone} rather than guessing. If the caller directly asks to speak \
+to a person, comply immediately the same way — call alert_owner and give them \
+{client.escalation_phone} — rather than trying to keep helping first.
+
+{_RESCHEDULE_NOTE}
+
+{_PREFERRED_WINDOW_NOTE}
 
 Once you have a service type and contact info, call log_job to capture the lead \
 before ending the call."""

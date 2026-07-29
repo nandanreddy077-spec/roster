@@ -171,3 +171,123 @@ def test_sms_prompt_includes_tone():
 def test_client_config_tone_defaults_to_professional_and_friendly():
     config = make_client_config()
     assert config.tone == "professional and friendly"
+
+
+# ---- Sprint 1: conversation-quality audit fixes -----------------------------
+# (docs/superpowers/specs/2026-07-29-frontdesk-conversation-quality-audit.md)
+
+import datetime as _datetime
+
+FIXED_NOW = _datetime.datetime(2026, 7, 29, 21, 47)
+
+
+def test_sms_prompt_includes_current_date_and_time():
+    config = make_client_config()
+    prompt = build_system_prompt(config, now=FIXED_NOW)
+    assert "Wednesday, July 29" in prompt
+    assert "09:47 PM" in prompt
+
+
+def test_voice_prompt_includes_current_date_and_time():
+    config = make_client_config()
+    prompt = build_voice_system_prompt(config, now=FIXED_NOW)
+    assert "Wednesday, July 29" in prompt
+    assert "09:47 PM" in prompt
+
+
+def test_sms_prompt_defaults_now_to_the_real_current_time_when_omitted():
+    """The injectable `now` is for tests — production calls it with nothing,
+    which must fall back to the real clock, not raise or produce a blank."""
+    import re
+
+    config = make_client_config()
+    prompt = build_system_prompt(config)
+    assert re.search(r"\d{2}:\d{2} (AM|PM)", prompt)
+
+
+TRADE_TRIAGE_CASES = {
+    "HVAC": ["thermostat", "burning smell"],
+    "Plumbing": ["shutoff", "leaking"],
+    "Electrical": ["sparking", "breaker"],
+    "Roofing": ["water actively coming inside", "section"],
+    "Landscaping": ["fallen tree", "power line"],
+    "Cleaning": ["one-time", "recurring"],
+    "Garage Door": ["stuck open", "stuck closed"],
+    "Pest Control": ["stung", "allergy"],
+    "Painting": ["interior", "exterior"],
+    "Pool Service": ["cloudy", "fence"],
+}
+
+
+def test_every_supported_trade_gets_its_own_triage_guidance_sms():
+    for trade, expected_fragments in TRADE_TRIAGE_CASES.items():
+        prompt = build_system_prompt(make_client_config(trade=trade), now=FIXED_NOW)
+        for fragment in expected_fragments:
+            assert fragment.lower() in prompt.lower(), (
+                f"{trade}'s triage guidance missing {fragment!r} from the SMS prompt"
+            )
+
+
+def test_every_supported_trade_gets_its_own_triage_guidance_voice():
+    for trade, expected_fragments in TRADE_TRIAGE_CASES.items():
+        prompt = build_voice_system_prompt(make_client_config(trade=trade), now=FIXED_NOW)
+        for fragment in expected_fragments:
+            assert fragment.lower() in prompt.lower(), (
+                f"{trade}'s triage guidance missing {fragment!r} from the voice prompt"
+            )
+
+
+def test_trade_matching_is_case_insensitive_like_receptionist_display_name():
+    """Mirrors roles.py's own `.strip().lower()` normalization — trade values
+    arrive with inconsistent casing (onboarding is free text)."""
+    lower_prompt = build_system_prompt(make_client_config(trade="hvac"), now=FIXED_NOW)
+    upper_prompt = build_system_prompt(make_client_config(trade="HVAC"), now=FIXED_NOW)
+    assert "thermostat" in lower_prompt.lower()
+    assert "thermostat" in upper_prompt.lower()
+
+
+def test_an_unrecognized_trade_still_gets_a_safe_default_note():
+    """Never crash or omit triage guidance entirely for a trade string
+    outside the 10 supported ones — same DEFAULT-fallback discipline as
+    roles.py's DEFAULT_RECEPTIONIST_NAME."""
+    prompt = build_system_prompt(make_client_config(trade="Fencing"), now=FIXED_NOW)
+    assert "log_job" in prompt   # built fine, no crash
+    # And it must not accidentally pick up another trade's specific guidance.
+    assert "thermostat" not in prompt.lower()
+
+
+def test_hvac_triage_does_not_leak_into_a_plumbing_prompt():
+    prompt = build_system_prompt(make_client_config(trade="Plumbing"), now=FIXED_NOW)
+    assert "thermostat" not in prompt.lower()
+
+
+def test_voice_prompt_tells_the_model_to_honor_a_direct_request_for_a_human():
+    prompt = build_voice_system_prompt(make_client_config(), now=FIXED_NOW)
+    lower = prompt.lower()
+    assert "speak to a person" in lower or "talk to a person" in lower
+    assert "alert_owner" in lower  # the instruction routes through the existing tool, not a new one
+
+
+def test_both_prompts_instruct_recognizing_reschedule_or_cancel_intent():
+    sms = build_system_prompt(make_client_config(), now=FIXED_NOW).lower()
+    voice = build_voice_system_prompt(make_client_config(), now=FIXED_NOW).lower()
+    for prompt in (sms, voice):
+        assert "reschedule" in prompt or "cancel" in prompt
+        assert "someone will" in prompt or "confirm" in prompt
+
+
+def test_both_prompts_ask_for_a_preferred_window_without_promising_availability():
+    sms = build_system_prompt(make_client_config(), now=FIXED_NOW).lower()
+    voice = build_voice_system_prompt(make_client_config(), now=FIXED_NOW).lower()
+    for prompt in (sms, voice):
+        assert "preferred_window" in prompt
+        assert "never" in prompt or "not a confirmed" in prompt or "not confirm" in prompt
+
+
+def test_log_job_tool_schema_has_preferred_window():
+    props = LOG_JOB_TOOL["input_schema"]["properties"]
+    assert "preferred_window" in props
+    assert props["preferred_window"]["type"] == "string"
+    # Still optional — a caller who won't commit to a window shouldn't block
+    # the booking itself.
+    assert "preferred_window" not in LOG_JOB_TOOL["input_schema"]["required"]
