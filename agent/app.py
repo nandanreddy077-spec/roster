@@ -226,7 +226,11 @@ def landing_preview_styles():
     return FileResponse(LANDING_DIR / "styles-v2.css", media_type="text/css")
 
 
-_DEPARTMENT_STATE_LABELS = {
+# The FOUNDER's wording for each department state. The customer portal keeps
+# its own map over the same states — departments.DepartmentStatus is
+# deliberately presentation-neutral so neither audience's voice leaks into the
+# other's screen.
+_FOUNDER_STATE_LABELS = {
     "staffed": "Staffed",
     "partial": "Partially staffed",
     "empty": "Not staffed",
@@ -252,37 +256,17 @@ def _employees_by_business(session, business_ids: list) -> dict:
     return grouped
 
 
-def _department_rows(employees: list) -> list:
-    """Every department, with what's actually deployed for this business.
+def _founder_department_rows(employees: list) -> list:
+    """The shared department facts, paired with the FOUNDER's wording.
 
-    Renders the full org every time so the founder sees the whole company,
-    with honest per-department state — replacing a roster that hardcoded
-    Frontdesk as active for every business whether or not it was deployed.
+    The computation lives in departments.department_status_for so the customer
+    dashboard answers "what's deployed?" with the identical code over the
+    identical rows. Only the labels are ours.
     """
-    deployed = {
-        departments.canonical_role_key(e.role_key)
-        for e in employees if e.status != "fired"
-    }
-    rows = []
-    for department in departments.REGISTRY:
-        deployable = departments.deployable_employees_for(department.key)
-        staffed = [d for d in deployable if departments.canonical_role_key(d.key) in deployed]
-        if not deployable:
-            state = "unavailable"
-        elif len(staffed) == len(deployable):
-            state = "staffed"
-        elif staffed:
-            state = "partial"
-        else:
-            state = "empty"
-        rows.append({
-            "department": department,
-            "deployable": deployable,
-            "staffed": staffed,
-            "state": state,
-            "state_label": _DEPARTMENT_STATE_LABELS[state],
-        })
-    return rows
+    return [
+        {"status": s, "label": _FOUNDER_STATE_LABELS[s.state]}
+        for s in departments.department_status_for(employees)
+    ]
 
 
 @app.get("/clients")
@@ -808,7 +792,7 @@ def client_detail(request: Request, client_id: int):
         referral_leads = session.exec(
             select(ReferralLead).where(ReferralLead.business_id == client_id).order_by(ReferralLead.created_at.desc())
         ).all()
-        department_rows = _department_rows(
+        department_rows = _founder_department_rows(
             session.exec(select(Employee).where(Employee.business_id == client_id)).all()
         )
         # Oldest first — a work queue, so ops handles what has waited longest.

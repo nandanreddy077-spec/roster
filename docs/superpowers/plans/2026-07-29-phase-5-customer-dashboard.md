@@ -157,16 +157,36 @@ routing to Phase 3's `record_interest` instead — never a form that deploys.
 
 ## Task 1: Move the shared view model out of `app.py`
 
-**Files:** `agent/departments.py`, `agent/app.py`, `agent/tests/test_departments.py`
+**Files:** `agent/departments.py`, `agent/app.py`, `agent/templates/client_detail.html`, `agent/tests/test_departments.py`
 
-Move `_department_rows`'s computation into `departments.department_status_for(employees)`,
-returning per-department `state` (`staffed` | `partial` | `empty` | `unavailable`)
-with **no labels**. `app.py` maps state → founder label; Phase 5's portal maps
-state → customer label. Pure refactor: `test_ops_console.py` must stay green
-**unmodified**, which is the proof the founder surface's behavior is unchanged.
+Move `_department_rows`'s computation into
+`departments.department_status_for(employees) -> list[DepartmentStatus]`.
 
-**Tests:** state computation for each of the four cases; a test asserting
-`app.py` no longer defines its own version; existing ops-console tests green.
+**`DepartmentStatus` is presentation-neutral — facts only** (founder,
+2026-07-29). Exactly these fields, and no others:
+
+| Field | Type |
+|---|---|
+| `department` | `Department` |
+| `deployable` | `list[EmployeeDefinition]` |
+| `staffed` | `list[EmployeeDefinition]` |
+| `deployed_count` | `int` |
+| `deployable_count` | `int` |
+| `state` | `"staffed" \| "partial" \| "empty" \| "unavailable"` |
+
+**No wording of any kind lives here.** The founder surface maps state →
+"Not staffed"; the customer surface maps state → "Not yet part of your
+workforce". Same facts, independent presentation — which is what makes the
+invariant *shared computation, independent presentation* rather than shared
+computation plus a shared voice. A wording field in this object would leak
+one audience's tone into the other's screen the first time either changed.
+
+Pure refactor: `test_ops_console.py` must stay green **unmodified** — that is
+the proof the founder surface's behavior is unchanged.
+
+**Tests:** state and counts for each of the four cases; **a permanent guard
+asserting `DepartmentStatus` carries no presentation field**; `app.py` no
+longer defines its own version; existing ops-console tests green.
 
 **Expected:** `438 passing`.
 

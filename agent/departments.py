@@ -185,6 +185,62 @@ def department_for_role(role_key: str):
     return _BY_KEY.get(department_key)
 
 
+@dataclass(frozen=True)
+class DepartmentStatus:
+    """What is actually deployed in one department for one business.
+
+    PRESENTATION-NEUTRAL BY RULE (founder, 2026-07-29). Facts only — no
+    labels, no copy, no wording. The founder console renders `empty` as
+    "Not staffed"; the customer dashboard renders the same `empty` as "Not yet
+    part of your workforce". Shared computation, independent presentation:
+    a wording field here would leak one audience's voice onto the other's
+    screen the first time either changed.
+
+    Both surfaces MUST derive deployment state from this — never from
+    requested_roster, a tested_at timestamp, or a hardcoded template badge
+    (the blueprint's permanent state-derivation invariant).
+    """
+    department: Department
+    deployable: List          # EmployeeDefinition — can be provisioned today
+    staffed: List             # EmployeeDefinition — actually deployed
+    deployed_count: int
+    deployable_count: int
+    state: str                # staffed | partial | empty | unavailable
+
+
+def department_status_for(employees) -> List[DepartmentStatus]:
+    """Every department's real state for one business, in display order.
+
+    Takes any iterable of objects with .role_key and .status — duck-typed, so
+    this module still never imports db_models.
+    """
+    deployed = {
+        canonical_role_key(e.role_key)
+        for e in employees if e.status != "fired"
+    }
+    statuses = []
+    for department in REGISTRY:
+        deployable = deployable_employees_for(department.key)
+        staffed = [d for d in deployable if canonical_role_key(d.key) in deployed]
+        if not deployable:
+            state = "unavailable"
+        elif len(staffed) == len(deployable):
+            state = "staffed"
+        elif staffed:
+            state = "partial"
+        else:
+            state = "empty"
+        statuses.append(DepartmentStatus(
+            department=department,
+            deployable=deployable,
+            staffed=staffed,
+            deployed_count=len(staffed),
+            deployable_count=len(deployable),
+            state=state,
+        ))
+    return statuses
+
+
 def canonical_role_key(role_key: str) -> str:
     """The registry spelling of a role key, resolving legacy spellings.
     roles.ROLE_KEYS emits "retention" where the registry says

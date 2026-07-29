@@ -178,3 +178,87 @@ def test_hireable_departments_is_the_six_sellable_ones():
     keys = [d.key for d in hireable_departments()]
     assert "leadership" not in keys
     assert len(keys) == 6
+
+
+# --- department_status_for: the ONE computation both surfaces share -----------
+
+from departments import DepartmentStatus, department_status_for
+
+
+def _status_by_key(employees):
+    return {s.department.key: s for s in department_status_for(employees)}
+
+
+def test_department_status_covers_every_department_in_display_order():
+    assert [s.department.key for s in department_status_for([])] == CANONICAL_ORDER
+
+
+def test_a_department_with_nothing_deployed_is_empty():
+    s = _status_by_key([])["customer_service"]
+    assert s.state == "empty"
+    assert s.deployed_count == 0
+    assert s.deployable_count == 2  # frontdesk + reviews
+    assert s.staffed == []
+
+
+def test_a_fully_deployed_department_is_staffed():
+    s = _status_by_key([
+        FakeEmployee("frontdesk"), FakeEmployee("reviews"),
+    ])["customer_service"]
+    assert s.state == "staffed"
+    assert s.deployed_count == 2
+    assert s.deployable_count == 2
+    assert {e.key for e in s.staffed} == {"frontdesk", "reviews"}
+
+
+def test_a_half_deployed_department_is_partial():
+    s = _status_by_key([FakeEmployee("frontdesk")])["customer_service"]
+    assert s.state == "partial"
+    assert s.deployed_count == 1
+    assert s.deployable_count == 2
+
+
+def test_a_department_with_no_deployable_employees_is_unavailable():
+    """Operations/Finance/Marketing are hireable but every role in them is
+    still `planned` — there is nothing to deploy yet."""
+    s = _status_by_key([])["operations"]
+    assert s.state == "unavailable"
+    assert s.deployable_count == 0
+
+
+def test_a_fired_employee_does_not_count_as_staffed():
+    s = _status_by_key([FakeEmployee("frontdesk", status="fired")])["customer_service"]
+    assert s.state == "empty"
+    assert s.deployed_count == 0
+
+
+def test_the_legacy_retention_key_counts_toward_its_department():
+    """Real rows carry "retention"; the registry says "retention_manager".
+    Without normalizing, a deployed Retention Manager would read as unstaffed."""
+    s = _status_by_key([FakeEmployee("retention")])["customer_success"]
+    assert s.state == "staffed"
+    assert s.deployed_count == 1
+
+
+def test_department_status_carries_no_presentation_wording():
+    """THE guard on the founder's architectural rule (2026-07-29): facts only.
+
+    Both surfaces derive their own labels from these facts — the founder says
+    'Not staffed', the customer says 'Not yet part of your workforce'. A
+    wording field here would leak one audience's voice onto the other's screen
+    the first time either changed."""
+    assert set(DepartmentStatus.__dataclass_fields__) == {
+        "department", "deployable", "staffed",
+        "deployed_count", "deployable_count", "state",
+    }
+
+
+def test_app_does_not_define_its_own_department_state():
+    """C3: one implementation. If the founder console grows a private copy,
+    the two surfaces can drift — which is the whole failure this move
+    prevents."""
+    import app
+
+    assert not hasattr(app, "_department_rows"), (
+        "app.py must consume departments.department_status_for, not reimplement it"
+    )
