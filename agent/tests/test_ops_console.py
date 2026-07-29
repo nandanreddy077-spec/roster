@@ -309,3 +309,98 @@ def test_existing_live_businesses_backfill_to_the_live_stage(test_engine, monkey
 
     with Session(test_engine) as s:
         assert s.get(Business, bid).pipeline_stage == "live"
+
+
+# --- expansion requests (B8) --------------------------------------------------
+
+
+def test_open_expansion_requests_are_shown_oldest_first(test_engine, monkeypatch):
+    """Asserts on a marker only the expansion section renders — every
+    department name already appears in the department grid, so matching on
+    'Finance' alone would pass without this section existing at all."""
+    from expansion import record_interest
+
+    monkeypatch.setattr(app_module, "engine", test_engine)
+    with Session(test_engine) as s:
+        bid = _business(s).id
+        record_interest(s, bid, "marketing")   # asked first
+        record_interest(s, bid, "finance")     # asked second
+
+    body = TestClient(app_module.app, headers=DASH_AUTH).get(f"/clients/{bid}").text
+
+    assert "Asked for Marketing" in body
+    assert "Asked for Finance" in body
+    # oldest first — a work queue, not a feed
+    assert body.index("Asked for Marketing") < body.index("Asked for Finance")
+
+
+def test_a_business_with_no_requests_shows_none(test_engine, monkeypatch):
+    monkeypatch.setattr(app_module, "engine", test_engine)
+    with Session(test_engine) as s:
+        bid = _business(s).id
+
+    body = TestClient(app_module.app, headers=DASH_AUTH).get(f"/clients/{bid}").text
+
+    assert "Asked for" not in body
+
+
+def test_actioning_a_request_removes_it_from_the_open_list(test_engine, monkeypatch):
+    from db_models import DepartmentInterest
+    from expansion import record_interest
+
+    monkeypatch.setattr(app_module, "engine", test_engine)
+    with Session(test_engine) as s:
+        bid = _business(s).id
+        interest_id = record_interest(s, bid, "finance").id
+
+    r = TestClient(app_module.app, headers=DASH_AUTH).post(
+        f"/clients/{bid}/interests/{interest_id}/actioned", follow_redirects=False
+    )
+
+    assert r.status_code == 303
+    with Session(test_engine) as s:
+        assert s.get(DepartmentInterest, interest_id).actioned_at is not None
+
+
+def test_actioning_the_same_request_twice_is_harmless(test_engine, monkeypatch):
+    """B8: mark_actioned is already idempotent — the route needs only PRG."""
+    from db_models import DepartmentInterest
+    from expansion import record_interest
+
+    monkeypatch.setattr(app_module, "engine", test_engine)
+    with Session(test_engine) as s:
+        bid = _business(s).id
+        interest_id = record_interest(s, bid, "finance").id
+    client = TestClient(app_module.app, headers=DASH_AUTH)
+
+    client.post(f"/clients/{bid}/interests/{interest_id}/actioned")
+    with Session(test_engine) as s:
+        first_time = s.get(DepartmentInterest, interest_id).actioned_at
+
+    second = client.post(f"/clients/{bid}/interests/{interest_id}/actioned",
+                         follow_redirects=False)
+
+    assert second.status_code == 303
+    with Session(test_engine) as s:
+        assert s.get(DepartmentInterest, interest_id).actioned_at == first_time
+
+
+def test_one_business_cannot_action_anothers_request(test_engine, monkeypatch):
+    """Business isolation at the ROUTE layer: the interest id is in the URL,
+    so the route must verify it belongs to the business in the path."""
+    from db_models import DepartmentInterest
+    from expansion import record_interest
+
+    monkeypatch.setattr(app_module, "engine", test_engine)
+    with Session(test_engine) as s:
+        a = _business(s, "A Co").id
+        b = _business(s, "B Co").id
+        theirs = record_interest(s, b, "finance").id
+
+    r = TestClient(app_module.app, headers=DASH_AUTH).post(
+        f"/clients/{a}/interests/{theirs}/actioned", follow_redirects=False
+    )
+
+    assert r.status_code == 404
+    with Session(test_engine) as s:
+        assert s.get(DepartmentInterest, theirs).actioned_at is None

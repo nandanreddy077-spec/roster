@@ -20,6 +20,25 @@
   </div>
 </section>
 
+{% if open_interests %}
+<section class="agent-roster">
+  <h2 class="agent-roster-heading">Expansion requests</h2>
+  <div class="agent-tile" style="max-width:640px;">
+    <p class="agent-tile-desc">Departments this customer asked about. Oldest first — handle the one that's waited longest.</p>
+    {% for row in open_interests %}
+    <div class="job-card">
+      <strong>Asked for {{ row.department.display_name if row.department else row.interest.department_key }}</strong>
+      <div>{{ row.interest.created_at.strftime('%b %d, %I:%M %p') }}</div>
+      <form method="post" action="/clients/{{ client.id }}/interests/{{ row.interest.id }}/actioned">
+        <button class="btn btn-secondary btn-small" type="submit">Mark handled</button>
+      </form>
+    </div>
+    {% endfor %}
+    <p class="agent-tile-desc" style="margin-top:12px;">Marking a request handled records that ops dealt with it — it does not deploy anything. Deploy below.</p>
+  </div>
+</section>
+{% endif %}
+
 <section class="agent-roster">
   <h2 class="agent-roster-heading">Departments</h2>
   {% if deploy_error %}<p class="job-notes">{{ deploy_error }}</p>{% endif %}

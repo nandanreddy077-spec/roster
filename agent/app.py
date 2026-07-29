@@ -32,6 +32,7 @@ from channels import get_channel
 import departments
 from db import DATA_DIR, engine, init_db
 from deployment import deploy_department, deploy_role
+from expansion import mark_actioned, open_interests_for
 from locks import conversation_lock
 from db_models import (
     AccessRequest, Business, Customer, DepartmentInterest, Employee, Event, Job, Message,
@@ -534,6 +535,27 @@ def complete_job(client_id: int, job_id: int):
 PIPELINE_STAGES = ("lead", "discovery", "provisioning", "qa", "live", "managed")
 
 
+@app.post("/clients/{client_id}/interests/{interest_id}/actioned")
+def action_department_interest(client_id: int, interest_id: int):
+    """Close an expansion request — ops has handled it, whether that meant
+    deploying the department or declining.
+
+    Handled is NOT deployed: this only closes the request. Deploying is the
+    separate action above, and Phase 3 has a permanent test asserting these
+    stay independent.
+
+    The interest id comes from the URL, so it is verified to belong to the
+    business in the path — business isolation is the security boundary
+    everywhere in Roster (platform PRD §12).
+    """
+    with Session(engine) as session:
+        interest = session.get(DepartmentInterest, interest_id)
+        if interest is None or interest.business_id != client_id:
+            raise HTTPException(status_code=404, detail="No such expansion request")
+        mark_actioned(session, interest_id)
+    return RedirectResponse(f"/clients/{client_id}", status_code=303)
+
+
 @app.post("/clients/{client_id}/pipeline-stage")
 def set_pipeline_stage(client_id: int, stage: str = Form(...)):
     """Move a business to an EXPLICIT pipeline stage.
@@ -740,6 +762,11 @@ def client_detail(request: Request, client_id: int):
         department_rows = _department_rows(
             session.exec(select(Employee).where(Employee.business_id == client_id)).all()
         )
+        # Oldest first — a work queue, so ops handles what has waited longest.
+        open_interests = [
+            {"interest": i, "department": departments.get_department(i.department_key)}
+            for i in open_interests_for(session, client_id)
+        ]
 
     chat = [
         {"role": m.role, "text": extract_display_text(json.loads(m.content_json))}
@@ -762,6 +789,7 @@ def client_detail(request: Request, client_id: int):
             "face_display_names": FACE_DISPLAY_NAMES,
             "referral_leads": referral_leads,
             "department_rows": department_rows,
+            "open_interests": open_interests,
             "pipeline_stages": PIPELINE_STAGES,
             "provision_error": request.query_params.get("provision_error"),
             "deploy_error": request.query_params.get("deploy_error"),
