@@ -183,64 +183,24 @@ async def _persist_job(session: Session, client: Business, thread: str, caller_n
     return job
 
 
-async def _handle_function_call(
-    ws, session: Session, client: Business, thread: str, caller_number: str,
-    event: Dict[str, Any], trace: CallTrace,
-) -> None:
-    name = event["name"]
-    call_id = event["call_id"]
-    args = json.loads(event["arguments"]) if event.get("arguments") else {}
-    trace.stage("tool_invoked", tool=name)
+# A single failing tool invocation must not end an otherwise healthy call
+# (2026-07-29 audit, "narrow per-tool error recovery") — the caller may still
+# need help with something else. Recoverable: malformed tool-call arguments,
+# and any exception raised while a tool actually executes (a booking DB
+# hiccup, an unexpected bug) — both are reported to the model as a plain
+# {"status": "error", ...} over the SAME function_call_output round-trip a
+# success uses, and the loop continues to the next event exactly as before.
+# Unrecoverable, by design, is anything OUTSIDE this function's try/except:
+# if `ws.send` itself fails, the transport is dead and there is no way to
+# tell the model or the caller anything — that still propagates up to
+# run_call's existing top-level crash handler, unchanged.
+GENERIC_TOOL_ERROR = {
+    "status": "error",
+    "detail": "Something went wrong on our end. Please try again.",
+}
 
-    if name == LOG_JOB_TOOL["name"]:
-        job = await _persist_job(session, client, thread, caller_number, args)
-        trace.stage("job_persisted", job_id=job.id)
-        # _persist_job already fired the owner text (best-effort) — mark the
-        # stage here so the latency trace shows when the notification went out.
-        trace.stage("owner_notified", job_id=job.id)
-        result = {"status": "logged"}
-    elif name == TRANSFER_CALL_TOOL["name"]:
-        # Honest escalation: we cannot redirect a live call, so (1) persist the
-        # lead FIRST so an emergency caller is never lost even if everything
-        # after fails, (2) urgently text the owner, (3) tell the model the
-        # truth about whether that text went out, plus the owner's number so
-        # the caller can be given a real next step either way.
-        #
-        # Idempotent per call thread (record_escalation): a repeat alert_owner
-        # in the same conversation must not double-page the owner, but a
-        # retry after a FAILED page must still go through — should_notify
-        # tracks exactly that (2026-07-29 voice-loop audit finding).
-        reason = args.get("reason") or "caller needs the owner"
-        # Same identity guarantee as log_job (see _persist_job) — a Job is a
-        # Job regardless of which tool created it, and an escalation call is
-        # from a real, identifiable caller too. alert_owner carries no name.
-        customer = get_or_create_customer(session, client.id, caller_number)
-        job, should_notify = record_escalation(
-            session, client, thread, caller_number, reason, customer_id=customer.id)
-        trace.stage("job_persisted", job_id=job.id, escalation=True)
-        if should_notify:
-            alerted = await asyncio.to_thread(notify_owner_of_escalation, client, caller_number, reason)
-            trace.stage("owner_alerted" if alerted else "owner_alert_failed")
-            # Strictly after `alerted` is decided: this must never influence
-            # what the model — and therefore the caller — is told.
-            record_owner_notification(
-                session, client.id, KIND_ESCALATION, SOURCE_ALERT_OWNER,
-                build_escalation_message(client, caller_number, reason), alerted,
-            )
-            if alerted:
-                job.owner_alerted_at = datetime.utcnow()
-                session.add(job)
-                session.commit()
-            status = "owner_alerted" if alerted else "alert_failed"
-        else:
-            # Already successfully paged for this call — honest, not a fresh
-            # alert: the owner does already know, so this isn't a lie.
-            trace.stage("escalation_deduped", job_id=job.id)
-            status = "owner_alerted"
-        result = {"status": status, "owner_number": client.escalation_phone}
-    else:
-        result = {"status": "unknown_tool"}
 
+async def _send_tool_result(ws, call_id: str, result: Dict[str, Any]) -> None:
     await ws.send(json.dumps({
         "type": "conversation.item.create",
         "item": {
@@ -250,6 +210,89 @@ async def _handle_function_call(
         },
     }))
     await ws.send(json.dumps({"type": "response.create"}))
+
+
+async def _handle_function_call(
+    ws, session: Session, client: Business, thread: str, caller_number: str,
+    event: Dict[str, Any], trace: CallTrace,
+) -> None:
+    name = event["name"]
+    call_id = event["call_id"]
+
+    try:
+        args = json.loads(event["arguments"]) if event.get("arguments") else {}
+    except (TypeError, ValueError) as e:
+        # Malformed arguments never reached a real tool invocation — traced
+        # distinctly from an execution failure below, so the two read apart
+        # in the capture (a bad payload vs. our own code breaking).
+        trace.stage("tool_call_failed", tool=name, reason="malformed_arguments", error=repr(e))
+        await _send_tool_result(ws, call_id, {
+            "status": "error",
+            "detail": "Could not read that. Could you say it again?",
+        })
+        return
+
+    trace.stage("tool_invoked", tool=name)
+
+    try:
+        if name == LOG_JOB_TOOL["name"]:
+            job = await _persist_job(session, client, thread, caller_number, args)
+            trace.stage("job_persisted", job_id=job.id)
+            # _persist_job already fired the owner text (best-effort) — mark
+            # the stage here so the latency trace shows when it went out.
+            trace.stage("owner_notified", job_id=job.id)
+            result = {"status": "logged"}
+        elif name == TRANSFER_CALL_TOOL["name"]:
+            # Honest escalation: we cannot redirect a live call, so (1) persist
+            # the lead FIRST so an emergency caller is never lost even if
+            # everything after fails, (2) urgently text the owner, (3) tell
+            # the model the truth about whether that text went out, plus the
+            # owner's number so the caller can be given a real next step
+            # either way.
+            #
+            # Idempotent per call thread (record_escalation): a repeat
+            # alert_owner in the same conversation must not double-page the
+            # owner, but a retry after a FAILED page must still go through —
+            # should_notify tracks exactly that (2026-07-29 audit finding).
+            reason = args.get("reason") or "caller needs the owner"
+            # Same identity guarantee as log_job (see _persist_job) — a Job
+            # is a Job regardless of which tool created it, and an escalation
+            # call is from a real, identifiable caller too. alert_owner
+            # carries no name.
+            customer = get_or_create_customer(session, client.id, caller_number)
+            job, should_notify = record_escalation(
+                session, client, thread, caller_number, reason, customer_id=customer.id)
+            trace.stage("job_persisted", job_id=job.id, escalation=True)
+            if should_notify:
+                alerted = await asyncio.to_thread(notify_owner_of_escalation, client, caller_number, reason)
+                trace.stage("owner_alerted" if alerted else "owner_alert_failed")
+                # Strictly after `alerted` is decided: this must never
+                # influence what the model — and therefore the caller — is
+                # told.
+                record_owner_notification(
+                    session, client.id, KIND_ESCALATION, SOURCE_ALERT_OWNER,
+                    build_escalation_message(client, caller_number, reason), alerted,
+                )
+                if alerted:
+                    job.owner_alerted_at = datetime.utcnow()
+                    session.add(job)
+                    session.commit()
+                status = "owner_alerted" if alerted else "alert_failed"
+            else:
+                # Already successfully paged for this call — honest, not a
+                # fresh alert: the owner does already know, so this isn't a lie.
+                trace.stage("escalation_deduped", job_id=job.id)
+                status = "owner_alerted"
+            result = {"status": status, "owner_number": client.escalation_phone}
+        else:
+            result = {"status": "unknown_tool"}
+    except Exception as e:
+        # Recoverable by design (see module note above this function): a
+        # booking/escalation failure ends the TOOL CALL, never the call.
+        trace.stage("tool_call_failed", tool=name, reason="execution_error", error=repr(e))
+        result = dict(GENERIC_TOOL_ERROR)
+
+    await _send_tool_result(ws, call_id, result)
 
 
 def _extract_transcript(response_done_event: Dict[str, Any]) -> str:

@@ -1149,6 +1149,193 @@ def test_no_task_leaks_after_a_timeout(test_engine, monkeypatch):
     assert len(app_module._active_call_tasks) == 0, "a timed-out call's task must be released"
 
 
+# ---- Per-tool recovery: one bad tool call must not end a healthy call ------
+#
+# 2026-07-29 audit, "narrow per-tool error recovery": before this, ANY
+# exception raised while handling a tool call (a booking DB hiccup, a bad
+# arguments payload, an unexpected bug) propagated all the way up through
+# _run_call_session and was caught only by run_call's top-level handler —
+# ending the ENTIRE call and texting the owner "call dropped", even though
+# the caller might have simply needed to repeat themselves.
+#
+# The line drawn: recoverable is anything inside tool EXECUTION (booking,
+# escalation, argument parsing) — the model is told {"status": "error", ...}
+# over the same function_call_output round-trip a success uses, and the loop
+# continues. Unrecoverable is a transport failure — if ws.send itself raises,
+# there is no way to tell the model or the caller anything, so that still
+# ends the call via run_call's existing (unchanged) crash handler.
+
+def test_a_booking_failure_is_recovered_not_fatal(test_engine, monkeypatch):
+    import xai_voice_adapter as adapter
+    from xai_voice_adapter import run_call
+    from call_trace import CallTrace
+
+    monkeypatch.setattr(adapter, "book_job",
+                        lambda *a, **k: (_ for _ in ()).throw(RuntimeError("db down")))
+    client = _seed_business(test_engine)
+    trace = CallTrace("call_bookfail")
+    ws = FakeWS([LOG_JOB_EVENT, GREETING_DONE])
+
+    asyncio.run(run_call("call_bookfail", client, "+15125559999", lambda: Session(test_engine),
+                         connect=connector_for(ws), trace=trace))
+
+    stages = [r["stage"] for r in trace.records if r["kind"] == "stage"]
+    assert "tool_call_failed" in stages
+    assert "call_completed" in stages
+    assert "call_failed" not in stages
+    with Session(test_engine) as s:
+        jobs = s.exec(select(Job).where(Job.business_id == client.id)).all()
+    assert jobs == []
+    outputs = [json.loads(m["item"]["output"]) for m in ws.sent if m.get("type") == "conversation.item.create"]
+    assert outputs[0]["status"] == "error"
+
+
+def test_a_notification_failure_does_not_fail_the_booking(test_engine, monkeypatch):
+    """Notification failure is handled differently from a booking failure —
+    notify_owner_of_booking already never raises (returns False), and that
+    must keep reporting "logged" to the model, not "error"."""
+    import xai_voice_adapter as adapter
+    from xai_voice_adapter import run_call
+    from call_trace import CallTrace
+
+    monkeypatch.setattr(adapter, "notify_owner_of_booking", lambda *a, **k: False)
+    client = _seed_business(test_engine)
+    trace = CallTrace("call_notif_fail")
+    ws = FakeWS([LOG_JOB_EVENT])
+
+    asyncio.run(run_call("call_notif_fail", client, "+15125559999", lambda: Session(test_engine),
+                         connect=connector_for(ws), trace=trace))
+
+    with Session(test_engine) as s:
+        jobs = s.exec(select(Job).where(Job.business_id == client.id)).all()
+    assert len(jobs) == 1        # the booking succeeded regardless of the failed owner text
+    outputs = [json.loads(m["item"]["output"]) for m in ws.sent if m.get("type") == "conversation.item.create"]
+    assert outputs[0]["status"] == "logged"
+    stages = [r["stage"] for r in trace.records if r["kind"] == "stage"]
+    assert "tool_call_failed" not in stages
+
+
+def test_malformed_tool_arguments_are_recovered_not_fatal(test_engine):
+    from xai_voice_adapter import run_call
+    from call_trace import CallTrace
+
+    client = _seed_business(test_engine)
+    trace = CallTrace("call_malformed")
+    malformed = {"type": "response.function_call_arguments.done", "name": "log_job",
+                "call_id": "fc_bad", "arguments": "{not valid json"}
+    ws = FakeWS([malformed, GREETING_DONE])
+
+    asyncio.run(run_call("call_malformed", client, "+15125559999", lambda: Session(test_engine),
+                         connect=connector_for(ws), trace=trace))
+
+    failures = [r for r in trace.records if r.get("stage") == "tool_call_failed"]
+    assert failures and failures[0]["reason"] == "malformed_arguments"
+    stages = [r["stage"] for r in trace.records if r["kind"] == "stage"]
+    assert "call_completed" in stages
+    assert "call_failed" not in stages
+    with Session(test_engine) as s:
+        jobs = s.exec(select(Job).where(Job.business_id == client.id)).all()
+    assert jobs == []
+    outputs = [json.loads(m["item"]["output"]) for m in ws.sent if m.get("type") == "conversation.item.create"]
+    assert outputs[0]["status"] == "error"
+
+
+def test_an_unexpected_exception_during_escalation_is_recovered(test_engine, monkeypatch):
+    import xai_voice_adapter as adapter
+    from xai_voice_adapter import run_call
+    from call_trace import CallTrace
+
+    monkeypatch.setattr(adapter, "record_escalation",
+                        lambda *a, **k: (_ for _ in ()).throw(RuntimeError("boom")))
+    client = _seed_business(test_engine)
+    trace = CallTrace("call_exc")
+    ws = FakeWS([ALERT_OWNER_EVENT, GREETING_DONE])
+
+    asyncio.run(run_call("call_exc", client, "+15125559999", lambda: Session(test_engine),
+                         connect=connector_for(ws), trace=trace))
+
+    failures = [r for r in trace.records if r.get("stage") == "tool_call_failed"]
+    assert failures and failures[0]["reason"] == "execution_error"
+    stages = [r["stage"] for r in trace.records if r["kind"] == "stage"]
+    assert "call_completed" in stages
+    assert "call_failed" not in stages
+    with Session(test_engine) as s:
+        jobs = s.exec(select(Job).where(Job.business_id == client.id)).all()
+    assert jobs == []
+    outputs = [json.loads(m["item"]["output"]) for m in ws.sent if m.get("type") == "conversation.item.create"]
+    assert outputs[0]["status"] == "error"
+
+
+def test_a_failed_booking_can_be_retried_successfully(test_engine, monkeypatch):
+    """The model retries the same tool after being told "error" — proves the
+    call is genuinely still alive and functional, not just not-crashed."""
+    import xai_voice_adapter as adapter
+    from bookings import book_job as real_book_job
+    from xai_voice_adapter import run_call
+    from call_trace import CallTrace
+
+    calls = {"n": 0}
+
+    def flaky_book_job(*a, **kw):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            raise RuntimeError("db hiccup")
+        return real_book_job(*a, **kw)
+
+    monkeypatch.setattr(adapter, "book_job", flaky_book_job)
+    monkeypatch.setattr(adapter, "notify_owner_of_booking", lambda *a, **k: True)
+    client = _seed_business(test_engine)
+    trace = CallTrace("call_retry")
+    first = dict(LOG_JOB_EVENT, call_id="fc_a")
+    second = dict(LOG_JOB_EVENT, call_id="fc_b")
+    ws = FakeWS([first, second])
+
+    asyncio.run(run_call("call_retry", client, "+15125559999", lambda: Session(test_engine),
+                         connect=connector_for(ws), trace=trace))
+
+    with Session(test_engine) as s:
+        jobs = s.exec(select(Job).where(Job.business_id == client.id)).all()
+    assert len(jobs) == 1        # the failed attempt left nothing; the retry booked cleanly
+    outputs = [json.loads(m["item"]["output"]) for m in ws.sent if m.get("type") == "conversation.item.create"]
+    assert [o["status"] for o in outputs] == ["error", "logged"]
+    stages = [r["stage"] for r in trace.records if r["kind"] == "stage"]
+    assert "call_completed" in stages
+
+
+class SendFailingAfterHandshakeWS(FakeWS):
+    """The initial session handshake succeeds, but every send after it fails
+    — proves specifically that a TRANSPORT failure while responding to a
+    tool call (not the earlier connect handshake) is genuinely unrecoverable,
+    unlike a booking/escalation/argument failure."""
+    def __init__(self, events):
+        super().__init__(events)
+        self._send_count = 0
+
+    async def send(self, raw):
+        self._send_count += 1
+        if self._send_count > 2:   # 1=session.update, 2=response.create (handshake)
+            raise RuntimeError("connection reset")
+        self.sent.append(json.loads(raw))
+
+
+def test_a_transport_send_failure_is_unrecoverable_and_ends_the_call(test_engine, monkeypatch):
+    import xai_voice_adapter as adapter
+    from xai_voice_adapter import run_call
+    from call_trace import CallTrace
+
+    monkeypatch.setattr(adapter, "notify_owner_of_escalation", lambda *a, **k: True)
+    client = _seed_business(test_engine)
+    trace = CallTrace("call_send_fail")
+    ws = SendFailingAfterHandshakeWS([LOG_JOB_EVENT])
+
+    asyncio.run(run_call("call_send_fail", client, "+15125559999", lambda: Session(test_engine),
+                         connect=connector_for(ws), trace=trace))
+
+    stages = [r["stage"] for r in trace.records if r["kind"] == "stage"]
+    assert "call_failed" in stages
+    assert "call_completed" not in stages
+
+
 # ---- Webhook hardening: fail closed, reject replays --------------------------
 
 def _fresh_signed(body: bytes, secret: str):
