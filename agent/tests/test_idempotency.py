@@ -1,9 +1,17 @@
 """Booking idempotency: the money event (a booked job) must survive every
 retry path without duplicating — Twilio SMS redelivery, xAI/Svix webhook
 retries, and the model re-calling log_job with fresh details mid-conversation.
+
+Also covers record_escalation: the same idempotency guarantee for the
+emergency alert_owner path, closing the gap found in the 2026-07-29
+Frontdesk voice-loop production audit (docs/superpowers/specs/
+2026-07-29-frontdesk-voice-loop-production-audit.md) — a duplicate escalation
+must never double-page the owner, but a retry after a FAILED page must still
+go through.
 """
 import asyncio
 import json
+from datetime import datetime
 
 import pytest
 from sqlmodel import Session, select
@@ -75,6 +83,77 @@ def test_book_job_completed_job_does_not_absorb_new_booking(test_engine):
                                   {"service_type": "burst pipe", "urgency": "routine"})
         job2_id = job2.id
     assert created2 is True and job2_id != job1_id
+
+
+# ---- record_escalation: idempotent per call thread --------------------------
+
+def test_record_escalation_creates_a_job_and_says_to_notify(test_engine):
+    from bookings import record_escalation
+
+    b = _seed(test_engine)
+    with Session(test_engine) as s:
+        job, should_notify = record_escalation(
+            s, s.get(Business, b.id), "xai-voice:call_1", "+15125559999", "gas smell")
+
+    assert should_notify is True
+    assert job.service_type == "Escalated call"
+    assert job.urgency == "emergency"
+    assert job.notes == "gas smell"
+
+
+def test_record_escalation_recall_same_thread_reuses_job_and_skips_notify(test_engine):
+    """The owner was already successfully alerted — a second alert_owner call
+    in the same conversation must not create a second Job or say to re-page."""
+    from bookings import record_escalation
+
+    b = _seed(test_engine)
+    with Session(test_engine) as s:
+        client = s.get(Business, b.id)
+        job1, _ = record_escalation(s, client, "xai-voice:call_1", "+15125559999", "gas smell")
+        job1.owner_alerted_at = datetime.utcnow()
+        s.add(job1); s.commit()
+
+        job2, should_notify = record_escalation(
+            s, client, "xai-voice:call_1", "+15125559999", "gas smell again")
+        jobs = s.exec(select(Job).where(Job.business_id == b.id)).all()
+
+    assert should_notify is False
+    assert job2.id == job1.id
+    assert len(jobs) == 1
+
+
+def test_record_escalation_recall_after_failed_alert_says_to_retry(test_engine):
+    """The FIRST page never went through — a retry must not be silently
+    swallowed, or a real emergency alert could vanish entirely."""
+    from bookings import record_escalation
+
+    b = _seed(test_engine)
+    with Session(test_engine) as s:
+        client = s.get(Business, b.id)
+        job1, should_notify1 = record_escalation(
+            s, client, "xai-voice:call_1", "+15125559999", "gas smell")
+        # owner_alerted_at deliberately left unset — the send failed.
+        job2, should_notify2 = record_escalation(
+            s, client, "xai-voice:call_1", "+15125559999", "gas smell")
+        jobs = s.exec(select(Job).where(Job.business_id == b.id)).all()
+
+    assert should_notify1 is True
+    assert should_notify2 is True
+    assert job2.id == job1.id
+    assert len(jobs) == 1
+
+
+def test_record_escalation_different_thread_creates_separate_job(test_engine):
+    from bookings import record_escalation
+
+    b = _seed(test_engine)
+    with Session(test_engine) as s:
+        client = s.get(Business, b.id)
+        record_escalation(s, client, "xai-voice:call_1", "+15125559999", "gas smell")
+        record_escalation(s, client, "xai-voice:call_2", "+15125550001", "flooding")
+        jobs = s.exec(select(Job).where(Job.business_id == b.id)).all()
+
+    assert len(jobs) == 2
 
 
 # ---- handle_customer_message: retry-safe via external_id --------------------

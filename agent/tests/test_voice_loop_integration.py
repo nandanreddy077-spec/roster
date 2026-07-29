@@ -452,6 +452,56 @@ def test_alert_owner_reports_failure_with_fallback_number(test_engine, monkeypat
         assert s.exec(select(Job).where(Job.business_id == client.id)).first() is not None
 
 
+def test_a_second_alert_owner_in_the_same_call_does_not_repage_the_owner(test_engine, monkeypatch):
+    """Closes the gap in the 2026-07-29 audit: alert_owner had no duplicate
+    protection at all, unlike log_job. Two escalations in one call must
+    produce exactly one Job and one owner text, not two."""
+    import xai_voice_adapter as adapter
+    calls = []
+    monkeypatch.setattr(adapter, "notify_owner_of_escalation",
+                        lambda business, caller, reason: calls.append(reason) or True)
+    client = _seed_business(test_engine)
+    second_event = dict(ALERT_OWNER_EVENT, call_id="fc_esc2",
+                        arguments=json.dumps({"reason": "gas smell in kitchen"}))
+    ws = FakeWS([ALERT_OWNER_EVENT, second_event])
+
+    _run(client, ws, test_engine)
+
+    assert len(calls) == 1, "the owner must be paged exactly once, not twice"
+    with Session(test_engine) as s:
+        jobs = s.exec(select(Job).where(Job.business_id == client.id)).all()
+    assert len(jobs) == 1
+    outputs = [json.loads(m["item"]["output"]) for m in ws.sent
+              if m.get("type") == "conversation.item.create"]
+    # Both tool calls get an honest "owner_alerted" response — the second one
+    # truthfully reflects that the owner already knows, not a fresh page.
+    assert [o["status"] for o in outputs] == ["owner_alerted", "owner_alerted"]
+
+
+def test_a_failed_alert_owner_is_retried_on_a_second_call_in_the_same_conversation(
+    test_engine, monkeypatch
+):
+    """The first page never went through — a second alert_owner call must
+    actually retry the SMS, not be silently treated as a duplicate."""
+    import xai_voice_adapter as adapter
+    calls = []
+    monkeypatch.setattr(adapter, "notify_owner_of_escalation",
+                        lambda business, caller, reason: calls.append(reason) or False)
+    client = _seed_business(test_engine)
+    second_event = dict(ALERT_OWNER_EVENT, call_id="fc_esc2")
+    ws = FakeWS([ALERT_OWNER_EVENT, second_event])
+
+    _run(client, ws, test_engine)
+
+    assert len(calls) == 2, "a failed page must be retried, never swallowed"
+    with Session(test_engine) as s:
+        jobs = s.exec(select(Job).where(Job.business_id == client.id)).all()
+    assert len(jobs) == 1
+    outputs = [json.loads(m["item"]["output"]) for m in ws.sent
+              if m.get("type") == "conversation.item.create"]
+    assert [o["status"] for o in outputs] == ["alert_failed", "alert_failed"]
+
+
 def test_voice_prompt_is_honest_about_escalation():
     from engine import build_voice_system_prompt
     from models import ClientConfig

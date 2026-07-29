@@ -31,12 +31,13 @@ import hmac
 import json
 import os
 import re
+from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 import websockets
 from sqlmodel import Session
 
-from bookings import book_job
+from bookings import book_job, record_escalation
 from memory import build_customer_context
 from call_trace import CallTrace
 from db_models import Business, Job, Message
@@ -187,30 +188,34 @@ async def _handle_function_call(
         # after fails, (2) urgently text the owner, (3) tell the model the
         # truth about whether that text went out, plus the owner's number so
         # the caller can be given a real next step either way.
+        #
+        # Idempotent per call thread (record_escalation): a repeat alert_owner
+        # in the same conversation must not double-page the owner, but a
+        # retry after a FAILED page must still go through — should_notify
+        # tracks exactly that (2026-07-29 voice-loop audit finding).
         reason = args.get("reason") or "caller needs the owner"
-        job = Job(
-            business_id=client.id,
-            customer_phone=thread,
-            service_type="Escalated call",
-            urgency="emergency",
-            callback_number=caller_number,
-            notes=reason,
-        )
-        session.add(job)
-        session.commit()
+        job, should_notify = record_escalation(session, client, thread, caller_number, reason)
         trace.stage("job_persisted", job_id=job.id, escalation=True)
-        alerted = await asyncio.to_thread(notify_owner_of_escalation, client, caller_number, reason)
-        trace.stage("owner_alerted" if alerted else "owner_alert_failed")
-        # Strictly after `alerted` is decided: this must never influence what
-        # the model — and therefore the caller — is told about the alert.
-        record_owner_notification(
-            session, client.id, KIND_ESCALATION, SOURCE_ALERT_OWNER,
-            build_escalation_message(client, caller_number, reason), alerted,
-        )
-        result = {
-            "status": "owner_alerted" if alerted else "alert_failed",
-            "owner_number": client.escalation_phone,
-        }
+        if should_notify:
+            alerted = await asyncio.to_thread(notify_owner_of_escalation, client, caller_number, reason)
+            trace.stage("owner_alerted" if alerted else "owner_alert_failed")
+            # Strictly after `alerted` is decided: this must never influence
+            # what the model — and therefore the caller — is told.
+            record_owner_notification(
+                session, client.id, KIND_ESCALATION, SOURCE_ALERT_OWNER,
+                build_escalation_message(client, caller_number, reason), alerted,
+            )
+            if alerted:
+                job.owner_alerted_at = datetime.utcnow()
+                session.add(job)
+                session.commit()
+            status = "owner_alerted" if alerted else "alert_failed"
+        else:
+            # Already successfully paged for this call — honest, not a fresh
+            # alert: the owner does already know, so this isn't a lie.
+            trace.stage("escalation_deduped", job_id=job.id)
+            status = "owner_alerted"
+        result = {"status": status, "owner_number": client.escalation_phone}
     else:
         result = {"status": "unknown_tool"}
 

@@ -78,3 +78,48 @@ def book_job(
     session.commit()
     session.refresh(job)
     return job, True
+
+
+ESCALATION_SERVICE_TYPE = "Escalated call"
+
+
+def record_escalation(
+    session: Session,
+    business: Business,
+    thread: str,
+    caller_number: str,
+    reason: str,
+) -> Tuple[Job, bool]:
+    """Upsert an emergency-escalation Job — the same idempotency guarantee
+    book_job gives log_job, for alert_owner. One call thread gets at most one
+    escalation Job; a repeat alert_owner call in the same conversation reuses
+    it instead of creating a second one.
+
+    Returns (job, should_notify). should_notify is True until the owner has
+    actually been successfully paged for THIS job (job.owner_alerted_at is
+    set by the caller only once notify_owner_of_escalation succeeds) — so a
+    retry after a failed page still fires, and only a repeat call after a
+    SUCCESSFUL page is deduped.
+    """
+    existing = session.exec(
+        select(Job).where(
+            Job.business_id == business.id,
+            Job.customer_phone == thread,
+            Job.service_type == ESCALATION_SERVICE_TYPE,
+        )
+    ).first()
+    if existing is not None:
+        return existing, existing.owner_alerted_at is None
+
+    job = Job(
+        business_id=business.id,
+        customer_phone=thread,
+        service_type=ESCALATION_SERVICE_TYPE,
+        urgency="emergency",
+        callback_number=caller_number,
+        notes=reason,
+    )
+    session.add(job)
+    session.commit()
+    session.refresh(job)
+    return job, True
