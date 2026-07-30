@@ -80,6 +80,43 @@ CONFIRM_SLOT_TOOL = {
 }
 
 
+ESCALATE_TOOL = {
+    "name": "escalate_to_owner",
+    "description": (
+        "Call this instead of record_response or confirm_slot when the customer is "
+        "negotiating price, asking for a discount or pricing exception, requesting to "
+        "reschedule or change the appointment, or expressing a complaint or frustration. "
+        "Do not negotiate, offer a discount, confirm a reschedule, or try to resolve a "
+        "complaint yourself — hand it to a human by calling this with a short reason."
+    ),
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "reason": {
+                "type": "string",
+                "description": (
+                    "Short reason for escalating, e.g. 'asked for a discount', "
+                    "'wants to reschedule', 'complained about the price'."
+                ),
+            },
+        },
+        "required": ["reason"],
+    },
+}
+
+# Shared by both prompt branches below (2026-07-30, Quote Chaser PR #2) — these
+# four categories get handed to a human rather than handled as an automated
+# sales response, since the model has no tool to actually negotiate, promise
+# a discount, or confirm a reschedule.
+_ESCALATION_GUIDANCE = (
+    "If the customer is negotiating price, asking for a discount or pricing exception, "
+    "requesting to reschedule or change the appointment, or expressing a complaint or "
+    "frustration, do not negotiate, promise a discount, confirm a reschedule, or try to "
+    "resolve the complaint yourself. Call escalate_to_owner with a short reason instead, "
+    "and tell the customer someone from the team will reach out."
+)
+
+
 class _SafeDict(dict):
     def __missing__(self, key):
         return ""
@@ -103,10 +140,12 @@ def build_recovery_reply_prompt(recovery_job, offered_slots: Optional[List[str]]
             "with its index. If their reply doesn't clearly match any slot, ask a short "
             "clarifying question instead of guessing. If instead the customer says they're "
             "no longer interested or asks to stop being contacted, call record_response with "
-            "intent 'not_interested' or 'unsubscribe' instead of confirm_slot."
+            "intent 'not_interested' or 'unsubscribe' instead of confirm_slot. "
+            f"{_ESCALATION_GUIDANCE}"
         )
     return base + (
         "Read the customer's reply and call record_response with their intent: "
         "'interested' if they want to book, 'not_interested' if they're declining, or "
-        "'unsubscribe' if they're asking to stop texts. Keep any spoken reply short and warm."
+        "'unsubscribe' if they're asking to stop texts. Keep any spoken reply short and warm. "
+        f"{_ESCALATION_GUIDANCE}"
     )

@@ -55,3 +55,31 @@ def test_membership_templates_cover_every_offset():
 
 def test_membership_offsets_are_ascending():
     assert MEMBERSHIP_OFFSETS == sorted(MEMBERSHIP_OFFSETS)
+
+
+# ---- PR #2: escalation -------------------------------------------------------
+
+from recovery_engine import ESCALATE_TOOL
+
+
+def test_escalate_tool_requires_a_reason():
+    props = ESCALATE_TOOL["input_schema"]["properties"]
+    assert "reason" in props
+    assert props["reason"]["type"] == "string"
+    assert "reason" in ESCALATE_TOOL["input_schema"]["required"]
+
+
+def test_prompt_without_slots_instructs_escalation_for_negotiation_and_complaints():
+    prompt = build_recovery_reply_prompt(FakeRecoveryJob()).lower()
+    assert "escalate_to_owner" in prompt
+    assert "negotiat" in prompt or "discount" in prompt
+    assert "reschedule" in prompt
+    assert "complaint" in prompt or "frustrat" in prompt
+    assert "don't negotiate" in prompt or "do not negotiate" in prompt
+
+
+def test_prompt_with_slots_also_instructs_escalation():
+    prompt = build_recovery_reply_prompt(
+        FakeRecoveryJob(), offered_slots=["Monday morning", "Tuesday afternoon"]
+    ).lower()
+    assert "escalate_to_owner" in prompt

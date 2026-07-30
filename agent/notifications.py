@@ -41,6 +41,7 @@ SOURCE_VOICE_BOOKING = "voice_booking"
 SOURCE_ALERT_OWNER = "alert_owner"
 SOURCE_CALL_DROPPED = "call_dropped"
 SOURCE_NEGATIVE_REVIEW_REPLY = "negative_review_reply"
+SOURCE_RECOVERY_ESCALATION = "recovery_escalation"
 
 # Lazily-built shared channel (avoids rebuilding a Twilio client per booking).
 # Tests inject their own channel via the `channel=` arg and never touch this.

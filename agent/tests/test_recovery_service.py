@@ -3,7 +3,7 @@ from datetime import datetime, timedelta
 
 from sqlmodel import Session, select
 
-from db_models import Business, Job, RecoveryCampaign, RecoveryJob, RecoveryMessageLog
+from db_models import Business, Job, OwnerNotification, RecoveryCampaign, RecoveryJob, RecoveryMessageLog
 import recovery_service
 from conftest import StubAgent
 
@@ -684,3 +684,155 @@ def test_enroll_completed_estimates_then_tick_sends_after_the_sequence_delay(ses
     assert len(sent) == 1
     assert fake_channel.sent[0]["to"] == "+15551234567"
     assert "AC replacement" in fake_channel.sent[0]["body"]
+
+
+# ---- PR #2: escalation -------------------------------------------------------
+# Negotiation, pricing exceptions, scheduling-change requests, and complaints
+# get handed to the owner rather than handled as an automated sales response —
+# the model has no tool to negotiate, promise a discount, or confirm a
+# reschedule, only escalate_to_owner. Escalating moves the job to a new
+# terminal-ish "escalated" status: excluded from tick()'s "pending" query (so
+# the automated sequence stops immediately, matching "never spam") and from
+# ACTIVE_STATUSES (so find_active_recovery_job stops routing this customer's
+# further replies into the rigid Quote Chaser flow — a later text falls
+# through to Frontdesk's general handling instead, the same "capture outcome,
+# then let general handling take over" shape Reviews' negative-outcome path
+# already uses).
+
+def _stub_escalation(reason: str = "asked for a discount") -> StubAgent:
+    return StubAgent({
+        "reply": "", "jobs": [], "new_messages": [],
+        "pending_tool_call": {"name": "escalate_to_owner", "input": {"reason": reason}},
+    })
+
+
+def test_handle_recovery_reply_escalates_on_price_negotiation(session, monkeypatch):
+    client = make_client(session)
+    recovery_service.create_campaign(
+        session, client, "quote", "June quotes",
+        [{"phone": "+1", "name": "Mike", "service_type": "AC install"}],
+    )
+    job = session.exec(select(RecoveryJob)).first()
+    job.last_sent_day = 1
+    session.add(job)
+    session.commit()
+    monkeypatch.setattr(recovery_service, "agent", _stub_escalation("wants 10% off the quote"))
+    calls = []
+    monkeypatch.setattr(recovery_service, "notify_owner_of_escalation",
+                        lambda business, caller, reason, **k: calls.append((caller, reason)) or True)
+
+    reply = recovery_service.handle_recovery_reply(session, client, job, "can you do any better on price?")
+
+    session.refresh(job)
+    assert job.current_status == "escalated"
+    assert len(calls) == 1
+    assert calls[0][0] == "+1"
+    assert "10% off" in calls[0][1]
+    assert "team" in reply.lower() or "reach out" in reply.lower()
+
+    notifications = session.exec(
+        select(OwnerNotification).where(OwnerNotification.business_id == client.id)
+    ).all()
+    assert len(notifications) == 1
+    assert notifications[0].kind == "escalation"
+    assert notifications[0].source == "recovery_escalation"
+
+
+def test_handle_recovery_reply_escalates_from_awaiting_slot_state(session, monkeypatch):
+    """A reschedule request mid-slot-confirmation must escalate too, not just
+    the first reply."""
+    client = make_client(session)
+    recovery_service.create_campaign(
+        session, client, "quote", "June quotes",
+        [{"phone": "+1", "name": "Mike", "service_type": "AC install"}],
+    )
+    job = session.exec(select(RecoveryJob)).first()
+    job.current_status = "awaiting_slot"
+    job.offered_slots_json = json.dumps(["Monday morning", "Tuesday afternoon"])
+    session.add(job)
+    session.commit()
+    monkeypatch.setattr(recovery_service, "agent", _stub_escalation("none of those times work, needs a different week"))
+    calls = []
+    monkeypatch.setattr(recovery_service, "notify_owner_of_escalation",
+                        lambda business, caller, reason, **k: calls.append(1) or True)
+
+    recovery_service.handle_recovery_reply(session, client, job, "none of those work, can we do next month instead?")
+
+    session.refresh(job)
+    assert job.current_status == "escalated"
+    assert len(calls) == 1
+
+
+def test_handle_recovery_reply_escalation_stops_future_sequence_messages(session, monkeypatch):
+    fake_channel = FakeSMSChannel()
+    monkeypatch.setattr(recovery_service, "sms_channel", fake_channel)
+    client = make_client(session)
+    campaign = recovery_service.create_campaign(
+        session, client, "quote", "June quotes",
+        [{"phone": "+1", "name": "Mike", "service_type": "AC install"}],
+    )
+    campaign.started_at = datetime.utcnow() - timedelta(days=1)
+    session.add(campaign)
+    job = session.exec(select(RecoveryJob)).first()
+    job.last_sent_day = 1
+    session.add(job)
+    session.commit()
+    monkeypatch.setattr(recovery_service, "agent", _stub_escalation())
+    monkeypatch.setattr(recovery_service, "notify_owner_of_escalation", lambda *a, **k: True)
+
+    recovery_service.handle_recovery_reply(session, client, job, "can you knock the price down?")
+    session.refresh(campaign)
+    campaign.started_at = datetime.utcnow() - timedelta(days=8)  # day-3 threshold now due
+    session.add(campaign)
+    session.commit()
+
+    sent = recovery_service.tick(session)
+
+    assert sent == [], "an escalated job must never receive another automated sequence message"
+
+
+def test_find_active_recovery_job_excludes_escalated_jobs(session, monkeypatch):
+    client = make_client(session)
+    recovery_service.create_campaign(
+        session, client, "quote", "June quotes",
+        [{"phone": "+1", "name": "Mike", "service_type": "AC install"}],
+    )
+    job = session.exec(select(RecoveryJob)).first()
+    job.last_sent_day = 1
+    session.add(job)
+    session.commit()
+    monkeypatch.setattr(recovery_service, "agent", _stub_escalation())
+    monkeypatch.setattr(recovery_service, "notify_owner_of_escalation", lambda *a, **k: True)
+
+    recovery_service.handle_recovery_reply(session, client, job, "can you knock the price down?")
+
+    assert recovery_service.find_active_recovery_job(session, client.id, "+1") is None
+
+
+def test_handle_recovery_reply_normal_interest_does_not_escalate(session, monkeypatch):
+    """Regression: an ordinary 'yes, book me' reply must never page the
+    owner."""
+    client = make_client(session)
+    recovery_service.create_campaign(
+        session, client, "quote", "June quotes",
+        [{"phone": "+1", "name": "Mike", "service_type": "AC install"}],
+    )
+    job = session.exec(select(RecoveryJob)).first()
+    job.last_sent_day = 1
+    session.add(job)
+    session.commit()
+    monkeypatch.setattr(
+        recovery_service, "agent",
+        StubAgent({
+            "reply": "", "jobs": [], "new_messages": [],
+            "pending_tool_call": {"name": "record_response", "input": {"intent": "interested"}},
+        }),
+    )
+    calls = []
+    monkeypatch.setattr(recovery_service, "notify_owner_of_escalation", lambda *a, **k: calls.append(1) or True)
+
+    recovery_service.handle_recovery_reply(session, client, job, "yes, sign me up")
+
+    session.refresh(job)
+    assert job.current_status == "awaiting_slot"
+    assert calls == []

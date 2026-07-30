@@ -15,9 +15,17 @@ from calendar_provider import get_calendar_provider
 from channels import get_channel
 from db_models import Business, Job, RecoveryCampaign, RecoveryJob, RecoveryMessageLog
 from engine import AgentEngine
+from notifications import (
+    KIND_ESCALATION,
+    SOURCE_RECOVERY_ESCALATION,
+    build_escalation_message,
+    notify_owner_of_escalation,
+    record_owner_notification,
+)
 from repositories import get_or_create_customer
 from recovery_engine import (
     CONFIRM_SLOT_TOOL,
+    ESCALATE_TOOL,
     MEMBERSHIP_OFFSETS,
     RECORD_RESPONSE_TOOL,
     SEQUENCE_DAYS,
@@ -251,6 +259,25 @@ def tick(session: Session) -> List[RecoveryJob]:
 
 STOP_KEYWORDS = {"stop", "stopall", "unsubscribe", "cancel", "end", "quit"}
 
+ESCALATED_REPLY = "Thanks for letting us know — someone from our team will reach out to help with that."
+
+
+def _escalate(session: Session, client: Business, job: RecoveryJob, reason: str) -> str:
+    """Page the owner via the same trio Frontdesk's alert_owner and Reviews'
+    negative-reply handling already use, tagged with a Recovery-specific
+    source. Moves the job to "escalated" — excluded from tick()'s "pending"
+    query (stops the automated sequence immediately) and from
+    ACTIVE_STATUSES (stops find_active_recovery_job from routing this
+    customer's further replies back into the rigid intent/slot state
+    machine — a later text falls through to Frontdesk's general handling)."""
+    alerted = notify_owner_of_escalation(client, job.customer_phone, reason)
+    record_owner_notification(
+        session, client.id, KIND_ESCALATION, SOURCE_RECOVERY_ESCALATION,
+        build_escalation_message(client, job.customer_phone, reason), alerted,
+    )
+    job.current_status = "escalated"
+    return ESCALATED_REPLY
+
 
 def handle_recovery_reply(session: Session, client: Business, job: RecoveryJob, text: str) -> Optional[str]:
     """Process an inbound reply to an active Recovery sequence. Returns the text
@@ -285,14 +312,17 @@ def handle_recovery_reply(session: Session, client: Business, job: RecoveryJob, 
         result = agent.respond(
             client.to_config(),
             history,
-            tools=[CONFIRM_SLOT_TOOL, RECORD_RESPONSE_TOOL],
+            tools=[CONFIRM_SLOT_TOOL, RECORD_RESPONSE_TOOL, ESCALATE_TOOL],
             system_prompt=build_recovery_reply_prompt(job, offered_slots=job.offered_slots),
             max_iters=2,
         )
         record_usage(session, client)
         reply = result["reply"] or "Sorry, could you confirm which time works — the first, second, or third option?"
         pending = result["pending_tool_call"]
-        if pending and pending["name"] == "confirm_slot":
+        if pending and pending["name"] == "escalate_to_owner":
+            reason = pending["input"].get("reason") or "Needs help the automated follow-up can't provide."
+            reply = _escalate(session, client, job, reason)
+        elif pending and pending["name"] == "confirm_slot":
             idx = pending["input"]["slot_index"]
             slots = job.offered_slots
             if isinstance(idx, int) and 0 <= idx < len(slots):
@@ -330,26 +360,30 @@ def handle_recovery_reply(session: Session, client: Business, job: RecoveryJob, 
     result = agent.respond(
         client.to_config(),
         history,
-        tools=[RECORD_RESPONSE_TOOL],
+        tools=[RECORD_RESPONSE_TOOL, ESCALATE_TOOL],
         system_prompt=build_recovery_reply_prompt(job),
         max_iters=2,
     )
     record_usage(session, client)
     pending = result["pending_tool_call"]
-    intent = pending["input"]["intent"] if pending and pending["name"] == "record_response" else None
 
-    if intent == "interested":
-        provider = get_calendar_provider(client)
-        slots = provider.get_available_slots(client.hours)
-        job.offered_slots_json = json.dumps(slots)
-        job.current_status = "awaiting_slot"
-        slot_text = "; ".join(f"{i + 1}) {s}" for i, s in enumerate(slots))
-        reply = f"Great! Which works best: {slot_text}?"
-    elif intent in ("not_interested", "unsubscribe"):
-        job.current_status = "declined"
-        reply = "No problem, thanks for letting us know! We won't follow up further."
+    if pending and pending["name"] == "escalate_to_owner":
+        reason = pending["input"].get("reason") or "Needs help the automated follow-up can't provide."
+        reply = _escalate(session, client, job, reason)
     else:
-        reply = result["reply"] or "Thanks for the reply! Are you still interested in booking?"
+        intent = pending["input"]["intent"] if pending and pending["name"] == "record_response" else None
+        if intent == "interested":
+            provider = get_calendar_provider(client)
+            slots = provider.get_available_slots(client.hours)
+            job.offered_slots_json = json.dumps(slots)
+            job.current_status = "awaiting_slot"
+            slot_text = "; ".join(f"{i + 1}) {s}" for i, s in enumerate(slots))
+            reply = f"Great! Which works best: {slot_text}?"
+        elif intent in ("not_interested", "unsubscribe"):
+            job.current_status = "declined"
+            reply = "No problem, thanks for letting us know! We won't follow up further."
+        else:
+            reply = result["reply"] or "Thanks for the reply! Are you still interested in booking?"
 
     job.updated_at = datetime.utcnow()
     session.add(job)
