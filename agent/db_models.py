@@ -258,6 +258,24 @@ class JobQualification(SQLModel, table=True):
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
 
+class DispatchPlan(SQLModel, table=True):
+    """Dispatcher's output — a satellite enrichment record, never a second
+    Job model. One row per Job, written once qualification exists (idempotent,
+    gated by source_job_id), never updated. Deterministic — every field is a
+    lookup over Job.urgency and JobQualification's already-structured fields,
+    no AgentEngine involved (2026-07-30 design review)."""
+    id: Optional[int] = Field(default=None, primary_key=True)
+    business_id: int = Field(foreign_key="business.id")
+    source_job_id: int = Field(foreign_key="job.id")
+    dispatch_priority: str  # "emergency" | "same_day" | "normal"
+    scheduling_window: str  # "immediate" | "today" | "tomorrow" | "flexible"
+    requires_dispatch_review: bool
+    # Comma-joined structured rule-code enums (dispatcher_rules.py), one per
+    # axis — never English prose, so analytics can group/count by rule.
+    dispatch_reason: str
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+
+
 class Employee(SQLModel, table=True):
     __table_args__ = (
         # Index, NOT UniqueConstraint: a table-level UNIQUE becomes part of

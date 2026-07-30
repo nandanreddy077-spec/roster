@@ -1,5 +1,5 @@
-"""Cron entry point: enroll due leads, qualify new jobs, and send any due
-outbound messages across Recovery, Referral, and Reviews.
+"""Cron entry point: enroll due leads, qualify new jobs, plan dispatch, and
+send any due outbound messages across Recovery, Referral, and Reviews.
 
 Run once a day, e.g. via crontab:
   0 9 * * * cd /path/to/agent && .venv/bin/python recovery_tick.py >> recovery.log 2>&1
@@ -10,6 +10,7 @@ review_requested_at, source_job_id).
 from sqlmodel import Session
 
 from db import engine, init_db
+from dispatcher_service import recommend_dispatch
 from lead_qualifier_service import qualify_new_jobs
 from recovery_service import enroll_completed_estimates, tick
 from referral_service import send_due_referral_asks
@@ -21,6 +22,8 @@ def run():
     with Session(engine) as session:
         qualified = qualify_new_jobs(session)
         print(f"Lead Qualifier: qualified {len(qualified)} job(s).")
+        planned = recommend_dispatch(session)
+        print(f"Dispatcher: planned {len(planned)} job(s).")
         enrolled = enroll_completed_estimates(session)
         print(f"Quote Chaser: enrolled {len(enrolled)} estimate(s).")
         sent = tick(session)
