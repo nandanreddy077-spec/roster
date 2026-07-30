@@ -725,6 +725,7 @@ def test_handle_recovery_reply_escalates_on_price_negotiation(session, monkeypat
 
     session.refresh(job)
     assert job.current_status == "escalated"
+    assert job.escalation_reason == "wants 10% off the quote"
     assert len(calls) == 1
     assert calls[0][0] == "+1"
     assert "10% off" in calls[0][1]
@@ -836,3 +837,4 @@ def test_handle_recovery_reply_normal_interest_does_not_escalate(session, monkey
     session.refresh(job)
     assert job.current_status == "awaiting_slot"
     assert calls == []
+    assert job.escalation_reason is None

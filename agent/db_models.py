@@ -186,7 +186,11 @@ class RecoveryJob(SQLModel, table=True):
     estimate_amount: Optional[str] = None
     days_since: Optional[str] = None
     anchor_date: Optional[str] = None  # ISO YYYY-MM-DD; only set for the "membership" face
-    current_status: str = "pending"  # pending, awaiting_slot, booked, declined, no_response
+    current_status: str = "pending"  # pending, awaiting_slot, booked, declined, no_response, escalated
+    # Set alongside current_status == "escalated" (recovery_service._escalate,
+    # PR #2) — the model's own short reason, drill-down-able next to the
+    # status without cross-referencing the OwnerNotification it also created.
+    escalation_reason: Optional[str] = None
     last_sent_day: Optional[int] = None
     offered_slots_json: str = "[]"
     booked_job_id: Optional[int] = Field(default=None, foreign_key="job.id")

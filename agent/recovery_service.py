@@ -276,6 +276,7 @@ def _escalate(session: Session, client: Business, job: RecoveryJob, reason: str)
         build_escalation_message(client, job.customer_phone, reason), alerted,
     )
     job.current_status = "escalated"
+    job.escalation_reason = reason
     return ESCALATED_REPLY
 
 
