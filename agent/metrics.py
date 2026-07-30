@@ -32,8 +32,8 @@ from typing import Callable, Optional
 from sqlmodel import func, select
 
 from db_models import (
-    Job, JobQualification, Message, OwnerNotification, RecoveryCampaign, RecoveryJob,
-    ReferralLead, ReviewReply,
+    DispatchPlan, Job, JobQualification, Message, OwnerNotification, RecoveryCampaign,
+    RecoveryJob, ReferralLead, ReviewReply,
 )
 from notifications import (
     KIND_CALL_DROPPED, KIND_ESCALATION, is_test_thread,
@@ -62,6 +62,10 @@ HIGH_PRIORITY_LEADS = "high_priority_leads"
 FINANCING_CANDIDATES = "financing_candidates"
 MEMBERSHIP_CANDIDATES = "membership_candidates"
 POSSIBLE_SPAM_FLAGGED = "possible_spam_flagged"
+JOBS_DISPATCHED = "jobs_dispatched"
+EMERGENCY_DISPATCHES = "emergency_dispatches"
+SAME_DAY_DISPATCHES = "same_day_dispatches"
+MANUAL_REVIEW_FLAGGED = "manual_review_flagged"
 
 METRIC_RECORDS = {
     JOBS_BOOKED: "job where not is_test_thread(customer_phone)",
@@ -85,6 +89,10 @@ METRIC_RECORDS = {
     FINANCING_CANDIDATES: "jobqualification where financing_candidate is true",
     MEMBERSHIP_CANDIDATES: "jobqualification where membership_candidate is true",
     POSSIBLE_SPAM_FLAGGED: "jobqualification where possible_spam is true",
+    JOBS_DISPATCHED: "dispatchplan",
+    EMERGENCY_DISPATCHES: "dispatchplan where dispatch_priority == 'emergency'",
+    SAME_DAY_DISPATCHES: "dispatchplan where dispatch_priority == 'same_day'",
+    MANUAL_REVIEW_FLAGGED: "dispatchplan where requires_dispatch_review is true",
 }
 
 
@@ -228,6 +236,19 @@ def _job_qualifications(condition=None, kind="lead_qualified"):
     return _fetch
 
 
+def _dispatch_plans(condition=None, kind="dispatch_planned"):
+    def _fetch(session, business_id, since=None):
+        q = select(DispatchPlan).where(DispatchPlan.business_id == business_id)
+        if condition is not None:
+            q = q.where(condition)
+        if since is not None:
+            q = q.where(DispatchPlan.created_at >= since)
+        return [ActivityRow(r.created_at, kind,
+                            f"{r.dispatch_priority} — {r.scheduling_window}")
+                for r in session.exec(q).all()]
+    return _fetch
+
+
 # ---- the registry -----------------------------------------------------------
 # Inclusion does NOT imply the employee is deployable — same rule as the
 # employee registry itself. `referral`'s engine ships and runs on the cron
@@ -294,6 +315,20 @@ EMPLOYEE_RECORDS = {
                      POSSIBLE_SPAM_FLAGGED,
                      _job_qualifications(JobQualification.possible_spam == True,  # noqa: E712
                                          "possible_spam")),
+    )),
+    "dispatcher": EmployeeRecords("dispatcher", (
+        RecordSource("dispatch_plans", METRIC_RECORDS[JOBS_DISPATCHED],
+                     JOBS_DISPATCHED, _dispatch_plans()),
+        RecordSource("emergency_dispatches", METRIC_RECORDS[EMERGENCY_DISPATCHES],
+                     EMERGENCY_DISPATCHES,
+                     _dispatch_plans(DispatchPlan.dispatch_priority == "emergency", "emergency_dispatch")),
+        RecordSource("same_day_dispatches", METRIC_RECORDS[SAME_DAY_DISPATCHES],
+                     SAME_DAY_DISPATCHES,
+                     _dispatch_plans(DispatchPlan.dispatch_priority == "same_day", "same_day_dispatch")),
+        RecordSource("manual_review_flagged", METRIC_RECORDS[MANUAL_REVIEW_FLAGGED],
+                     MANUAL_REVIEW_FLAGGED,
+                     _dispatch_plans(DispatchPlan.requires_dispatch_review == True,  # noqa: E712
+                                     "manual_review_flagged")),
     )),
 }
 

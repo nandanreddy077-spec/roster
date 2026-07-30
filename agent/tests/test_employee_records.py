@@ -13,16 +13,20 @@ from datetime import datetime, timedelta
 
 import metrics
 from db_models import (
-    Business, Job, JobQualification, OwnerNotification, RecoveryCampaign, RecoveryJob, ReviewReply,
+    Business, DispatchPlan, Job, JobQualification, OwnerNotification, RecoveryCampaign,
+    RecoveryJob, ReviewReply,
 )
 from metrics import (
     CALLS_ANSWERED,
+    EMERGENCY_DISPATCHES,
     EMPLOYEE_RECORDS,
     ESCALATIONS,
     FINANCING_CANDIDATES,
     HIGH_PRIORITY_LEADS,
     JOBS_BOOKED,
+    JOBS_DISPATCHED,
     LEADS_QUALIFIED,
+    MANUAL_REVIEW_FLAGGED,
     MEMBERSHIP_CANDIDATES,
     POSSIBLE_SPAM_FLAGGED,
     QUOTES_CHASED,
@@ -31,6 +35,7 @@ from metrics import (
     REVIEW_REQUESTS_SENT,
     REVIEW_RESPONSES,
     REVIEWS_SELF_REPORTED,
+    SAME_DAY_DISPATCHES,
     employee_activity,
     employee_outcomes,
 )
@@ -193,9 +198,12 @@ def test_a_since_window_narrows_the_count(session):
 
 
 def test_an_undeclared_role_reports_nothing_rather_than_zeros(session):
+    """financing has no engine yet (employees.py: still `planned`), so it
+    correctly has no EMPLOYEE_RECORDS entry — dispatcher used to be this
+    example too, until Dispatcher PR #1 (2026-07-30) gave it one."""
     b = _business(session, "er7@test.io")
 
-    assert employee_outcomes(session, b.id, "dispatcher") == {}
+    assert employee_outcomes(session, b.id, "financing") == {}
 
 
 def test_activity_resolves_to_real_rows_newest_first(session):
@@ -302,3 +310,39 @@ def test_lead_qualifier_counts_every_qualification_axis(session):
     assert outcomes[FINANCING_CANDIDATES] == 1
     assert outcomes[MEMBERSHIP_CANDIDATES] == 1
     assert outcomes[POSSIBLE_SPAM_FLAGGED] == 1
+
+
+def test_dispatcher_counts_every_dispatch_axis(session):
+    b = _business(session, "er14@test.io")
+    other = _business(session, "er14b@test.io")
+    job1 = Job(business_id=b.id, customer_phone="+1", service_type="x", urgency="emergency")
+    job2 = Job(business_id=b.id, customer_phone="+2", service_type="x", urgency="routine")
+    session.add(job1)
+    session.add(job2)
+    session.commit()
+    session.refresh(job1)
+    session.refresh(job2)
+    session.add(DispatchPlan(
+        business_id=b.id, source_job_id=job1.id, dispatch_priority="emergency",
+        scheduling_window="immediate", requires_dispatch_review=True, dispatch_reason="X",
+    ))
+    session.add(DispatchPlan(
+        business_id=b.id, source_job_id=job2.id, dispatch_priority="normal",
+        scheduling_window="flexible", requires_dispatch_review=False, dispatch_reason="Y",
+    ))
+    # a plan on a DIFFERENT business must never bleed into b's counts
+    other_job = Job(business_id=other.id, customer_phone="+3", service_type="x", urgency="emergency")
+    session.add(other_job)
+    session.commit()
+    session.refresh(other_job)
+    session.add(DispatchPlan(
+        business_id=other.id, source_job_id=other_job.id, dispatch_priority="emergency",
+        scheduling_window="immediate", requires_dispatch_review=True, dispatch_reason="Z",
+    ))
+    session.commit()
+
+    outcomes = metrics.department_outcomes(session, b.id, "operations", ["dispatcher"])
+    assert outcomes[JOBS_DISPATCHED] == 2
+    assert outcomes[EMERGENCY_DISPATCHES] == 1
+    assert outcomes[SAME_DAY_DISPATCHES] == 0
+    assert outcomes[MANUAL_REVIEW_FLAGGED] == 1

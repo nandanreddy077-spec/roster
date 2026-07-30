@@ -67,6 +67,10 @@ METRIC_LABELS = {
     metrics.FINANCING_CANDIDATES: "Financing candidates",
     metrics.MEMBERSHIP_CANDIDATES: "Membership candidates",
     metrics.POSSIBLE_SPAM_FLAGGED: "Possible spam flagged",
+    metrics.JOBS_DISPATCHED: "Jobs planned",
+    metrics.EMERGENCY_DISPATCHES: "Emergency jobs",
+    metrics.SAME_DAY_DISPATCHES: "Same-day jobs",
+    metrics.MANUAL_REVIEW_FLAGGED: "Flagged for your review",
 }
 
 # The CUSTOMER's wording for each notifications.KIND_* — the Notifications

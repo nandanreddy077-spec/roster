@@ -99,13 +99,15 @@ def test_sales_outcomes_report_quotes_chased_and_recovered(session):
 
 
 def test_a_department_with_no_engine_reports_no_metrics_not_zeros(session):
-    """Honesty: Operations has no engine, so it has nothing to report even if
-    (hypothetically) role keys were passed for it. Showing '0 jobs dispatched'
-    would imply a department that ran and achieved nothing, rather than one
-    that was never built."""
+    """Honesty: Finance has no engine (collections/financing are both still
+    `planned`), so it has nothing to report even if role keys were passed
+    for it. Showing '0 invoices collected' would imply a department that ran
+    and achieved nothing, rather than one that was never built. Operations
+    used to be this example too, until Dispatcher PR #1 (2026-07-30) gave it
+    an engine."""
     b = _business(session, "m7@test.io")
 
-    assert department_outcomes(session, b.id, "operations", ["dispatcher"]) == {}
+    assert department_outcomes(session, b.id, "finance", ["collections", "financing"]) == {}
 
 
 def test_outcomes_for_an_unknown_department_are_empty(session):
