@@ -76,3 +76,52 @@ def dispatch_job_completed(session: Session, business: Business, job: Job) -> No
 
 # The first validated job-completion employee registers here (one line).
 JOB_COMPLETED_ROLES: List[RoleDefinition] = []
+
+
+def deployed_businesses(session: Session, role_key: str) -> List[Business]:
+    """Every Business with `role_key` deployed and not fired — the bulk-query
+    sibling of is_active, for tick-shaped access ("scan every deployed
+    business") rather than request-shaped access ("check this one business").
+    Same Employee-row source of truth, same legacy-key normalization, so the
+    two can never disagree about the same row (2026-07-30, Critical Finding
+    #2: this is the shared resolver every tick-based employee goes through —
+    none of them queries deployment state independently)."""
+    from sqlmodel import select
+
+    from db_models import Employee
+    from departments import canonical_role_key
+
+    wanted = canonical_role_key(role_key)
+    business_ids = {
+        e.business_id
+        for e in session.exec(select(Employee).where(Employee.status != "fired")).all()
+        if canonical_role_key(e.role_key) == wanted
+    }
+    if not business_ids:
+        return []
+    return session.exec(select(Business).where(Business.id.in_(business_ids))).all()
+
+
+TickCapability = Callable[[Session, Business], list]
+
+
+def dispatch_tick(session: Session, role_key: str, capability: TickCapability) -> list:
+    """The tick-triggered counterpart to dispatch_job_completed: resolve
+    which businesses have `role_key` deployed, and only then call
+    `capability(session, business)` for each — once per deployed business,
+    never for anything else. This is the single path every tick-based
+    employee's own processing function is reached through; none of them
+    queries Job/JobQualification/etc. across businesses on its own, so there
+    is no reachable code path to an undeployed business's data to forget to
+    guard.
+
+    Aggregates and returns whatever each capability call returns (typically
+    the rows it created), matching the existing return shape of
+    qualify_new_jobs/recommend_dispatch/etc. so callers don't need to
+    change."""
+    results: list = []
+    for business in deployed_businesses(session, role_key):
+        produced = capability(session, business)
+        if produced:
+            results.extend(produced)
+    return results

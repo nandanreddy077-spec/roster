@@ -152,12 +152,14 @@ def test_deploying_the_same_department_twice_is_a_no_op(test_engine, monkeypatch
 
 def test_deploying_a_department_with_nothing_deployable_does_not_500(test_engine, monkeypatch):
     """B10: deploy_department raises for these. The route must surface it as a
-    message on the page, never as a stack trace."""
+    message on the page, never as a stack trace. (Operations used to be this
+    example, until Dispatcher gained a real engine — 2026-07-30, Critical
+    Finding #2 fix; Finance still has zero live/internal employees.)"""
     monkeypatch.setattr(app_module, "engine", test_engine)
     with Session(test_engine) as s:
         bid = _business(s).id
 
-    r = _post_deploy(bid, department_key="operations")
+    r = _post_deploy(bid, department_key="finance")
 
     assert r.status_code == 303
     assert "deploy_error" in r.headers["location"]
@@ -476,12 +478,15 @@ def test_clients_new_without_a_department_deploys_nothing(test_engine, monkeypat
 
 def test_a_bad_department_choice_does_not_lose_the_business(test_engine, monkeypatch):
     """The business is the valuable thing on this form. A department that
-    can't be staffed yet must not take the whole submission down with it."""
+    can't be staffed yet must not take the whole submission down with it.
+    (Operations used to be this example, until Dispatcher gained a real
+    engine — 2026-07-30, Critical Finding #2 fix; Finance still has zero
+    live/internal employees.)"""
     monkeypatch.setattr(app_module, "engine", test_engine)
 
     r = TestClient(app_module.app, headers=DASH_AUTH).post(
         "/clients/new",
-        data={**WIZARD_FIELDS, "department_key": "operations"},
+        data={**WIZARD_FIELDS, "department_key": "finance"},
         follow_redirects=False,
     )
 

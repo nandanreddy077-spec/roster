@@ -53,9 +53,12 @@ def test_a_fully_staffed_department_404s(test_engine, monkeypatch):
 
 
 def test_a_department_with_nothing_deployable_404s(test_engine, monkeypatch):
+    """Finance has zero live/internal employees. (Operations used to be this
+    example, until Dispatcher gained a real engine — 2026-07-30, Critical
+    Finding #2 fix.)"""
     client, _ = _client_for(test_engine, monkeypatch)
 
-    r = client.get("/v2/dashboard/departments/operations/expand")
+    r = client.get("/v2/dashboard/departments/finance/expand")
 
     assert r.status_code == 404
 

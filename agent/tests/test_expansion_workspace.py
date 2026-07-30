@@ -42,10 +42,12 @@ def test_leadership_is_never_expandable(session):
 
 
 def test_a_department_with_nothing_ever_deployable_returns_none(session):
-    """Operations/Finance/Marketing: every role is still `planned`."""
+    """Finance/Marketing: every role is still `planned`. Operations used to
+    be a third example here too, until Dispatcher gained a real engine
+    (2026-07-30, Critical Finding #2 fix)."""
     b = _business(session, "xw3@test.io")
 
-    assert build_expansion_workspace(session, b.id, "operations") is None
+    assert build_expansion_workspace(session, b.id, "finance") is None
 
 
 def test_a_fully_staffed_department_returns_none(session):

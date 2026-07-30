@@ -139,13 +139,16 @@ def test_workspace_never_crosses_businesses(session):
     assert build_department_workspace(session, b.id, "customer_service") is None
 
 
-def test_sales_workspace_uses_quote_chaser(session):
+def test_sales_workspace_uses_quote_chaser_and_lead_qualifier(session):
+    """Sales now has two deployable employees — Lead Qualifier joined
+    Quote Chaser once it gained a real deterministic engine (2026-07-30,
+    Critical Finding #2 fix)."""
     b = _business(session, "w11@test.io")
     deploy_department(session, b.id, "sales")
 
     ws = build_department_workspace(session, b.id, "sales")
 
-    assert {e.role_key for e in ws.employees} == {"quote_chaser"}
+    assert {e.role_key for e in ws.employees} == {"quote_chaser", "lead_qualifier"}
 
 
 def test_customer_state_labels_and_active_states_are_consistent():

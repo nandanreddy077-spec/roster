@@ -44,14 +44,16 @@ def test_deploying_the_same_role_twice_creates_one_row(session):
 
 
 def test_deploying_a_planned_employee_is_rejected(session):
-    """I5 / audit F4. `dispatcher` has no engine — status `planned` in the
+    """I5 / audit F4. `financing` has no engine — status `planned` in the
     registry. Creating a row for it would make active_departments_for()
-    report Operations as STAFFED, and the customer's dashboard would show a
-    department that cannot do anything."""
+    report Finance as STAFFED, and the customer's dashboard would show a
+    department that cannot do anything. (`dispatcher` used to be this
+    example, until it gained a real deterministic engine — 2026-07-30,
+    Critical Finding #2 fix.)"""
     b = _business(session, "dep3@test.io")
 
     with pytest.raises(ValueError):
-        deploy_role(session, b.id, "dispatcher")
+        deploy_role(session, b.id, "financing")
 
     assert session.exec(select(Employee).where(Employee.business_id == b.id)).all() == []
 
@@ -113,13 +115,15 @@ def test_re_running_a_partial_deployment_completes_it(session):
 
 
 def test_deploy_department_rejects_a_department_with_nothing_deployable(session):
-    """audit F4: Operations, Finance and Marketing are hireable in the
-    registry but have zero live/internal employees today. Refusing loudly is
-    what stops the ops console from 'deploying' vaporware."""
+    """audit F4: Finance and Marketing are hireable in the registry but have
+    zero live/internal employees today. Refusing loudly is what stops the
+    ops console from 'deploying' vaporware. (Operations used to be a third
+    example here too, until Dispatcher gained a real engine — 2026-07-30,
+    Critical Finding #2 fix.)"""
     b = _business(session, "dep9@test.io")
 
     with pytest.raises(ValueError):
-        deploy_department(session, b.id, "operations")
+        deploy_department(session, b.id, "finance")
 
 
 def test_deploy_department_rejects_leadership(session):

@@ -219,9 +219,11 @@ def test_a_half_deployed_department_is_partial():
 
 
 def test_a_department_with_no_deployable_employees_is_unavailable():
-    """Operations/Finance/Marketing are hireable but every role in them is
-    still `planned` — there is nothing to deploy yet."""
-    s = _status_by_key([])["operations"]
+    """Finance/Marketing are hireable but every role in them is still
+    `planned` — there is nothing to deploy yet. Operations used to be a
+    third example here too, until Dispatcher (2026-07-30, Critical Finding
+    #2 fix) gave it a deployable employee."""
+    s = _status_by_key([])["finance"]
     assert s.state == "unavailable"
     assert s.deployable_count == 0
 

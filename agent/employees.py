@@ -39,8 +39,9 @@ class EmployeeDefinition:
     # answering customers?" Left "" for every `planned` entry: writing this
     # copy for an employee with no engine would be inventing marketing content
     # for a product that doesn't exist yet, the same rule that kept "Reviews
-    # received" off the dashboard. Populated only for the five with a real
-    # engine (frontdesk, quote_chaser, retention_manager, reviews, referral).
+    # received" off the dashboard. Populated only for employees with a real
+    # engine (frontdesk, quote_chaser, retention_manager, reviews, referral,
+    # lead_qualifier, dispatcher).
     mission: str = ""
 
 
@@ -57,13 +58,23 @@ REGISTRY: list[EmployeeDefinition] = [
     EmployeeDefinition("reviews", "customer_service", "internal", "Reviews",
                        mission="Is Reviews requesting feedback?"),
     # Sales
-    EmployeeDefinition("lead_qualifier", "sales", "planned", "Lead Qualifier"),
+    # Deterministic — no AgentEngine, no LLM call (2026-07-30 design review):
+    # enriches every deployed business's new jobs with structured
+    # classification (job_type, priority, financing/membership candidacy,
+    # possible_spam). "internal" like Reviews/Quote Chaser/Referral — the
+    # founder deploys per business, not yet a standing self-serve offer.
+    EmployeeDefinition("lead_qualifier", "sales", "internal", "Lead Qualifier",
+                       mission="Is Lead Qualifier enriching new jobs?"),
     EmployeeDefinition("quote_chaser", "sales", "internal", "Quote Chaser",
                        mission="Is Quote Chaser recovering revenue?"),
     EmployeeDefinition("membership_agent", "sales", "planned", "Membership Agent"),
     EmployeeDefinition("upsell_agent", "sales", "planned", "Upsell Agent"),
     # Operations
-    EmployeeDefinition("dispatcher", "operations", "planned", "Dispatcher"),
+    # Deterministic, same reasoning as Lead Qualifier above — combines
+    # Job.urgency and JobQualification's already-structured output into a
+    # scheduling recommendation, no LLM involved.
+    EmployeeDefinition("dispatcher", "operations", "internal", "Dispatcher",
+                       mission="Is Dispatcher planning today's work?"),
     EmployeeDefinition("route_optimizer", "operations", "planned", "Route Optimizer"),
     EmployeeDefinition("emergency_coordinator", "operations", "planned", "Emergency Coordinator"),
     # Finance
