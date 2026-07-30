@@ -78,6 +78,30 @@ def warn_missing_production_env(environ) -> list:
     return [v for v in _PRODUCTION_CRITICAL_ENV if not environ.get(v)]
 
 
+def should_start_scheduler(environ) -> bool:
+    """The in-process tick scheduler (recovery_tick.run, on a timer) must
+    only ever run in production — never during the test suite or local dev,
+    which would otherwise spin up a live loop hitting Twilio/Anthropic/the
+    real database just because this module was imported. Kept pure for
+    testability, same convention as warn_missing_production_env."""
+    return environ.get("ROSTER_ENV") == "production"
+
+
+def scheduler_interval_seconds(environ) -> int:
+    """How often the scheduler ticks. Configurable via TICK_INTERVAL_SECONDS;
+    a malformed override falls back to the safe default rather than crashing
+    boot."""
+    from scheduler import DEFAULT_INTERVAL_SECONDS
+
+    raw = environ.get("TICK_INTERVAL_SECONDS")
+    if raw is None:
+        return DEFAULT_INTERVAL_SECONDS
+    try:
+        return int(raw)
+    except ValueError:
+        return DEFAULT_INTERVAL_SECONDS
+
+
 def resolve_session_secret(environ) -> str:
     secret = environ.get("SESSION_SECRET_KEY")
     if secret:
@@ -135,6 +159,31 @@ init_db()
 for _missing in warn_missing_production_env(os.environ):
     print(f"[PRODUCTION WARNING] {_missing} is not set — see app.py:_PRODUCTION_CRITICAL_ENV "
           "for what silently breaks without it.", file=sys.stderr)
+
+
+# ---- Background tick scheduler ----------------------------------------------
+# Runs recovery_tick.run() (Lead Qualifier, Dispatcher, Quote Chaser
+# enrollment, Reviews, Referral) on an interval inside this same process —
+# not a separate Railway service, which on the current single-service SQLite
+# volume would have no access to the real database at all. Production only
+# (should_start_scheduler); the test suite and local dev never spin this up.
+@app.on_event("startup")
+async def _start_background_scheduler() -> None:
+    if not should_start_scheduler(os.environ):
+        return
+    import recovery_tick
+    from scheduler import run_scheduler
+
+    task = asyncio.create_task(
+        run_scheduler(recovery_tick.run, scheduler_interval_seconds(os.environ))
+    )
+    _background_tasks.add(task)
+    task.add_done_callback(_background_tasks.discard)
+
+
+# Strong reference: an un-awaited create_task result nobody holds can be
+# garbage-collected mid-loop, silently killing the scheduler.
+_background_tasks: set = set()
 
 
 # ---- Dashboard auth --------------------------------------------------------
@@ -217,8 +266,8 @@ def roster_page():
     return FileResponse(LANDING_DIR / "roster.html", media_type="text/html")
 
 
-# Unlinked preview of the homepage rewrite. Live "/" is untouched; shipping is
-# repointing root() at index-v2.html. Spec:
+# Kept as an alias after the homepage rewrite shipped (root() above now serves
+# index-v2.html directly). Spec:
 # docs/superpowers/specs/2026-07-27-homepage-craft-pass-design.md
 
 
