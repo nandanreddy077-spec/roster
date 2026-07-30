@@ -45,12 +45,24 @@ Summary:
 | `ANTHROPIC_API_KEY` | Yes | Claude calls that power every conversation |
 | `ADMIN_PASSWORD` | Yes | Founder `/clients` console (fails closed if unset) |
 | `SESSION_SECRET_KEY` | Yes in production | Signs the customer-portal session cookie |
-| `ROSTER_ENV` | No (set to `production` in prod) | Enforces fail-closed checks |
+| `ROSTER_ENV` | No (set to `production` in prod) | Enforces fail-closed checks; also gates the in-process background scheduler on |
+| `PYTHONUNBUFFERED` | Set to `1` in production | Without it, background `print()` output (the scheduler's own tick logs) can sit in a buffer instead of reaching the log stream |
+| `TICK_INTERVAL_SECONDS` | No (default `3600`) | How often the in-process scheduler runs `recovery_tick.run()` |
+| `DATABASE_URL` | No | Postgres connection string; unset falls back to SQLite on `ROSTER_DATA_DIR` |
+| `ROSTER_DATA_DIR` | No (production sets it to the mounted volume) | Where the SQLite file lives; unset uses local disk |
+| `PUBLIC_BASE_URL` | No (has a hardcoded fallback) | The public HTTPS host webhook-dependent URLs are built against |
 | `FOUNDER_ALERT_PHONE` | No | Trial spend-cap SMS alert destination |
 | `TWILIO_ACCOUNT_SID` / `TWILIO_AUTH_TOKEN` | No (needed for outbound SMS) | Missed-call text-back, Recovery/Referral/Review sends |
 | `XAI_API_KEY` | No (needed for live voice) | Registers numbers + opens the realtime voice WebSocket |
 | `XAI_SIP_ALLOWED_ADDRESSES` | No | IP allowlist for xAI SIP registration |
-| `XAI_SIGNING_SECRET` | No (needed for live voice) | Verifies the xAI incoming-call webhook signature |
+| `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | No | Enables "Continue with Google" on the customer portal; unset just hides the button |
+| `OAUTH_REDIRECT_BASE_URL` | No (only if Google OAuth is enabled) | Pins the OAuth redirect URI behind Railway's proxy |
+
+Note: the xAI **signing secret** is *not* an environment variable, even
+though it's easy to assume it is alongside `XAI_API_KEY` — it's per-business
+(`Business.xai_signing_secret`), entered per client via the founder console
+when you register that client's number. See
+[`../agent/README.md`](../agent/README.md#ai-receptionist-xai-grok-voice-agent-api-live-voice).
 
 ## Project layout
 

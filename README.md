@@ -89,6 +89,10 @@ Deploys to Railway with root directory `agent/`. Summary in
 - **More than one Railway worker** — don't. SQLite is single-writer and the
   conversation lock is process-local; see
   [`docs/architecture.md`](docs/architecture.md#why-sqlite-and-one-worker).
+- **No scheduler/tick output in Railway logs** — check `PYTHONUNBUFFERED=1` is
+  set. Without it, background `print()` output can sit in a buffer instead of
+  reaching the log stream, even though the scheduler is running correctly; see
+  [`docs/deployment.md`](docs/deployment.md).
 
 ## Coding standards
 

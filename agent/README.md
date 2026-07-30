@@ -25,8 +25,8 @@ database surviving redeploys.
 
 **Why Railway specifically:** unlike free-tier Render, it doesn't spin the app down
 on idle — a missed-call agent that's asleep when the webhook fires defeats the
-product. It supports persistent volumes (so SQLite doesn't get wiped every deploy)
-and a native cron-schedule feature, without needing a Dockerfile.
+product. It supports persistent volumes (so SQLite doesn't get wiped every deploy),
+without needing a Dockerfile.
 
 ### One-time setup (in Railway's dashboard — an agent can't click through this for you)
 
@@ -48,6 +48,23 @@ and a native cron-schedule feature, without needing a Dockerfile.
      fallback, so if you don't set it here every redeploy logs customers out and
      the cookie is forgeable. Generate one with
      `python -c "import secrets; print(secrets.token_urlsafe(48))"`.
+   - `ROSTER_ENV=production` — enables every fail-closed check above, and turns on
+     the in-process background scheduler (see step 5).
+   - `PYTHONUNBUFFERED=1` — **needed for logs to show up at all.** Python
+     block-buffers `print()` output when stdout isn't a terminal, which under
+     Railway means background work (the scheduler, any tick output) can run
+     correctly while producing no visible log lines for a long time. Without
+     this, you will not see the scheduler's own output.
+   - `TICK_INTERVAL_SECONDS` — optional, defaults to `3600` (hourly). How often
+     the in-process scheduler below fires.
+   - `DATABASE_URL` — optional. Unset means SQLite on the mounted volume (see
+     step 3) — fine at current scale, see "Why SQLite, not Postgres" below. Set
+     to a Postgres connection string to switch.
+   - `PUBLIC_BASE_URL` — the public HTTPS URL Twilio/xAI webhooks are configured
+     against (e.g. `https://yourdomain.com`). Falls back to a hardcoded default
+     if unset — set this explicitly once you have your own domain (see
+     "Attaching your custom domain" below), or webhook-dependent URLs can be
+     built against the wrong host.
    - `FOUNDER_ALERT_PHONE` — optional. The number that gets the one-time SMS when
      a trial client crosses their spend cap (needs `TWILIO_*` set to actually
      send). Unset = no SMS, but the founder dashboard still shows a cap-reached
@@ -55,17 +72,30 @@ and a native cron-schedule feature, without needing a Dockerfile.
    - `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN` — once you have a Twilio number (see
      below). Twilio is SMS-only now (Chaser, Rebooker, Renewals, Referrals, Reviews,
      Frontdesk text-back) — it no longer carries live voice.
-   - `XAI_API_KEY`, `XAI_SIGNING_SECRET` — see "AI receptionist" below.
+   - `XAI_API_KEY` — see "AI receptionist" below. (The signing secret returned
+     when you register a number is **not** an env var — see the note in that
+     section.)
+   - `XAI_SIP_ALLOWED_ADDRESSES` — optional, see "AI receptionist" below.
+   - `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` — optional. Enables "Continue
+     with Google" on the customer portal login; unset simply hides that button
+     rather than erroring (`google_auth.py`).
+   - `OAUTH_REDIRECT_BASE_URL` — only needed if Google OAuth is enabled above.
+     Railway sits behind a proxy, so the request scheme can read as `http` even
+     though the public URL is `https`; set this (e.g. `https://yourdomain.com`)
+     to pin the OAuth redirect URI and avoid a `redirect_uri_mismatch`.
    - `ROSTER_DATA_DIR=/data` — points the SQLite file at the mounted volume instead
      of local disk, so it survives redeploys.
-5. **Add a second service** (same repo, same root directory `agent/`) for the daily
-   Recovery/Referrals tick:
-   - Override its **Start Command** to `python recovery_tick.py`.
-   - Set a **Cron Schedule** of `0 9 * * *` (matches the schedule already
-     documented in `recovery_tick.py`'s own docstring).
-   - Mount the **same persistent volume** at the **same path** (`/data`) as the web
-     service, and set the same `ROSTER_DATA_DIR=/data` env var — this service must
-     read/write the *same* database file the web service uses, not a separate one.
+5. **Background work runs in-process — no second service.** Lead Qualifier,
+   Dispatcher, Quote Chaser's auto-enrollment, Reviews, and Referral all run via
+   `recovery_tick.run()`, called on a schedule by an `asyncio` background task
+   the app itself starts on boot (`scheduler.py`), gated to
+   `ROSTER_ENV=production` only. This was originally planned as a second
+   Railway service running `recovery_tick.py` on a cron schedule, but Railway
+   volumes attach to one service only — a second service would have no access
+   to the real database. Running it in-process sidesteps that entirely: same
+   process, same volume, no separate service to configure. See
+   [`../docs/architecture.md`](../docs/architecture.md) for how the tick
+   pipeline works.
 6. **Copy the web service's public URL** (Railway assigns one automatically,
    `https://<something>.up.railway.app`, or attach a custom domain per below) —
    this is the URL Twilio's SMS webhooks point at, and the URL xAI's
@@ -74,7 +104,7 @@ and a native cron-schedule feature, without needing a Dockerfile.
 
 ### Attaching your custom domain
 
-Do this on the **web service** (not the cron service — that one has no public URL).
+Do this on the web service — there is only one service.
 
 1. In Railway: web service → **Settings → Networking → Custom Domain**, enter your
    domain (e.g. `app.yourdomain.com` for a subdomain, or the apex `yourdomain.com`).
@@ -132,7 +162,11 @@ we only speak on the wire when a tool (`log_job` / `transfer_call`) fires.
      number itself stays with Twilio.
    - Or take one of xAI's own **Direct SIP numbers** directly, no Twilio number
      needed for voice at all.
-3. Registration returns a **signing secret** — set it as `XAI_SIGNING_SECRET`.
+3. Registration returns a **signing secret**. This is **not** an environment
+   variable — it's per-business, stored on `Business.xai_signing_secret` and
+   set via the founder console's registration form (`app.py`), because each
+   client's number gets its own secret. `verify_webhook_signature()` reads it
+   per-request from the matched `Business` row, not from `os.environ`.
 4. Set the client's `xai_phone_number` field to the registered number (this is
    separate from `inbound_number`, which stays the Twilio number used for SMS).
 
@@ -179,11 +213,16 @@ says yes.
    Recovery campaigns".
 2. Pick a type (quote follow-up or reactivation), name the campaign, and paste
    customers one per line: `phone,name,service_type,amount_or_days_since`.
-3. Set up a daily cron job to send due messages:
+3. Something needs to call `recovery_tick.run()` on a schedule to send due
+   messages. **On Railway in production this already happens automatically**
+   — see "Deploying to Railway" above, the in-process background scheduler
+   covers this. For local testing, or any other host, run it manually or via
+   a real crontab:
    ```bash
    0 9 * * * cd /path/to/agent && .venv/bin/python recovery_tick.py >> recovery.log 2>&1
    ```
-   Safe to run more than once a day — each sequence day's message is only ever sent once.
+   Safe to run more than once a day (or more than once an hour) — every step
+   is idempotent, so nothing sends or processes twice.
 4. When a customer replies, `/webhook/sms` checks for an active Recovery
    conversation before falling through to Frontdesk, so replies get routed
    correctly even on a shared inbound number.
