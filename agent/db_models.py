@@ -239,6 +239,25 @@ class ReviewReply(SQLModel, table=True):
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
 
+class JobQualification(SQLModel, table=True):
+    """Lead Qualifier's output — a satellite enrichment record, never a
+    second Job model. One row per Job, written once (idempotent, gated by
+    source_job_id), never updated. Deterministic: no AgentEngine involved in
+    producing any field here (2026-07-30 design review)."""
+    id: Optional[int] = Field(default=None, primary_key=True)
+    business_id: int = Field(foreign_key="business.id")
+    source_job_id: int = Field(foreign_key="job.id")
+    job_type: str  # "repair" | "replacement" | "maintenance" | "estimate"
+    financing_candidate: bool
+    membership_candidate: bool
+    priority: str  # "high" | "normal"
+    possible_spam: bool  # heuristic flag, not an objective claim — see field name
+    # Comma-joined structured rule-code enums (lead_qualifier_rules.py), one
+    # per axis — never English prose, so analytics can group/count by rule.
+    reasoning: str
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+
+
 class Employee(SQLModel, table=True):
     __table_args__ = (
         # Index, NOT UniqueConstraint: a table-level UNIQUE becomes part of
