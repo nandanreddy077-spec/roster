@@ -13,13 +13,18 @@ from datetime import datetime, timedelta
 
 import metrics
 from db_models import (
-    Business, Job, OwnerNotification, RecoveryCampaign, RecoveryJob, ReviewReply,
+    Business, Job, JobQualification, OwnerNotification, RecoveryCampaign, RecoveryJob, ReviewReply,
 )
 from metrics import (
     CALLS_ANSWERED,
     EMPLOYEE_RECORDS,
     ESCALATIONS,
+    FINANCING_CANDIDATES,
+    HIGH_PRIORITY_LEADS,
     JOBS_BOOKED,
+    LEADS_QUALIFIED,
+    MEMBERSHIP_CANDIDATES,
+    POSSIBLE_SPAM_FLAGGED,
     QUOTES_CHASED,
     REVIEW_FOLLOWUPS_SENT,
     REVIEW_NEGATIVE_REPLIES,
@@ -257,3 +262,43 @@ def test_sales_outcomes_come_from_quote_chaser(session):
     session.commit()
 
     assert metrics.department_outcomes(session, b.id, "sales", ["quote_chaser"])[QUOTES_CHASED] == 1
+
+
+def test_lead_qualifier_counts_every_qualification_axis(session):
+    b = _business(session, "er13@test.io")
+    other = _business(session, "er13b@test.io")
+    job1 = Job(business_id=b.id, customer_phone="+1", service_type="AC not cooling", urgency="routine")
+    job2 = Job(business_id=b.id, customer_phone="+2", service_type="AC not cooling", urgency="routine")
+    session.add(job1)
+    session.add(job2)
+    session.commit()
+    session.refresh(job1)
+    session.refresh(job2)
+    session.add(JobQualification(
+        business_id=b.id, source_job_id=job1.id, job_type="replacement",
+        financing_candidate=True, membership_candidate=False, priority="high",
+        possible_spam=False, reasoning="X",
+    ))
+    session.add(JobQualification(
+        business_id=b.id, source_job_id=job2.id, job_type="repair",
+        financing_candidate=False, membership_candidate=True, priority="normal",
+        possible_spam=True, reasoning="Y",
+    ))
+    # a qualification on a DIFFERENT business must never bleed into b's counts
+    other_job = Job(business_id=other.id, customer_phone="+3", service_type="x", urgency="routine")
+    session.add(other_job)
+    session.commit()
+    session.refresh(other_job)
+    session.add(JobQualification(
+        business_id=other.id, source_job_id=other_job.id, job_type="replacement",
+        financing_candidate=True, membership_candidate=False, priority="high",
+        possible_spam=False, reasoning="Z",
+    ))
+    session.commit()
+
+    outcomes = metrics.department_outcomes(session, b.id, "sales", ["lead_qualifier"])
+    assert outcomes[LEADS_QUALIFIED] == 2
+    assert outcomes[HIGH_PRIORITY_LEADS] == 1
+    assert outcomes[FINANCING_CANDIDATES] == 1
+    assert outcomes[MEMBERSHIP_CANDIDATES] == 1
+    assert outcomes[POSSIBLE_SPAM_FLAGGED] == 1

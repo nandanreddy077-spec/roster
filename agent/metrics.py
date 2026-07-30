@@ -32,8 +32,8 @@ from typing import Callable, Optional
 from sqlmodel import func, select
 
 from db_models import (
-    Job, Message, OwnerNotification, RecoveryCampaign, RecoveryJob, ReferralLead,
-    ReviewReply,
+    Job, JobQualification, Message, OwnerNotification, RecoveryCampaign, RecoveryJob,
+    ReferralLead, ReviewReply,
 )
 from notifications import (
     KIND_CALL_DROPPED, KIND_ESCALATION, is_test_thread,
@@ -57,6 +57,11 @@ QUOTES_RECOVERED = "quotes_recovered"
 CUSTOMERS_REACHED = "customers_reached"
 CUSTOMERS_RETURNED = "customers_returned"
 REFERRALS_RECEIVED = "referrals_received"
+LEADS_QUALIFIED = "leads_qualified"
+HIGH_PRIORITY_LEADS = "high_priority_leads"
+FINANCING_CANDIDATES = "financing_candidates"
+MEMBERSHIP_CANDIDATES = "membership_candidates"
+POSSIBLE_SPAM_FLAGGED = "possible_spam_flagged"
 
 METRIC_RECORDS = {
     JOBS_BOOKED: "job where not is_test_thread(customer_phone)",
@@ -75,6 +80,11 @@ METRIC_RECORDS = {
         "current_status == 'booked'"
     ),
     REFERRALS_RECEIVED: "referrallead",
+    LEADS_QUALIFIED: "jobqualification",
+    HIGH_PRIORITY_LEADS: "jobqualification where priority == 'high'",
+    FINANCING_CANDIDATES: "jobqualification where financing_candidate is true",
+    MEMBERSHIP_CANDIDATES: "jobqualification where membership_candidate is true",
+    POSSIBLE_SPAM_FLAGGED: "jobqualification where possible_spam is true",
 }
 
 
@@ -206,6 +216,18 @@ def _referrals(session, business_id, since=None):
                         f"Referral from {r.asker_phone}") for r in session.exec(q).all()]
 
 
+def _job_qualifications(condition=None, kind="lead_qualified"):
+    def _fetch(session, business_id, since=None):
+        q = select(JobQualification).where(JobQualification.business_id == business_id)
+        if condition is not None:
+            q = q.where(condition)
+        if since is not None:
+            q = q.where(JobQualification.created_at >= since)
+        return [ActivityRow(r.created_at, kind, f"{r.job_type} — {r.priority} priority")
+                for r in session.exec(q).all()]
+    return _fetch
+
+
 # ---- the registry -----------------------------------------------------------
 # Inclusion does NOT imply the employee is deployable — same rule as the
 # employee registry itself. `referral`'s engine ships and runs on the cron
@@ -253,6 +275,25 @@ EMPLOYEE_RECORDS = {
     "referral": EmployeeRecords("referral", (
         RecordSource("referral_leads", METRIC_RECORDS[REFERRALS_RECEIVED],
                      REFERRALS_RECEIVED, _referrals),
+    )),
+    "lead_qualifier": EmployeeRecords("lead_qualifier", (
+        RecordSource("jobs_qualified", METRIC_RECORDS[LEADS_QUALIFIED],
+                     LEADS_QUALIFIED, _job_qualifications()),
+        RecordSource("high_priority_leads", METRIC_RECORDS[HIGH_PRIORITY_LEADS],
+                     HIGH_PRIORITY_LEADS,
+                     _job_qualifications(JobQualification.priority == "high", "high_priority_lead")),
+        RecordSource("financing_candidates", METRIC_RECORDS[FINANCING_CANDIDATES],
+                     FINANCING_CANDIDATES,
+                     _job_qualifications(JobQualification.financing_candidate == True,  # noqa: E712
+                                         "financing_candidate")),
+        RecordSource("membership_candidates", METRIC_RECORDS[MEMBERSHIP_CANDIDATES],
+                     MEMBERSHIP_CANDIDATES,
+                     _job_qualifications(JobQualification.membership_candidate == True,  # noqa: E712
+                                         "membership_candidate")),
+        RecordSource("possible_spam_flagged", METRIC_RECORDS[POSSIBLE_SPAM_FLAGGED],
+                     POSSIBLE_SPAM_FLAGGED,
+                     _job_qualifications(JobQualification.possible_spam == True,  # noqa: E712
+                                         "possible_spam")),
     )),
 }
 

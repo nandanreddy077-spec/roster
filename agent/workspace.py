@@ -62,6 +62,11 @@ METRIC_LABELS = {
     metrics.CUSTOMERS_REACHED: "Past customers contacted",
     metrics.CUSTOMERS_RETURNED: "Customers who came back",
     metrics.REFERRALS_RECEIVED: "Referrals received",
+    metrics.LEADS_QUALIFIED: "Jobs qualified",
+    metrics.HIGH_PRIORITY_LEADS: "Flagged high priority",
+    metrics.FINANCING_CANDIDATES: "Financing candidates",
+    metrics.MEMBERSHIP_CANDIDATES: "Membership candidates",
+    metrics.POSSIBLE_SPAM_FLAGGED: "Possible spam flagged",
 }
 
 # The CUSTOMER's wording for each notifications.KIND_* — the Notifications
