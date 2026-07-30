@@ -41,6 +41,14 @@ LOG_JOB_TOOL = {
                     "actually checks technician availability yet."
                 ),
             },
+            "is_estimate": {
+                "type": "boolean",
+                "description": (
+                    "True if this call was a price/estimate/replacement request rather "
+                    "than an active repair — lets Quote Chaser follow up automatically "
+                    "once the estimate visit is marked done."
+                ),
+            },
         },
         "required": ["service_type", "urgency"],
     },
@@ -183,9 +191,9 @@ _ESTIMATE_NOTE = (
     "If the caller is asking about a replacement or a price estimate rather "
     "than an active problem, treat it as a different kind of call: ask about "
     "the age or size of what's being replaced and their rough timeline, "
-    "rather than treating it like an urgent repair. Mention in log_job's "
-    "notes that it's an estimate/replacement request, and set urgency to "
-    "'routine' unless they also describe an active problem."
+    "rather than treating it like an urgent repair. Set is_estimate to true "
+    "when you call log_job, and set urgency to 'routine' unless they also "
+    "describe an active problem."
 )
 
 

@@ -293,6 +293,23 @@ def test_log_job_tool_schema_has_preferred_window():
     assert "preferred_window" not in LOG_JOB_TOOL["input_schema"]["required"]
 
 
+def test_log_job_tool_schema_has_is_estimate():
+    """Quote Chaser PR #1: the structured signal that lets recovery_service
+    auto-detect an outstanding estimate — replaces the old free-text-only
+    "mention it in notes" approach."""
+    props = LOG_JOB_TOOL["input_schema"]["properties"]
+    assert "is_estimate" in props
+    assert props["is_estimate"]["type"] == "boolean"
+    assert "is_estimate" not in LOG_JOB_TOOL["input_schema"]["required"]
+
+
+def test_both_prompts_instruct_flagging_estimate_calls_as_is_estimate():
+    sms = build_system_prompt(make_client_config(), now=FIXED_NOW).lower()
+    voice = build_voice_system_prompt(make_client_config(), now=FIXED_NOW).lower()
+    for prompt in (sms, voice):
+        assert "is_estimate" in prompt
+
+
 # ---- Sprint 2: customer context & qualification -----------------------------
 # (docs/superpowers/specs/2026-07-29-frontdesk-conversation-quality-audit.md,
 # items 5 and 13)

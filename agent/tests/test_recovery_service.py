@@ -3,7 +3,7 @@ from datetime import datetime, timedelta
 
 from sqlmodel import Session, select
 
-from db_models import Business, Job, RecoveryJob, RecoveryMessageLog
+from db_models import Business, Job, RecoveryCampaign, RecoveryJob, RecoveryMessageLog
 import recovery_service
 from conftest import StubAgent
 
@@ -547,3 +547,140 @@ def test_overlapping_ticks_cannot_double_text_a_customer(test_engine, monkeypatc
     assert len(texts_to_customer) == 1, (
         f"customer must get day-1 message exactly once, got {len(texts_to_customer)}"
     )
+
+
+# ---- PR #1: automatic enrollment of completed estimates ---------------------
+# Job.completed_at (not a new "requested" timestamp) is the timing anchor —
+# an estimate can only be chased once it's actually been given, which is what
+# "Mark done" represents. Job.is_estimate is the structured "what kind of job
+# was this" flag. Each enrollment gets its OWN RecoveryCampaign: tick()'s
+# elapsed-time math for the quote/reactivation faces reads campaign.started_at,
+# not per-job creation time, so sharing one long-lived campaign across leads
+# enrolled at different times would make a late-enrolled lead's "elapsed days"
+# jump straight to the campaign's true age — potentially firing the day-28
+# "last chance" message on a lead's very first tick. One campaign per job
+# keeps that math correct with zero changes to the frozen tick() engine.
+
+def _completed_estimate_job(session, client, **overrides) -> Job:
+    defaults = dict(
+        business_id=client.id, service_type="AC replacement", urgency="routine",
+        customer_name="Mike", callback_number="+15551234567",
+        is_estimate=True, completed_at=datetime.utcnow(),
+    )
+    defaults.update(overrides)
+    job = Job(**defaults)
+    session.add(job)
+    session.commit()
+    session.refresh(job)
+    return job
+
+
+def test_enroll_completed_estimates_creates_a_recovery_job(session):
+    client = make_client(session)
+    job = _completed_estimate_job(session, client)
+
+    enrolled = recovery_service.enroll_completed_estimates(session)
+
+    assert len(enrolled) == 1
+    rj = enrolled[0]
+    assert rj.source_job_id == job.id
+    assert rj.business_id == client.id
+    assert rj.customer_phone == "+15551234567"
+    assert rj.customer_name == "Mike"
+    assert rj.service_type == "AC replacement"
+    assert rj.current_status == "pending"
+    campaign = session.get(RecoveryCampaign, rj.campaign_id)
+    assert campaign.face == "quote"
+
+
+def test_enroll_completed_estimates_ignores_non_estimate_jobs(session):
+    client = make_client(session)
+    _completed_estimate_job(session, client, is_estimate=False)
+
+    assert recovery_service.enroll_completed_estimates(session) == []
+
+
+def test_enroll_completed_estimates_ignores_incomplete_jobs(session):
+    client = make_client(session)
+    _completed_estimate_job(session, client, completed_at=None)
+
+    assert recovery_service.enroll_completed_estimates(session) == []
+
+
+def test_enroll_completed_estimates_skips_jobs_without_callback_number(session):
+    client = make_client(session)
+    _completed_estimate_job(session, client, callback_number=None)
+
+    assert recovery_service.enroll_completed_estimates(session) == []
+
+
+def test_enroll_completed_estimates_is_idempotent(session):
+    """Duplicate-enrollment protection: a job already linked to a RecoveryJob
+    (via source_job_id) must never be enrolled a second time, matching
+    find_active_review_ask/find_active_referral_ask's own precedent — the
+    tick can safely run more than once a day."""
+    client = make_client(session)
+    _completed_estimate_job(session, client)
+
+    first = recovery_service.enroll_completed_estimates(session)
+    second = recovery_service.enroll_completed_estimates(session)
+
+    assert len(first) == 1
+    assert second == []
+    all_recovery_jobs = session.exec(select(RecoveryJob)).all()
+    assert len(all_recovery_jobs) == 1
+
+
+def test_enroll_completed_estimates_business_isolation(session):
+    client_a = make_client(session)
+    client_b = Business(business_name="Other Co", trade="HVAC", hours="9-5",
+                        pricing_faq="n/a", escalation_phone="+15550009999",
+                        inbound_number="+15559991111")
+    session.add(client_b)
+    session.commit()
+    session.refresh(client_b)
+
+    job_a = _completed_estimate_job(session, client_a, callback_number="+1")
+    job_b = _completed_estimate_job(session, client_b, callback_number="+2")
+
+    enrolled = recovery_service.enroll_completed_estimates(session)
+
+    by_source = {rj.source_job_id: rj for rj in enrolled}
+    assert len(enrolled) == 2
+    assert by_source[job_a.id].business_id == client_a.id
+    assert by_source[job_b.id].business_id == client_b.id
+
+
+def test_enroll_completed_estimates_gives_each_job_its_own_campaign(session):
+    """Regression guard for the shared-campaign elapsed-time bug described
+    above: two estimates completed at different times must never land in the
+    same RecoveryCampaign."""
+    client = make_client(session)
+    job1 = _completed_estimate_job(session, client, callback_number="+1")
+    job2 = _completed_estimate_job(session, client, callback_number="+2")
+
+    enrolled = recovery_service.enroll_completed_estimates(session)
+
+    campaign_ids = {rj.campaign_id for rj in enrolled}
+    assert len(campaign_ids) == 2
+
+
+def test_enroll_completed_estimates_then_tick_sends_after_the_sequence_delay(session, monkeypatch):
+    """Integration proof that an auto-enrolled lead flows correctly into the
+    existing, unmodified tick() engine — the real point of this PR."""
+    fake_channel = FakeSMSChannel()
+    monkeypatch.setattr(recovery_service, "sms_channel", fake_channel)
+    client = make_client(session)
+    _completed_estimate_job(session, client)
+
+    enrolled = recovery_service.enroll_completed_estimates(session)
+    campaign = session.get(RecoveryCampaign, enrolled[0].campaign_id)
+    campaign.started_at = datetime.utcnow() - timedelta(days=1)
+    session.add(campaign)
+    session.commit()
+
+    sent = recovery_service.tick(session)
+
+    assert len(sent) == 1
+    assert fake_channel.sent[0]["to"] == "+15551234567"
+    assert "AC replacement" in fake_channel.sent[0]["body"]

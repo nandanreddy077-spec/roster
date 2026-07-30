@@ -13,7 +13,7 @@ from sqlmodel import Session, select
 from bookings import book_job
 from calendar_provider import get_calendar_provider
 from channels import get_channel
-from db_models import Business, RecoveryCampaign, RecoveryJob, RecoveryMessageLog
+from db_models import Business, Job, RecoveryCampaign, RecoveryJob, RecoveryMessageLog
 from engine import AgentEngine
 from repositories import get_or_create_customer
 from recovery_engine import (
@@ -69,6 +69,70 @@ def create_campaign(
         )
     session.commit()
     return campaign
+
+
+def enroll_completed_estimates(session: Session) -> List[RecoveryJob]:
+    """Auto-enroll every completed estimate Job into the quote sequence —
+    Quote Chaser's automatic trigger (2026-07-30 PR #1), alongside the
+    founder-pasted CSV campaign create_campaign already supports.
+
+    Job.completed_at ("Mark done") is the timing anchor, not a separate
+    "estimate requested" timestamp: an estimate can only be chased once it's
+    actually been given, and completed_at is the exact moment that happens —
+    the same anchor Reviews already uses for its own delayed ask.
+    Job.is_estimate is the structured "was this an estimate call" flag.
+
+    Each enrollment gets its OWN RecoveryCampaign rather than sharing one
+    long-lived campaign: tick()'s elapsed-time math for the quote face reads
+    campaign.started_at, so a lead enrolled into an old, shared campaign
+    would see its true elapsed age on its very first tick — potentially
+    firing the day-28 "last chance" message immediately. One campaign per
+    job keeps that math correct with no change to tick() itself.
+
+    source_job_id is the idempotency key: a Job already linked to a
+    RecoveryJob is never enrolled twice, so this is safe to call every tick.
+    """
+    enrolled: List[RecoveryJob] = []
+    jobs = session.exec(
+        select(Job).where(Job.completed_at.is_not(None), Job.is_estimate == True)  # noqa: E712
+    ).all()
+
+    for job in jobs:
+        if not job.callback_number:
+            continue
+        already_enrolled = session.exec(
+            select(RecoveryJob).where(RecoveryJob.source_job_id == job.id)
+        ).first()
+        if already_enrolled is not None:
+            continue
+
+        campaign = RecoveryCampaign(
+            business_id=job.business_id,
+            face="quote",
+            name=f"Auto-detected: {job.service_type}",
+            customer_list_json=json.dumps([{
+                "phone": job.callback_number, "name": job.customer_name,
+                "service_type": job.service_type,
+            }]),
+        )
+        session.add(campaign)
+        session.commit()
+        session.refresh(campaign)
+
+        recovery_job = RecoveryJob(
+            campaign_id=campaign.id,
+            business_id=job.business_id,
+            source_job_id=job.id,
+            customer_phone=job.callback_number,
+            customer_name=job.customer_name,
+            service_type=job.service_type,
+        )
+        session.add(recovery_job)
+        session.commit()
+        session.refresh(recovery_job)
+        enrolled.append(recovery_job)
+
+    return enrolled
 
 
 def find_active_recovery_job(session: Session, client_id: int, customer_phone: str) -> Optional[RecoveryJob]:

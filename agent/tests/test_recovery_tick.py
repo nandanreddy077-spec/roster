@@ -9,3 +9,4 @@ def test_run_executes_without_error(monkeypatch, test_engine, capsys):
     assert "Referrals: sent 0 message(s)." in captured.out
     assert "Reviews: sent 0 message(s)." in captured.out
     assert "Review follow-ups: sent 0 message(s)." in captured.out
+    assert "Quote Chaser: enrolled 0 estimate(s)." in captured.out

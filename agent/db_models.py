@@ -146,6 +146,14 @@ class Job(SQLModel, table=True):
     # escalation Job — lets a retry after a FAILED page still go through while
     # a repeat call after a SUCCESSFUL one is deduped (bookings.record_escalation).
     owner_alerted_at: Optional[datetime] = None
+    # Structured "what kind of job was this" flag (Quote Chaser PR #1,
+    # 2026-07-30) — set by log_job when the call was a price/estimate/
+    # replacement conversation rather than an active repair. The timing
+    # signal for auto-enrollment is completed_at (already above), not this
+    # field: an estimate can only be chased once it's actually been given,
+    # which "Mark done" represents; this field only says which completed
+    # jobs qualify.
+    is_estimate: bool = False
 
 
 class RecoveryCampaign(SQLModel, table=True):
@@ -182,6 +190,12 @@ class RecoveryJob(SQLModel, table=True):
     last_sent_day: Optional[int] = None
     offered_slots_json: str = "[]"
     booked_job_id: Optional[int] = Field(default=None, foreign_key="job.id")
+    # Set only for auto-enrolled leads (recovery_service.
+    # enroll_completed_estimates) — the completed Job an estimate follow-up
+    # was detected from. None for founder-pasted CSV campaigns, which have
+    # no source Job. Doubles as the idempotency key: a Job already linked to
+    # a RecoveryJob here is never enrolled a second time.
+    source_job_id: Optional[int] = Field(default=None, foreign_key="job.id")
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
 

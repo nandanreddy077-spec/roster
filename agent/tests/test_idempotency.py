@@ -101,6 +101,53 @@ def test_book_job_without_preferred_window_leaves_it_unset(test_engine):
     assert job.preferred_window is None
 
 
+def test_book_job_persists_is_estimate(test_engine):
+    """Quote Chaser PR #1: the structured signal recovery_service.
+    enroll_completed_estimates reads back out, replacing free-text-only
+    notes."""
+    from bookings import book_job
+
+    b = _seed(test_engine)
+    with Session(test_engine) as s:
+        job, created = book_job(s, s.get(Business, b.id), "+15550001111", "+15550001111",
+                                {"service_type": "AC replacement", "urgency": "routine",
+                                 "is_estimate": True})
+
+    assert created is True
+    assert job.is_estimate is True
+
+
+def test_book_job_merges_is_estimate_on_a_repeat_call(test_engine):
+    from bookings import book_job
+
+    b = _seed(test_engine)
+    with Session(test_engine) as s:
+        job1, _ = book_job(s, s.get(Business, b.id), "+15550001111", "+15550001111",
+                           {"service_type": "AC replacement", "urgency": "routine"})
+        job2, created2 = book_job(s, s.get(Business, b.id), "+15550001111", "+15550001111",
+                                  {"service_type": "AC replacement", "urgency": "routine",
+                                   "is_estimate": True})
+
+    assert created2 is False
+    assert job1.id == job2.id
+    assert job2.is_estimate is True
+
+
+def test_book_job_without_is_estimate_defaults_to_false(test_engine):
+    """Regression: the existing booking flow (no is_estimate supplied) must
+    behave exactly as before — an ordinary repair job is never mistaken for
+    an outstanding estimate."""
+    from bookings import book_job
+
+    b = _seed(test_engine)
+    with Session(test_engine) as s:
+        job, created = book_job(s, s.get(Business, b.id), "+15550001111", "+15550001111",
+                                {"service_type": "burst pipe", "urgency": "emergency"})
+
+    assert created is True
+    assert job.is_estimate is False
+
+
 def test_book_job_different_service_creates_second_job(test_engine):
     from bookings import book_job
 

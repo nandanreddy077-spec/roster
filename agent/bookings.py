@@ -56,6 +56,8 @@ def book_job(
                 setattr(match, field, value)
         if args.get("urgency"):
             match.urgency = args["urgency"]
+        if args.get("is_estimate"):
+            match.is_estimate = True
         if customer_id is not None and match.customer_id is None:
             match.customer_id = customer_id
         session.add(match)
@@ -74,6 +76,7 @@ def book_job(
         callback_number=args.get("callback_number") or caller_number,
         notes=args.get("notes"),
         preferred_window=args.get("preferred_window"),
+        is_estimate=bool(args.get("is_estimate")),
     )
     session.add(job)
     session.commit()
