@@ -17,8 +17,12 @@ from db_models import Business, Job, RecoveryCampaign, RecoveryJob, RecoveryMess
 from engine import AgentEngine
 from notifications import (
     KIND_ESCALATION,
+    KIND_JOB_BOOKED,
+    SOURCE_RECOVERY_BOOKING,
     SOURCE_RECOVERY_ESCALATION,
     build_escalation_message,
+    build_owner_message,
+    notify_owner_of_booking,
     notify_owner_of_escalation,
     record_owner_notification,
 )
@@ -345,6 +349,14 @@ def handle_recovery_reply(session: Session, client: Business, job: RecoveryJob, 
                 job.booked_job_id = new_job.id
                 job.current_status = "booked"
                 reply = f"Perfect, you're booked for {chosen}! We'll text you a reminder. Any questions, just reply here."
+                # Booking notification parity with every other booking path
+                # (service.py's SMS flow): the owner must hear about a real
+                # new job regardless of which employee booked it.
+                delivered = notify_owner_of_booking(client, new_job, employee_name="Quote Chaser")
+                record_owner_notification(
+                    session, client.id, KIND_JOB_BOOKED, SOURCE_RECOVERY_BOOKING,
+                    build_owner_message(new_job, "Quote Chaser"), delivered,
+                )
         elif (
             pending
             and pending["name"] == "record_response"

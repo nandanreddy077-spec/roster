@@ -838,3 +838,70 @@ def test_handle_recovery_reply_normal_interest_does_not_escalate(session, monkey
     assert job.current_status == "awaiting_slot"
     assert calls == []
     assert job.escalation_reason is None
+
+
+# ---- PR #3: booking notification parity --------------------------------------
+# confirm_slot's booking branch already called bookings.book_job, but unlike
+# every other booking path (service.py's SMS flow) it never told the owner —
+# a real bug, not a missing feature: notify_owner_of_booking already accepts
+# an employee_name specifically so other booking employees could plug in.
+
+def test_handle_recovery_reply_confirm_slot_notifies_the_owner(session, monkeypatch):
+    client = make_client(session)
+    recovery_service.create_campaign(
+        session, client, "quote", "June quotes",
+        [{"phone": "+15551234567", "name": "Mike", "service_type": "AC install"}],
+    )
+    job = session.exec(select(RecoveryJob)).first()
+    job.current_status = "awaiting_slot"
+    job.offered_slots_json = json.dumps(["Monday morning", "Tuesday afternoon"])
+    session.add(job)
+    session.commit()
+    monkeypatch.setattr(
+        recovery_service, "agent",
+        StubAgent({
+            "reply": "", "jobs": [], "new_messages": [],
+            "pending_tool_call": {"name": "confirm_slot", "input": {"slot_index": 1}},
+        }),
+    )
+    calls = []
+    monkeypatch.setattr(recovery_service, "notify_owner_of_booking",
+                        lambda business, job, employee_name="Frontdesk", **k: calls.append(employee_name) or True)
+
+    recovery_service.handle_recovery_reply(session, client, job, "Tuesday afternoon works")
+
+    assert calls == ["Quote Chaser"]
+    notifications = session.exec(
+        select(OwnerNotification).where(OwnerNotification.business_id == client.id)
+    ).all()
+    assert len(notifications) == 1
+    assert notifications[0].kind == "job_booked"
+    assert notifications[0].source == "recovery_booking"
+
+
+def test_handle_recovery_reply_out_of_range_slot_does_not_notify_owner(session, monkeypatch):
+    """Regression: no booking happened, so no notification should fire."""
+    client = make_client(session)
+    recovery_service.create_campaign(
+        session, client, "quote", "June quotes",
+        [{"phone": "+1", "name": "Mike", "service_type": "AC install"}],
+    )
+    job = session.exec(select(RecoveryJob)).first()
+    job.current_status = "awaiting_slot"
+    job.offered_slots_json = json.dumps(["Monday morning", "Tuesday afternoon"])
+    session.add(job)
+    session.commit()
+    monkeypatch.setattr(
+        recovery_service, "agent",
+        StubAgent({
+            "reply": "", "jobs": [], "new_messages": [],
+            "pending_tool_call": {"name": "confirm_slot", "input": {"slot_index": 99}},
+        }),
+    )
+    calls = []
+    monkeypatch.setattr(recovery_service, "notify_owner_of_booking", lambda *a, **k: calls.append(1) or True)
+
+    recovery_service.handle_recovery_reply(session, client, job, "the third one")
+
+    assert calls == []
+    assert session.exec(select(OwnerNotification)).all() == []
