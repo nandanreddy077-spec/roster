@@ -4,9 +4,10 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Roster — Hire the office. Not the software.</title>
-<meta name="description" content="Roster staffs your front office with AI employees. Each one owns a job: answering every call, chasing every estimate, collecting every invoice, asking for every review. Built for home service businesses.">
+<meta name="description" content="Roster staffs your front office with AI employees. Each one owns a job: answering every call, chasing every estimate, dispatching the crew, asking for every review. Built for home service businesses.">
+<meta name="theme-color" content="#F7F4EC">
 <meta property="og:title" content="Roster — Hire the office. Not the software.">
-<meta property="og:description" content="Roster staffs your front office with AI employees. Each one owns a job — answering calls, chasing estimates, collecting invoices, asking for reviews. You get the finished work.">
+<meta property="og:description" content="Roster staffs your front office with AI employees. Each one owns a job — answering calls, chasing estimates, dispatching the crew, asking for reviews. You get the finished work.">
 <meta property="og:type" content="website">
 <meta property="og:url" content="https://rosterhires.com/">
 <link rel="canonical" href="https://rosterhires.com/">
@@ -32,240 +33,303 @@
   <symbol id="i-pest" viewBox="0 0 24 24"><ellipse cx="12" cy="13" rx="4" ry="5.5"/><path d="M12 7.5V5M9.5 4l1.4 2M14.5 4l-1.4 2M8 10.5 4.5 9M16 10.5 19.5 9M8 15H4.5M16 15h3.5"/></symbol>
   <symbol id="i-painting" viewBox="0 0 24 24"><rect x="4" y="4" width="13" height="5" rx="1"/><path d="M17 6.5h3v4h-8v3"/><rect x="10" y="13.5" width="4" height="6.5" rx="1"/></symbol>
   <symbol id="i-pool" viewBox="0 0 24 24"><path d="M3 9c2-1.6 3.5-1.6 5.5 0S12 10.6 14 9s3.5-1.6 5.5 0"/><path d="M3 14c2-1.6 3.5-1.6 5.5 0S12 15.6 14 14s3.5-1.6 5.5 0"/><path d="M3 19c2-1.6 3.5-1.6 5.5 0S12 20.6 14 19s3.5-1.6 5.5 0"/></symbol>
+  <symbol id="i-tick" viewBox="0 0 16 16"><path d="M3 8.5 6.2 12 13 4.5"/></symbol>
 </svg>
 
-<header class="nav">
-  <div class="shell nav-inner">
+<header class="nav" id="nav">
+  <div class="shell hero-shell nav-inner">
     <a class="logo" href="/">Roster</a>
     <nav class="nav-actions" aria-label="Main">
       <a class="nav-link" href="#how">How it works</a>
       <a class="nav-link" href="/roster">The roster</a>
-      <a class="nav-cta" href="#request">Request early access</a>
+      <a class="nav-cta" href="#request">Request a demo</a>
     </nav>
   </div>
 </header>
 
 <main id="main">
 
-<!-- ═══ 1. HERO — "What is this?" ═══════════════════════════════════════ -->
+<!-- ═══ 1. HERO — what is this, who is it for, what do I do next ═════════ -->
 <section class="hero" aria-labelledby="hero-h">
-  <div class="shell hero-grid">
+  <div class="shell hero-shell hero-grid">
 
     <div class="hero-copy">
       <p class="eyebrow">AI employees for home service businesses</p>
       <h1 id="hero-h">Hire the office.<br>Not the software.</h1>
       <p class="lede">
-        Each employee owns a job — answering calls, chasing estimates,
-        collecting invoices, asking for reviews. You get the finished work.
+        Each employee owns a job — answering the calls, chasing the estimates,
+        dispatching the crew, asking for the reviews. You get the finished work.
       </p>
       <div class="actions">
-        <a class="btn btn-primary" href="#request">Request early access</a>
+        <a class="btn btn-primary" href="#request">Request a demo</a>
         <a class="btn btn-ghost" href="#how">See how it works</a>
       </div>
       <p class="microtrust">No setup fee. No contract. We onboard a few businesses at a time.</p>
     </div>
 
-    <!-- Hero visual: the product, working. Plays once, rests on final state. -->
-    <div class="feed-wrap">
-      <div class="feed" id="feed">
-        <div class="feed-head">
-          <span class="feed-title">Your office</span>
-          <span class="feed-tag">Illustration</span>
+    <!-- The product. A sample account, mid-shift. -->
+    <div class="console-wrap">
+      <div class="console" id="console">
+        <div class="console-bar">
+          <span class="console-mark">Roster</span>
+          <span class="console-biz">Kestrel Plumbing &amp; Heating</span>
+          <span class="console-tag">Sample account</span>
         </div>
-        <!-- data-job/data-value: counters move only on rows where a job
-             actually books, so the totals always match the events above. -->
-        <ol class="feed-list">
-          <li class="feed-row"><span class="chip chip-front">Frontdesk</span><span class="feed-what">Answered a call in two rings</span></li>
-          <li class="feed-row" data-job="1" data-value="450"><span class="chip chip-front">Frontdesk</span><span class="feed-what">Booked it — Tuesday, 10:30&nbsp;AM</span></li>
-          <li class="feed-row"><span class="chip chip-ops">Dispatcher</span><span class="feed-what">Assigned to the closest truck</span></li>
-          <li class="feed-row"><span class="chip chip-sales">Quote&nbsp;Chaser</span><span class="feed-what">Third follow-up on a $4,200 estimate</span></li>
-          <li class="feed-row" data-job="1" data-value="4200"><span class="chip chip-sales">Quote&nbsp;Chaser</span><span class="feed-what">Estimate approved</span></li>
-          <li class="feed-row"><span class="chip chip-cs">Reviews</span><span class="feed-what">Asked for a review on job&nbsp;#1184</span></li>
-          <li class="feed-row" data-job="1" data-value="530"><span class="chip chip-cs">Rebooker</span><span class="feed-what">Brought back a customer from March</span></li>
-        </ol>
-        <div class="feed-foot">
-          <div class="feed-stat"><span class="feed-stat-label">Jobs booked</span><span class="feed-stat-num" id="statJobs">0</span></div>
-          <div class="feed-stat"><span class="feed-stat-label">Booked value</span><span class="feed-stat-num" id="statValue">$0</span></div>
-          <div class="feed-stat"><span class="feed-stat-label">Your effort</span><span class="feed-stat-num">None</span></div>
-        </div>
-      </div>
-      <p class="feed-caption">Nobody on your team touched any of this.</p>
-    </div>
 
-  </div>
-</section>
+        <div class="console-body">
+          <aside class="rail" aria-label="Employees on shift">
+            <p class="rail-dept">Customer Service</p>
+            <ul class="rail-list">
+              <li class="rail-emp is-live">
+                <span class="dot dot-live" aria-hidden="true"></span>
+                <span><span class="rail-name">Frontdesk</span><br><span class="rail-state num">On a call · 00:32</span></span>
+              </li>
+              <li class="rail-emp">
+                <span class="dot dot-on" aria-hidden="true"></span>
+                <span><span class="rail-name">Reviews</span><br><span class="rail-state num">3 requests sent today</span></span>
+              </li>
+            </ul>
+            <p class="rail-dept">Sales</p>
+            <ul class="rail-list">
+              <li class="rail-emp">
+                <span class="dot dot-on" aria-hidden="true"></span>
+                <span><span class="rail-name">Quote Chaser</span><br><span class="rail-state num">14 estimates open</span></span>
+              </li>
+              <li class="rail-emp">
+                <span class="dot dot-on" aria-hidden="true"></span>
+                <span><span class="rail-name">Lead Qualifier</span><br><span class="rail-state num">6 leads scored</span></span>
+              </li>
+            </ul>
+            <p class="rail-dept">Operations</p>
+            <ul class="rail-list">
+              <li class="rail-emp">
+                <span class="dot dot-on" aria-hidden="true"></span>
+                <span><span class="rail-name">Dispatcher</span><br><span class="rail-state num">Routing 4 jobs</span></span>
+              </li>
+            </ul>
+          </aside>
 
-<!-- ═══ 2. PROBLEM — "Why should I care?" ═══════════════════════════════ -->
-<section class="statement" aria-labelledby="stmt-h">
-  <div class="shell narrow">
-    <p class="eyebrow eyebrow-dark">Sound familiar?</p>
-    <h2 id="stmt-h" class="sr-only">The problem</h2>
-    <ul class="monologue">
-      <li class="reveal">"I've got 18 missed calls and it's not even lunch."</li>
-      <li class="reveal">"That $14,000 estimate? Nobody ever followed up."</li>
-      <li class="reveal">"I'm sending invoices at 10 at night. Again."</li>
-      <li class="reveal">"Why am I doing office work instead of running my company?"</li>
-    </ul>
-    <p class="statement-closer reveal">
-      That's not you failing at business.<br>
-      That's a business running without an office.
-    </p>
-  </div>
-</section>
+          <div class="feed">
+            <div class="feed-head">
+              <span class="feed-title">Today</span>
+              <span class="feed-when num">Tuesday · 6:12 PM</span>
+            </div>
 
-<!-- Loss calculator — the visitor's own numbers, not an industry average -->
-<section class="calc-section" aria-labelledby="calc-h">
-  <div class="shell mid">
-    <h2 id="calc-h">What the empty desk costs you.</h2>
-    <p class="lede">Two numbers you already know. The rest is arithmetic.</p>
+            <!-- The open item: one call, and the thing another employee
+                 wrote down in March that let Frontdesk answer it. -->
+            <div class="ev-open">
+              <div class="ev-open-head">
+                <span class="ev-open-who">Frontdesk</span>
+                <span class="ev-open-time num">6:12 PM · live</span>
+              </div>
+              <p class="ev-quote">
+                <span class="said">“My water heater's leaking all over the garage floor —
+                can somebody come out tonight?”</span>
+                <br>Dana Whitmore · Cavanaugh Dr.
+              </p>
+              <div class="memory">
+                <p class="memory-text">Water heater valve replaced Mar 12 — labor warranty still active.</p>
+                <p class="memory-by">Written by Dispatcher · shared memory</p>
+              </div>
+              <p class="ev-result">
+                <svg class="ti tick" width="15" height="15" aria-hidden="true"><use href="#i-tick"/></svg>
+                Booked tonight, 7:30–9:00 · covered under warranty
+              </p>
+            </div>
 
-    <div class="calc reveal">
-      <div class="calc-inputs">
-        <div class="field">
-          <label for="calls">Calls you miss in a week</label>
-          <input type="number" id="calls" value="15" min="0" max="999" step="1" inputmode="numeric">
-        </div>
-        <div class="field">
-          <label for="ticket">Your average ticket</label>
-          <div class="field-money">
-            <span class="field-prefix" aria-hidden="true">$</span>
-            <input type="number" id="ticket" value="450" min="0" max="99999" step="10" inputmode="numeric">
+            <ol class="feed-list">
+              <li class="ev">
+                <span class="ev-time num">6:09p</span>
+                <span class="ev-body"><span class="ev-who">Quote Chaser</span>
+                  <span class="ev-what">— estimate approved, Vasquez · $4,200</span></span>
+              </li>
+              <li class="ev">
+                <span class="ev-time num">6:02p</span>
+                <span class="ev-body"><span class="ev-who">Reviews</span>
+                  <span class="ev-what">— asked for a review on job #1184</span></span>
+              </li>
+              <li class="ev">
+                <span class="ev-time num">5:54p</span>
+                <span class="ev-body"><span class="ev-who">Dispatcher</span>
+                  <span class="ev-what">— moved tomorrow's 8 AM to Truck 2, shorter drive</span></span>
+              </li>
+              <li class="ev">
+                <span class="ev-time num">5:41p</span>
+                <span class="ev-body"><span class="ev-who">Frontdesk</span>
+                  <span class="ev-what">— texted back three calls that came in during the storm</span></span>
+              </li>
+            </ol>
+
+            <p class="feed-foot">Nobody on your team touched any of this.</p>
           </div>
         </div>
       </div>
-      <div class="calc-out" aria-live="polite">
-        <p class="calc-label">If only one in three of those would have booked</p>
-        <p class="calc-big" id="calcBig">$117,000</p>
-        <p class="calc-unit">walks out of your business every year</p>
-        <p class="calc-note">
-          Every one of those callers reached your business and then dialled
-          somebody else. Gross value of the calls you missed:
-          <strong id="calcGross">$351,000</strong>.
-        </p>
-      </div>
     </div>
-    <p class="footnote">Your inputs, multiplied out over 52 weeks. Nothing is sent anywhere.</p>
+
   </div>
 </section>
 
-<!-- ═══ 3. SOLUTION — "How does Roster solve it?" ═══════════════════════ -->
-<section class="solution" id="how" aria-labelledby="sol-h">
-  <div class="shell mid">
-    <h2 id="sol-h">How it works.</h2>
-    <p class="lede">Pick the roles you need. We do the rest.</p>
+<!-- ═══ 2. THE COST — why should I care ═════════════════════════════════ -->
+<section class="cost" aria-labelledby="cost-h">
+  <div class="shell hero-shell cost-grid">
+    <div>
+      <p class="eyebrow eyebrow-dark">Sound familiar?</p>
+      <h2 id="cost-h" class="sr-only">What running without an office costs you</h2>
+      <ul class="monologue">
+        <li class="reveal">“I've got 18 missed calls and it's not even lunch.”</li>
+        <li class="reveal">“That $14,000 estimate? Nobody ever followed up.”</li>
+        <li class="reveal">“I'm sending invoices at 10 at night. Again.”</li>
+        <li class="reveal">“Why am I doing office work instead of running my company?”</li>
+      </ul>
+      <p class="cost-closer reveal">
+        That's not you failing at business.<br>
+        That's a business running <em>without an office</em>.
+      </p>
+    </div>
 
+    <div>
+      <div class="ledger reveal">
+        <p class="ledger-title">What the empty desk costs you</p>
+        <div class="ledger-fields">
+          <div class="field">
+            <label for="calls">Calls you miss in a week</label>
+            <input type="number" id="calls" value="15" min="0" max="999" step="1" inputmode="numeric">
+          </div>
+          <div class="field">
+            <label for="ticket">Your average ticket</label>
+            <div class="field-money">
+              <span class="field-prefix" aria-hidden="true">$</span>
+              <input type="number" id="ticket" value="450" min="0" max="99999" step="10" inputmode="numeric">
+            </div>
+          </div>
+        </div>
+        <div class="ledger-out" aria-live="polite">
+          <p class="ledger-label">If only one in three of those would have booked</p>
+          <p class="ledger-big" id="calcBig">$117,000</p>
+          <p class="ledger-unit">walks out of your business every year</p>
+          <p class="ledger-note">
+            Every one of those callers reached your business and then dialed
+            somebody else. Gross value of the calls you missed:
+            <strong id="calcGross">$351,000</strong>.
+          </p>
+        </div>
+      </div>
+      <p class="footnote">Your own numbers, multiplied over 52 weeks. Nothing is sent anywhere.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ═══ 3. HOW IT WORKS — what do I have to do ═════════════════════════ -->
+<section class="how ruled" id="how" aria-labelledby="how-h">
+  <div class="shell">
+    <div class="section-head">
+      <h2 id="how-h">It starts with one phone call.</h2>
+      <p class="lede">You pick the roles. We hire, train and manage them.</p>
+    </div>
     <ol class="steps">
       <li class="step reveal">
-        <span class="step-num">1</span>
+        <span class="step-num num">01</span>
         <h3>Tell us how you work</h3>
         <p>One call. Your prices, your hours, your service area, how you talk
         to customers. That's the whole interview.</p>
       </li>
       <li class="step reveal">
-        <span class="step-num">2</span>
+        <span class="step-num num">02</span>
         <h3>Your employees start</h3>
         <p>Within days. We read every conversation and tune every answer.
         You never open a piece of software.</p>
       </li>
       <li class="step reveal">
-        <span class="step-num">3</span>
+        <span class="step-num num">03</span>
         <h3>Work comes back finished</h3>
-        <p>Jobs on your calendar. Estimates closed. Invoices paid. One short
-        report each morning. That's your entire workload.</p>
+        <p>Jobs on your calendar. Estimates closed. Crews routed. One short
+        report each morning — that's your entire workload.</p>
       </li>
     </ol>
   </div>
 </section>
 
-<!-- ═══ 4. EMPLOYEES — "What work gets done?" ═══════════════════════════ -->
-<section class="employees" aria-labelledby="emp-h">
+<!-- ═══ 4. THE EMPLOYEES — what work actually gets done ════════════════ -->
+<section class="employees ruled" aria-labelledby="emp-h">
   <div class="shell">
-    <div class="mid section-head">
-      <h2 id="emp-h">Five things that stop slipping.</h2>
-      <p class="lede">Each one owns a job, start to finish. Nobody has to remind them.</p>
+    <div class="section-head">
+      <h2 id="emp-h">The work that stops slipping.</h2>
+      <p class="lede">Each one owns a job start to finish. Nobody has to remind them.</p>
     </div>
 
     <div class="emp-grid">
-
       <article class="emp reveal">
         <p class="emp-role">Frontdesk</p>
         <h3 class="emp-outcome">Never miss another customer.</h3>
-        <p class="emp-body">Answers the call, texts back the ones you missed, and books the job before they try the next name on Google.</p>
-        <div class="flow" aria-hidden="true">
-          <span class="flow-step">Call comes in</span>
-          <span class="flow-step">Answered</span>
-          <span class="flow-step flow-done">Job booked</span>
-        </div>
-        <p class="emp-metric"><strong>Answers in 2 rings</strong> · 24 hours a day</p>
+        <p class="emp-body">Answers the call, texts back the ones you missed, and books the job
+        before they try the next name on Google.</p>
+        <p class="emp-metric"><strong>Answers in two rings</strong> · 24 hours a day</p>
       </article>
 
       <article class="emp reveal">
         <p class="emp-role">Quote Chaser</p>
         <h3 class="emp-outcome">Recover the estimates you already paid to win.</h3>
-        <p class="emp-body">Follows up on every open quote, patiently, for weeks — until it's a yes or a clean no.</p>
-        <div class="flow" aria-hidden="true">
-          <span class="flow-step">Estimate sent</span>
-          <span class="flow-step">8 follow-ups</span>
-          <span class="flow-step flow-done">Approved</span>
-        </div>
+        <p class="emp-body">Follows up on every open quote, patiently, for weeks — until it's a
+        yes or a clean no.</p>
         <p class="emp-metric"><strong>Most shops send one.</strong> Closing takes eight.</p>
+      </article>
+
+      <article class="emp reveal">
+        <p class="emp-role">Dispatcher</p>
+        <h3 class="emp-outcome">Put the right truck on the right job.</h3>
+        <p class="emp-body">Assigns each job to the closest available crew and reshuffles the
+        day when an emergency lands.</p>
+        <p class="emp-metric"><strong>Fewer miles</strong> · more jobs per truck</p>
       </article>
 
       <article class="emp reveal">
         <p class="emp-role">Reviews</p>
         <h3 class="emp-outcome">Turn finished jobs into five stars.</h3>
-        <p class="emp-body">Asks the moment the work is done, while the customer is still glad you showed up.</p>
-        <div class="flow" aria-hidden="true">
-          <span class="flow-step">Job complete</span>
-          <span class="flow-step">Asked</span>
-          <span class="flow-step flow-done">Review posted</span>
-        </div>
-        <p class="emp-metric"><strong>Every job</strong> · not the ones you remember</p>
-      </article>
-
-      <article class="emp reveal">
-        <p class="emp-role">Renewals</p>
-        <h3 class="emp-outcome">Stop letting memberships quietly lapse.</h3>
-        <p class="emp-body">Tracks every maintenance-plan date and renews it before it expires. Nobody has to keep the spreadsheet.</p>
-        <div class="flow" aria-hidden="true">
-          <span class="flow-step">Plan expiring</span>
-          <span class="flow-step">Reached out</span>
-          <span class="flow-step flow-done">Renewed</span>
-        </div>
-        <p class="emp-metric"><strong>Recurring revenue</strong> · kept recurring</p>
+        <p class="emp-body">Asks the moment the work is done, while the customer is still glad
+        you showed up.</p>
+        <p class="emp-metric"><strong>Every job</strong> · not just the ones you remember</p>
       </article>
 
       <article class="emp reveal">
         <p class="emp-role">Rebooker</p>
         <h3 class="emp-outcome">Bring back the customers you already earned.</h3>
-        <p class="emp-body">Works the dormant customer list nobody on your team has time to call.</p>
-        <div class="flow" aria-hidden="true">
-          <span class="flow-step">Quiet 14 months</span>
-          <span class="flow-step">Reached out</span>
-          <span class="flow-step flow-done">Booked again</span>
-        </div>
-        <p class="emp-metric"><strong>Cheapest job you'll sell</strong> · they already trust you</p>
+        <p class="emp-body">Works the dormant customer list nobody on your team has time to
+        call.</p>
+        <p class="emp-metric"><strong>The cheapest job you'll sell</strong> · they already trust you.</p>
       </article>
 
-      <a class="emp emp-more reveal" href="/roster">
-        <p class="emp-role">The full roster</p>
-        <h3 class="emp-outcome">Fourteen more roles, seven departments.</h3>
-        <p class="emp-body">Dispatch, collections, financing, routing, referrals, analysis. Some are working today, some are still being hired.</p>
-        <span class="emp-more-cta">See the full roster <span aria-hidden="true">→</span></span>
-      </a>
-
+      <article class="emp emp-note reveal">
+        <p class="emp-role">How they work together</p>
+        <h3 class="emp-outcome">What one employee learns, every employee knows.</h3>
+        <p class="emp-body">The warranty Dispatcher logged in March is the reason Frontdesk
+        gets tonight's call right.</p>
+        <p class="emp-metric"><strong>One customer record</strong> · every department reads it</p>
+      </article>
     </div>
+
+    <a class="roster-link" href="/roster">
+      <span class="roster-link-text">
+        <strong>The full roster:</strong> fourteen more roles across seven departments —
+        collections, financing, routing, referrals, analysis. Some are working today,
+        some are still being hired.
+      </span>
+      <span class="roster-link-cta">See the full roster <span aria-hidden="true">→</span></span>
+    </a>
   </div>
 </section>
 
-<!-- ═══ 6. DIFFERENCE — "Why is this different?" ════════════════════════ -->
-<section class="diff" aria-labelledby="diff-h">
-  <div class="shell mid">
-    <h2 id="diff-h">Everyone else sells you one phone answerer.</h2>
+<!-- ═══ 5. THE DIFFERENCE — why is this not an AI receptionist ═════════ -->
+<section class="diff ruled" aria-labelledby="diff-h">
+  <div class="shell">
+    <div class="section-head">
+      <h2 id="diff-h">Everyone else sells you one phone answerer.</h2>
+      <p class="lede">An office isn't a desk. It's everything that happens after the call.</p>
+    </div>
+
     <div class="diff-grid">
-      <div class="diff-col reveal">
+      <div class="diff-col diff-fade reveal">
         <p class="diff-head">A typical AI receptionist</p>
-        <ul>
+        <ul class="diff-list">
           <li>Answers the call</li>
           <li>Books the appointment</li>
           <li class="diff-stop">Then it stops.</li>
@@ -274,14 +338,13 @@
       </div>
       <div class="diff-col diff-ours reveal">
         <p class="diff-head">Roster</p>
-        <ul>
+        <ul class="diff-list">
           <li>Answers the call</li>
           <li>Books the appointment</li>
+          <li>Routes it to the right truck</li>
           <li>Chases every open estimate</li>
           <li>Asks for the review</li>
-          <li>Renews the membership</li>
           <li>Wakes up your dormant customers</li>
-          <li class="diff-strong">A whole office, not one desk.</li>
         </ul>
         <p class="diff-foot">Nothing after the booking is yours.</p>
       </div>
@@ -289,44 +352,18 @@
   </div>
 </section>
 
-<!-- ═══ 7. TRUST — "Can I believe this?" ════════════════════════════════ -->
-<section class="faq" aria-labelledby="faq-h">
-  <div class="shell narrow">
-    <p class="eyebrow">Fair questions</p>
-    <h2 id="faq-h">The three things every owner asks.</h2>
-
-    <div class="qa reveal">
-      <h3>"Won't my customers hate talking to a robot?"</h3>
-      <p>Some would — so they don't have to. Anyone who wants a person gets
-      you, immediately. For everyone else the real choice isn't robot versus
-      human. It's a text back in five seconds versus your voicemail, and most
-      people who hit voicemail just call the next name on Google.</p>
+<!-- ═══ 6. PRICING — what does it cost ═════════════════════════════════ -->
+<section class="pricing ruled" aria-labelledby="pr-h">
+  <div class="shell">
+    <div class="section-head">
+      <h2 id="pr-h">Priced like a hire, not a subscription.</h2>
+      <p class="lede">Compare it to the person you'd otherwise put at that desk.</p>
     </div>
-    <div class="qa reveal">
-      <h3>"Do I have to change my number or my software?"</h3>
-      <p>No. Keep your number. Keep whatever you already run the business on.
-      Your office works alongside it and puts booked jobs on your calendar.
-      Setup is our job, not yours.</p>
-    </div>
-    <div class="qa reveal">
-      <h3>"What happens when it gets something wrong?"</h3>
-      <p>A human catches it — that's the product. Roster is managed: we read
-      your conversations, fix wrong answers, and tune your employees every
-      week. You're not buying software and hoping. You're hiring staff with a
-      manager included.</p>
-    </div>
-  </div>
-</section>
-
-<!-- ═══ 8. PRICING — "How do I buy?" ═══════════════════════════════════ -->
-<section class="pricing" aria-labelledby="pr-h">
-  <div class="shell mid">
-    <h2 id="pr-h">Priced like a hire, not a subscription.</h2>
 
     <div class="price-grid">
       <div class="price-card reveal">
         <p class="price-label">One human office hire</p>
-        <p class="price-num">$45,000<span class="price-per">/year</span></p>
+        <p class="price-num num">$45,000<span class="price-per">/year</span></p>
         <p class="price-sub">plus payroll taxes, benefits and PTO</p>
         <ul>
           <li>Works 40 of the week's 168 hours</li>
@@ -341,46 +378,83 @@
         <ul>
           <li>Works all 168 — nights, weekends, holidays</li>
           <li>Never quits, never needs a second training</li>
-          <li>Answers, chases, collects, follows up, reports back</li>
+          <li>Answers, routes, chases, follows up, reports back</li>
         </ul>
       </div>
     </div>
-    <p class="footnote">No setup fee. No contract. Cancel any day it stops earning its keep.</p>
+    <p class="footnote" style="margin-top:var(--s3)">No setup fee. No contract. Cancel any day it stops earning its keep.</p>
   </div>
 </section>
 
-<!-- Is it for me? -->
-<section class="trades" aria-labelledby="tr-h">
-  <div class="shell mid">
-    <h2 id="tr-h">Your trade is on the roster.</h2>
-    <ul class="trade-strip reveal">
-      <li><svg class="ti" aria-hidden="true"><use href="#i-hvac"/></svg>HVAC</li>
-      <li><svg class="ti" aria-hidden="true"><use href="#i-plumbing"/></svg>Plumbing</li>
-      <li><svg class="ti" aria-hidden="true"><use href="#i-electrical"/></svg>Electrical</li>
-      <li><svg class="ti" aria-hidden="true"><use href="#i-roofing"/></svg>Roofing</li>
-      <li><svg class="ti" aria-hidden="true"><use href="#i-landscaping"/></svg>Landscaping</li>
-      <li><svg class="ti" aria-hidden="true"><use href="#i-cleaning"/></svg>Cleaning</li>
-      <li><svg class="ti" aria-hidden="true"><use href="#i-garage"/></svg>Garage Door</li>
-      <li><svg class="ti" aria-hidden="true"><use href="#i-pest"/></svg>Pest Control</li>
-      <li><svg class="ti" aria-hidden="true"><use href="#i-painting"/></svg>Painting</li>
-      <li><svg class="ti" aria-hidden="true"><use href="#i-pool"/></svg>Pool Service</li>
+<!-- ═══ 7. TRUST — can I believe this ══════════════════════════════════ -->
+<section class="faq ruled" aria-labelledby="faq-h">
+  <div class="shell">
+    <div class="section-head">
+      <h2 id="faq-h">The three things every owner asks.</h2>
+      <p class="lede">Asked on nearly every call. Answered the same way here.</p>
+    </div>
+
+    <div class="qa reveal">
+      <h3>“Won't my customers hate talking to a robot?”</h3>
+      <p>Some would — so they don't have to. Anyone who wants a person gets you,
+      immediately. For everyone else the real choice isn't robot versus human. It's
+      a text back in five seconds versus your voicemail, and most people who hit
+      voicemail just call the next name on Google.</p>
+    </div>
+    <div class="qa reveal">
+      <h3>“Do I have to change my number or my software?”</h3>
+      <p>No. Keep your number. Keep whatever you already run the business on. Your
+      office works alongside it and puts booked jobs on your calendar. Setup is our
+      job, not yours.</p>
+    </div>
+    <div class="qa reveal">
+      <h3>“What happens when it gets something wrong?”</h3>
+      <p>A human catches it — that's the product. Roster is managed: we read your
+      conversations, fix wrong answers, and tune your employees every week. You're
+      not buying software and hoping. You're hiring staff with a manager included.</p>
+    </div>
+
+  </div>
+</section>
+
+<!-- Is it for me? One line, one strip. -->
+<section class="trades ruled" aria-labelledby="tr-h">
+  <div class="shell">
+    <h2 id="tr-h" class="trades-h">Built for any home service business with a phone line and a crew.</h2>
+    <ul class="trade-strip" aria-label="Trades we staff">
+      <li><svg class="ti" width="17" height="17" aria-hidden="true"><use href="#i-hvac"/></svg>HVAC</li>
+      <li><svg class="ti" width="17" height="17" aria-hidden="true"><use href="#i-plumbing"/></svg>Plumbing</li>
+      <li><svg class="ti" width="17" height="17" aria-hidden="true"><use href="#i-electrical"/></svg>Electrical</li>
+      <li><svg class="ti" width="17" height="17" aria-hidden="true"><use href="#i-roofing"/></svg>Roofing</li>
+      <li><svg class="ti" width="17" height="17" aria-hidden="true"><use href="#i-landscaping"/></svg>Landscaping</li>
+      <li><svg class="ti" width="17" height="17" aria-hidden="true"><use href="#i-cleaning"/></svg>Cleaning</li>
+      <li><svg class="ti" width="17" height="17" aria-hidden="true"><use href="#i-garage"/></svg>Garage Door</li>
+      <li><svg class="ti" width="17" height="17" aria-hidden="true"><use href="#i-pest"/></svg>Pest Control</li>
+      <li><svg class="ti" width="17" height="17" aria-hidden="true"><use href="#i-painting"/></svg>Painting</li>
+      <li><svg class="ti" width="17" height="17" aria-hidden="true"><use href="#i-pool"/></svg>Pool Service</li>
     </ul>
-    <p class="footnote">Built for any home service business with a phone line and a crew.</p>
   </div>
 </section>
 
-<!-- ═══ 9. CTA — "What do I do next?" ══════════════════════════════════ -->
+<!-- ═══ 8. CLOSE — what do I do next ═══════════════════════════════════ -->
 <section class="cta" id="request" aria-labelledby="cta-h">
-  <div class="shell narrow">
-    <p class="eyebrow">Request early access</p>
-    <h2 id="cta-h">Your next hire doesn't need a desk.</h2>
-    <p class="lede lede-center">
-      Roster is new and we're not pretending otherwise. We take on a handful of
-      businesses at a time, so each office gets set up personally. The first
-      shops keep founding pricing for good.
-    </p>
+  <div class="shell hero-shell cta-grid">
+    <div>
+      <p class="eyebrow eyebrow-dark">Request a demo</p>
+      <h2 id="cta-h">Your next hire doesn't need a desk.</h2>
+      <p class="lede">
+        Roster is new and we're not pretending otherwise. We take on a handful of
+        businesses at a time so each office gets set up personally — and the first
+        shops keep founding pricing for good.
+      </p>
+      <ul class="cta-points">
+        <li>A 15-minute call, on your schedule</li>
+        <li>We show you your own office, staffed</li>
+        <li>No setup fee, no contract, no pressure</li>
+      </ul>
+    </div>
 
-    <form class="request-form" method="post" action="/request-access">
+    <form class="cta-form" method="post" action="/request-access">
       <div class="form-row">
         <div class="field">
           <label for="f-name">Your name</label>
@@ -415,15 +489,15 @@
         </div>
       </div>
       <button class="btn btn-primary btn-big" type="submit">Claim a founding spot</button>
+      <p class="footnote">We reach out within a day.</p>
     </form>
-    <p class="footnote center">No setup fee. No contract. We reach out within a day.</p>
   </div>
 </section>
 
 </main>
 
 <footer class="footer">
-  <div class="shell footer-inner">
+  <div class="shell hero-shell footer-inner">
     <span class="logo">Roster</span>
     <span class="footer-note">You run the business. We'll run the office.</span>
   </div>
@@ -433,13 +507,14 @@
 (function () {
   var reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-  /* ---- Scroll reveal: one-time, never repeats ---------------------------- */
+  /* ---- Scroll reveal: one-time, never repeats --------------------------- */
   var reveals = document.querySelectorAll('.reveal');
-  function showAll() { reveals.forEach(function (el) { el.classList.add('in'); }); }
+  function showAll() {
+    reveals.forEach(function (el) { el.classList.add('in'); });
+  }
 
-  // Safety net: content is opacity:0 until revealed, so anything that stops the
-  // observer firing (zero-height viewport, embedded render, threshold never
-  // crossed) would hide the page. Force everything visible after 3s regardless.
+  // Content is opacity:0 until revealed, so anything that stops the observer
+  // firing would hide the page. Force everything visible after 3s regardless.
   setTimeout(showAll, 3000);
 
   if (reduced || !('IntersectionObserver' in window)) {
@@ -449,68 +524,43 @@
       entries.forEach(function (e) {
         if (!e.isIntersecting) return;
         var el = e.target;
-        // Stagger siblings so a row of cards cascades instead of popping.
+        // Stagger siblings so a row cascades instead of popping.
         var sibs = Array.prototype.slice.call(el.parentNode.children);
-        el.style.transitionDelay = Math.min(sibs.indexOf(el), 6) * 70 + 'ms';
+        el.style.transitionDelay = Math.min(Math.max(sibs.indexOf(el), 0), 6) * 60 + 'ms';
         el.classList.add('in');
         io.unobserve(el);
       });
-    }, { rootMargin: '0px 0px -12% 0px', threshold: 0.12 });
+    }, { rootMargin: '0px 0px -10% 0px', threshold: 0.1 });
     reveals.forEach(function (el) { io.observe(el); });
   }
 
-  /* ---- Hero feed: plays once, rests on the finished state ---------------- */
-  var feed = document.getElementById('feed');
-  var rows = feed ? feed.querySelectorAll('.feed-row') : [];
-  var jobsEl = document.getElementById('statJobs');
-  var valueEl = document.getElementById('statValue');
-
-  function money(n) { return '$' + Math.round(n).toLocaleString('en-US'); }
-
-  // Totals derive from the rows themselves — markup and counters can't drift.
-  function totalsThrough(upto) {
-    var jobs = 0, value = 0;
-    for (var i = 0; i <= upto && i < rows.length; i++) {
-      jobs += parseInt(rows[i].dataset.job, 10) || 0;
-      value += parseInt(rows[i].dataset.value, 10) || 0;
-    }
-    return { jobs: jobs, value: value };
-  }
-
-  function paint(upto) {
-    var t = totalsThrough(upto);
-    if (jobsEl) jobsEl.textContent = t.jobs;
-    if (valueEl) valueEl.textContent = money(t.value);
-  }
-
-  function restFeed() {
-    rows.forEach(function (r) { r.classList.add('in'); });
-    paint(rows.length - 1);
-  }
-
-  function playFeed() {
-    var i = 0;
-    (function next() {
-      if (i >= rows.length) return;
-      rows[i].classList.add('in');
-      paint(i);
-      i++;
-      setTimeout(next, i === 1 ? 620 : 780);
-    })();
-  }
-
-  // The feed sits above the fold, so it just plays on load — no observer to
-  // mis-fire and leave the card sitting empty.
+  /* ---- Console feed: fills in once, then rests -------------------------- */
+  var rows = document.querySelectorAll('#console .ev');
   if (rows.length) {
-    if (reduced) restFeed();
-    else setTimeout(playFeed, 400);
+    if (reduced) {
+      rows.forEach(function (r) { r.classList.add('in'); });
+    } else {
+      rows.forEach(function (r, i) {
+        setTimeout(function () { r.classList.add('in'); }, 420 + i * 130);
+      });
+    }
   }
 
-  /* ---- Loss calculator -------------------------------------------------- */
+  /* ---- Nav hairline appears only once the page has moved ---------------- */
+  var nav = document.getElementById('nav');
+  if (nav) {
+    var onScroll = function () { nav.classList.toggle('is-stuck', window.scrollY > 8); };
+    onScroll();
+    window.addEventListener('scroll', onScroll, { passive: true });
+  }
+
+  /* ---- Loss ledger ------------------------------------------------------ */
   var callsEl = document.getElementById('calls');
   var ticketEl = document.getElementById('ticket');
   var bigEl = document.getElementById('calcBig');
   var grossEl = document.getElementById('calcGross');
+
+  function money(n) { return '$' + Math.round(n).toLocaleString('en-US'); }
 
   // Exposed for verification: clamp bad input, never NaN, never break layout.
   function lostRevenue(calls, ticket) {
