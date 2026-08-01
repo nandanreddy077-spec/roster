@@ -1,8 +1,36 @@
 # 002 – DECISION MODEL
 
-**Version:** 0.1 (Draft)  
-**Status:** Target Architecture  
+**Version:** 0.2 (Draft)  
+**Status:** Target Architecture — **not implemented**  
 **Owner:** Founding Team
+
+---
+
+> ## ⚠ Implementation status
+>
+> **Nothing in this document is implemented.** There is no Decision Runtime, no `Decision` entity,
+> and no shared lifecycle. Every statement below is target state.
+>
+> What exists today, as of the 2026-08-01 audit
+> ([`GAP-ANALYSIS-2026-08-01.md`](GAP-ANALYSIS-2026-08-01.md)):
+>
+> | Stage | Status |
+> |---|---|
+> | 1 Intent | 🟡 Inferred by the model, never named or stored |
+> | 2 Context Collection | ✅ `memory.build_customer_context` |
+> | 3 Evidence Collection | ❌ No code |
+> | 4 Decision Proposal | 🟡 Real for passthrough tools (`AgentEngine.respond` returns `pending_tool_call` unexecuted); **absent for `log_job`**, which is resolved inside the loop and booked unconditionally |
+> | 5 Policy Evaluation | ❌ No code |
+> | 6 Authority Evaluation | ❌ No code |
+> | 7 Validation | 🟡 Ad-hoc per handler (e.g. Recovery's slot-index bounds check) |
+> | 8 Execution | ✅ `bookings.book_job` / `record_escalation`, idempotent |
+> | 9 Observation | ✅ Send results are checked, never assumed (`delivered` booleans) |
+> | 10 Audit | 🟡 Split across `OwnerNotification`, `Message`, `CallTrace` — no decision record |
+> | 11 Completion | 🟡 Real for Recovery (`RecoveryJob.current_status`); absent elsewhere |
+>
+> The lifecycle as a whole is re-implemented in four handlers rather than shared. A post-hoc
+> `Decision` audit record is planned as D1 in
+> [`IMPLEMENTATION-PLAN-001.md`](IMPLEMENTATION-PLAN-001.md); the runtime itself is D2.
 
 ---
 
@@ -61,6 +89,9 @@ Completion
 ```
 
 No business operation may bypass this lifecycle.
+
+> ❌ **Not true today.** No business operation currently goes through this lifecycle at all,
+> because it does not exist as shared code.
 
 ---
 
@@ -223,6 +254,12 @@ No decision disappears silently.
 
 # Decision Object
 
+> ❌ **Not implemented.** No `Decision` table exists. D1 of
+> [`IMPLEMENTATION-PLAN-001.md`](IMPLEMENTATION-PLAN-001.md) creates a **post-hoc audit record**
+> with 9 of these 16 fields — deliberately omitting `evidence`, `policy_version` and
+> `authority_result`, because nothing produces those values yet and an always-`NULL` column claims
+> a capability the platform does not have.
+
 Every decision should include:
 
 ```yaml
@@ -247,6 +284,10 @@ completed_at:
 ---
 
 # Decision Invariants
+
+> 🟡 **Two of six are reachable today.** After D1, decisions become *Observable* and
+> *Explainable*. *Verified*, *Authorized*, *Replayable* and *Recoverable* require the Policy
+> Engine, the Authority Engine and the Decision Runtime, none of which exist.
 
 Every decision must be:
 
@@ -303,6 +344,9 @@ Examples:
 - RequestReview
 
 Every command executes through the Decision Runtime.
+
+> ❌ **Not true today.** Business actions are not modelled as commands. `BookAppointment` exists
+> as `bookings.book_job`; the rest of the examples above have no implementation.
 
 ---
 

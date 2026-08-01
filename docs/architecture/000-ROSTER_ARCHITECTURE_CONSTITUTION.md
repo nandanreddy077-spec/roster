@@ -72,6 +72,29 @@ Choose the simplest architecture that preserves correctness.
 
 # The Ten Laws of Roster
 
+> ## ⚠ Compliance status (audited 2026-08-01)
+>
+> The Laws are permanent and are **not** softened here — this document states that where the
+> implementation conflicts, *the implementation is wrong*. That remains true. This note records
+> which Laws the codebase does not yet satisfy, so the gap is tracked rather than assumed closed.
+> Evidence: [`GAP-ANALYSIS-2026-08-01.md`](GAP-ANALYSIS-2026-08-01.md).
+>
+> | Law | Status |
+> |---|---|
+> | 1 Truth before Intelligence | 🟡 Verified facts win where they are checked at all; hours, pricing and service area are not checked |
+> | 2 Authority before Action | 🟡 Deployment-level only. No per-action authority exists |
+> | 3 Verification before Commitment | 🟡 Ad-hoc per handler; no shared verification step |
+> | **4 Policies live outside prompts** | ❌ **Violated.** `engine.py:259-262` and `:295-298` interpolate hours, pricing and service area directly into the LLM system prompt, and `_service_area_note` delegates enforcement of the service-area rule to the model |
+> | 5 Every important action is observable | 🟡 Owner alerts and voice calls are logged; the `Event` table has no publishers |
+> | 6 Humans retain ultimate authority | ✅ Escalation to the owner exists on every path; no autonomous irreversible action |
+> | 7 Failures must be recoverable | 🟡 Strong in Recovery (claim/release retry); inconsistent elsewhere |
+> | 8 History is immutable | ✅ No update path on any log or event row |
+> | 9 Architecture outlives AI models | ✅ Provider adapters are ports; model choice is one constant |
+> | 10 Trust is the North Star | — Not mechanically checkable |
+>
+> Law 4 is the largest open violation and is the highest-value fix in the gap analysis's
+> recommended order.
+
 1. Truth before Intelligence.
 2. Authority before Action.
 3. Verification before Commitment.
