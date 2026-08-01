@@ -8,18 +8,54 @@ service_type) inside the dedup window. A re-book of the same service on the
 same thread MERGES new details into the existing job instead of inserting a
 second row; a different service, a completed job, or an old job books fresh.
 """
+import sys
 from datetime import datetime, timedelta
 from typing import Any, Dict, Optional, Tuple
 
 from sqlmodel import Session, select
 
 from db_models import Business, Job
+from eventbus import bus
+from events import JOB_BOOKED, DomainEvent
 
 # A same-thread re-book of the same service within this window is treated as
 # the same job (details merged), not a new booking. Long enough to cover any
 # single conversation incl. voice retries; short enough that a genuine repeat
 # customer next week books cleanly.
 BOOKING_DEDUP_WINDOW_HOURS = 24
+
+
+def _publish_job_booked(session: Session, job: Job, customer_id: Optional[int]) -> None:
+    """Record a NEW booking on the event stream. Best-effort, and deliberately
+    subordinate to the booking itself: the job has already committed by the time
+    this runs, and nothing here may undo it or raise into the caller. A lost
+    event is a gap in history; a lost booking is a lost customer.
+
+    Only reached on the create path — a detail-merge is not a new booking and
+    must not emit a second event (the whole point of book_job's upsert). The
+    dedup_key makes that structural too, so even a mistaken second call is
+    dropped rather than duplicating history.
+
+    ponytail: eventbus dispatches subscribers synchronously, in-process, so a
+    slow handler would run inside the booking path. Safe today — there are zero
+    subscribers. Move dispatch off-thread if one ever appears.
+    """
+    try:
+        bus.publish(session, DomainEvent(
+            type=JOB_BOOKED,
+            business_id=job.business_id,
+            customer_id=customer_id,
+            payload={
+                "job_id": job.id,
+                "service_type": job.service_type,
+                "urgency": job.urgency,
+            },
+            dedup_key=f"job.booked:{job.id}",
+        ))
+    except Exception as e:
+        # Loud, like notifications.record_owner_notification: a booking that
+        # never reached the event stream is invisible everywhere else.
+        print(f"[events] failed to publish job.booked for job {job.id}: {e}", file=sys.stderr)
 
 
 def book_job(
@@ -80,6 +116,14 @@ def book_job(
     )
     session.add(job)
     session.commit()
+    # Strictly after the commit above: the job is already durable, so a failed
+    # or deduped publish can only roll back the event, never the booking.
+    _publish_job_booked(session, job, customer_id)
+    # Refresh AFTER publishing, not before. publish() commits, and a commit
+    # expires every instance in the session — so refreshing first would leave
+    # callers holding a Job whose fields raise DetachedInstanceError once the
+    # session closes. This is the last statement that touches `job` for exactly
+    # that reason; don't add anything that commits between here and the return.
     session.refresh(job)
     return job, True
 
