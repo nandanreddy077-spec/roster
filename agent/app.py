@@ -32,6 +32,8 @@ from channels import get_channel
 import departments
 from db import DATA_DIR, engine, init_db
 from deployment import deploy_department, deploy_role
+from eventbus import bus
+from events import JOB_COMPLETED, DomainEvent
 from expansion import mark_actioned, open_interests_for
 from notifications import is_test_thread
 from locks import conversation_lock
@@ -607,6 +609,21 @@ def complete_job(client_id: int, job_id: int):
                 dispatch_job_completed(session, client, job)
             except Exception as e:
                 print(f"Runner: dispatch_job_completed failed for job {job_id}: {e}")
+            # After dispatch, not before: a deduped publish rolls the session
+            # back, and the employees reacting to this completion matter more
+            # than the record that it happened. Post-commit either way — the
+            # completion above is already durable.
+            try:
+                bus.publish(session, DomainEvent(
+                    type=JOB_COMPLETED,
+                    business_id=job.business_id,
+                    customer_id=job.customer_id,
+                    payload={"job_id": job.id, "service_type": job.service_type},
+                    dedup_key=f"job.completed:{job.id}",
+                ))
+            except Exception as e:
+                print(f"[events] failed to publish job.completed for job {job_id}: {e}",
+                      file=sys.stderr)
     return RedirectResponse(f"/clients/{client_id}", status_code=303)
 
 
