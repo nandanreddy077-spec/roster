@@ -435,3 +435,46 @@ def test_regression_service_area_and_estimate_language_still_present():
     prompt = build_system_prompt(config, now=FIXED_NOW)
     assert "within 20 miles of Austin, TX" in prompt
     assert "replacement" in prompt.lower()
+
+
+# ---- sounding like a person on the phone ----------------------------------
+
+def _voice(**overrides):
+    fields = dict(client_id="1", business_name="Ridgeline Plumbing", trade="plumbing",
+                  services=["drain cleaning"], hours="9-5", pricing_faq="",
+                  escalation_phone="+15125550149")
+    fields.update(overrides)
+    return build_voice_system_prompt(ClientConfig(**fields))
+
+
+def test_the_voice_prompt_bans_the_call_center_tells():
+    """What gives an AI away on the phone is phrasing, not the voice."""
+    prompt = _voice().lower()
+    for tell in ["i'd be happy to assist", "anything else i can help",
+                 "thank you for your patience", "absolutely"]:
+        assert tell in prompt, f"the prompt no longer names {tell!r} as a phrase to avoid"
+    assert "contractions" in prompt
+    assert "one thought per turn" in prompt
+
+
+def test_the_voice_prompt_tells_it_to_stop_when_interrupted():
+    assert "interrupt" in _voice().lower()
+
+
+def test_the_greeting_is_capped_at_one_sentence():
+    """Measured on a real call: the opening ran 4.5 seconds of speech before the
+    caller could say a word."""
+    for mode in ("primary", "backup"):
+        prompt = _voice(answer_mode=mode)
+        assert "ONE short sentence" in prompt
+
+
+def test_it_never_claims_to_be_human_but_stays_warm():
+    """The line between 'sounds human' and 'lies about being human'. Sounding
+    natural is the goal; denying it when asked is a legal and trust problem
+    (bot-disclosure statutes), and it is worse for the caller than an honest
+    answer they didn't mind."""
+    prompt = _voice()
+    assert "Never claim to be a human being." in prompt
+    assert "AI assistant for" in prompt
+    assert "carry straight on helping" in prompt

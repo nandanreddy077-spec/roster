@@ -2169,3 +2169,52 @@ def test_raw_audio_never_reaches_the_capture_or_the_logs(tmp_path):
     assert "input_audio_buffer.append" in body, "the fact audio flowed was lost entirely"
     assert '"audio_stream_summary"' in body or "audio_stream_summary" in body
     assert body.count("U2VjcmV0") == 0
+
+
+# ---- session config: turn-taking and trade vocabulary ----------------------
+
+def test_the_session_tunes_turn_detection_for_a_phone_line(test_engine):
+    """xAI's default VAD threshold is 0.85 — tuned for studio audio. A caller in
+    a truck, outside, or simply soft-spoken never registers, and the AI talks
+    over them. Turn-taking is what makes a voice feel human, more than the
+    voice itself."""
+    from xai_voice_adapter import build_session_update
+
+    session = build_session_update(_seed_business(test_engine))["session"]
+    vad = session["turn_detection"]
+
+    assert vad["type"] == "server_vad"
+    assert vad["threshold"] < 0.85, "left at the studio-audio default"
+    assert 200 <= vad["silence_duration_ms"] <= 900, (
+        "too short cuts callers off mid-sentence; too long is the classic "
+        "robot pause")
+
+
+def test_the_session_sends_trade_vocabulary_to_the_transcriber(test_engine):
+    """Mishearing 'P-trap' as 'pea trap' is the loudest tell that a machine is
+    on the line, and it makes the caller repeat themselves."""
+    from xai_voice_adapter import build_session_update, TRADE_KEYTERMS
+
+    session = build_session_update(_seed_business(test_engine))["session"]
+    keyterms = session["audio"]["input"]["transcription"]["keyterms"]
+
+    assert "P-trap" in keyterms
+    assert "condenser" in keyterms
+    assert len(keyterms) <= 100, "xAI caps keyterms at 100"
+    assert all(len(t) <= 50 for t in keyterms), "xAI caps each term at 50 chars"
+    assert keyterms == TRADE_KEYTERMS
+
+
+def test_the_voice_is_configurable_without_a_deploy(test_engine, monkeypatch):
+    """26 voices exist and picking one is a judgement made by ear, not in code."""
+    import importlib
+    import xai_voice_adapter
+
+    monkeypatch.setenv("XAI_VOICE", "celeste")
+    importlib.reload(xai_voice_adapter)
+    try:
+        session = xai_voice_adapter.build_session_update(_seed_business(test_engine))["session"]
+        assert session["voice"] == "celeste"
+    finally:
+        monkeypatch.undo()
+        importlib.reload(xai_voice_adapter)

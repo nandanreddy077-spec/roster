@@ -61,7 +61,40 @@ from repositories import get_or_create_customer
 
 REALTIME_URL = "wss://api.x.ai/v1/realtime"
 VOICE_THREAD_PREFIX = "xai-voice:"
-DEFAULT_VOICE = "eve"
+DEFAULT_VOICE = os.environ.get("XAI_VOICE", "eve")
+
+# Turn-taking is what makes a voice feel human — more than the voice itself.
+# xAI's defaults are tuned for clean studio audio, not a phone line:
+#
+#   threshold 0.85 (default) means only LOUD speech registers. A caller in a
+#   truck, outside, or simply softly spoken gets ignored, and the AI talks over
+#   them or sits waiting. 0.55 registers ordinary phone speech while staying
+#   above line noise.
+#
+#   silence_duration_ms is the gap before the AI decides you've finished. Long
+#   gaps are the classic robot tell — the caller stops, then waits, then starts
+#   again just as the AI begins. 500ms is about a natural conversational beat.
+#
+# Both are deliberately conservative rather than aggressive: cutting a caller
+# off mid-sentence reads as ruder, and less human, than a slight pause.
+TURN_DETECTION = {
+    "type": "server_vad",
+    "threshold": 0.55,
+    "silence_duration_ms": 500,
+    "prefix_padding_ms": 300,
+}
+
+# Home-services vocabulary the transcriber would otherwise mangle. Kept short
+# and trade-general — this is the shared list every business gets, not a
+# per-customer glossary (xAI caps it at 100 terms).
+TRADE_KEYTERMS = [
+    "HVAC", "AC unit", "condenser", "compressor", "evaporator coil", "furnace",
+    "heat pump", "thermostat", "ductwork", "refrigerant", "freon", "air handler",
+    "P-trap", "water heater", "tankless", "sump pump", "garbage disposal",
+    "shutoff valve", "main line", "sewer line", "septic", "drain snake",
+    "flapper valve", "pressure regulator", "backflow", "breaker", "panel",
+    "GFCI", "outlet", "estimate", "quote", "diagnostic fee", "service call",
+]
 
 # Hard safety cap on one call's total duration (connect through close) — a
 # stuck/zombie connection (or a caller who never hangs up) must not pin a
@@ -159,7 +192,15 @@ def build_session_update(client: Business, customer_context: str = "") -> Dict[s
         "session": {
             "voice": DEFAULT_VOICE,
             "instructions": instructions,
-            "turn_detection": {"type": "server_vad"},
+            "turn_detection": TURN_DETECTION,
+            "audio": {
+                "input": {
+                    # Trade vocabulary, so the caller doesn't have to repeat
+                    # themselves. Mishearing "P-trap" as "pea trap" is the
+                    # single loudest tell that a machine is on the line.
+                    "transcription": {"keyterms": TRADE_KEYTERMS},
+                },
+            },
             "tools": [_translate_tool(LOG_JOB_TOOL), _translate_tool(TRANSFER_CALL_TOOL)],
         },
     }
