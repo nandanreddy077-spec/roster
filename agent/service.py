@@ -5,20 +5,31 @@ identically: load this customer's thread, run the agent, persist the turn, and
 capture any booked jobs.
 """
 import json
-from typing import Any, Dict, List
+from datetime import datetime
+from typing import Any, Dict, List, Optional
 
 from sqlmodel import Session, select
 
-from bookings import book_job
+from bookings import book_job, record_escalation
 from db_models import Business, Job, Message
-from engine import AgentEngine, build_system_prompt, merge_consecutive_roles
+from engine import (
+    LOG_JOB_TOOL,
+    TRANSFER_CALL_TOOL,
+    AgentEngine,
+    build_system_prompt,
+    merge_consecutive_roles,
+)
 from memory import build_customer_context
 from notifications import (
+    KIND_ESCALATION,
     KIND_JOB_BOOKED,
+    SOURCE_ALERT_OWNER,
     SOURCE_SMS_BOOKING,
+    build_escalation_message,
     build_owner_message,
     is_test_thread,
     notify_owner_of_booking,
+    notify_owner_of_escalation,
     record_owner_notification,
 )
 from repositories import get_or_create_customer
@@ -88,7 +99,16 @@ def handle_customer_message(
     if context:
         system = f"{system}\n\n{context}"
 
-    result = agent.respond(client.to_config(), history, system_prompt=system)
+    # Both tools, matching the voice path (xai_voice_adapter.build_session_update).
+    # Without alert_owner here the SMS prompt's emergency instruction was a
+    # promise the channel could not keep: the model told a gas-leak customer
+    # "I'm alerting our team" while the owner received an ordinary
+    # "just booked a job" text, indistinguishable from a routine call.
+    result = agent.respond(
+        client.to_config(), history,
+        tools=[LOG_JOB_TOOL, TRANSFER_CALL_TOOL],
+        system_prompt=system,
+    )
     record_usage(session, client)
 
     # The engine produced the full turn (assistant tool_use, tool_result, final
@@ -131,4 +151,70 @@ def handle_customer_message(
                 build_owner_message(job, "Frontdesk"), delivered,
             )
 
-    return {"reply": result["reply"], "jobs": captured}
+    # Strictly after the booking commit above, same rule the voice path follows:
+    # the lead is already durable, so a failed page can never cost us the job.
+    # `.get` not `[...]`: existing test doubles return results without this key.
+    reply = result["reply"]
+    pending = result.get("pending_tool_call")
+    if pending and pending.get("name") == TRANSFER_CALL_TOOL["name"]:
+        reply = _escalate(session, client, customer_phone, pending.get("input") or {}, reply)
+
+    return {"reply": reply, "jobs": captured}
+
+
+def _escalate(
+    session: Session, client: Business, customer_phone: str,
+    args: Dict[str, Any], reply: str,
+) -> str:
+    """Execute an alert_owner tool call from the SMS path and return the reply
+    the customer should actually receive.
+
+    Unlike voice — where the tool result is fed back and the model can report a
+    failed page itself (see engine.build_voice_system_prompt) — the engine ends
+    the turn on a passthrough tool, so the model's text was already written
+    before we knew whether the owner was reached. The honest correction is
+    therefore appended deterministically here rather than trusted to a second
+    model turn: it costs no extra API call and cannot itself hallucinate.
+    """
+    reason = args.get("reason") or "customer needs the owner"
+    customer = get_or_create_customer(session, client.id, customer_phone)
+    job, should_notify = record_escalation(
+        session, client, customer_phone, customer_phone, reason, customer_id=customer.id)
+
+    # The owner's own dashboard test must never page them, exactly as it
+    # never produces a booking text (notify_owner_of_booking's same check).
+    if is_test_thread(customer_phone):
+        return reply
+    # Already paged successfully for this emergency inside the dedup window —
+    # the owner does know, so the model's "I've alerted them" stays true.
+    if not should_notify:
+        return reply
+
+    alerted = notify_owner_of_escalation(client, customer_phone, reason)
+    record_owner_notification(
+        session, client.id, KIND_ESCALATION, SOURCE_ALERT_OWNER,
+        build_escalation_message(client, customer_phone, reason), alerted,
+    )
+    if alerted:
+        job.owner_alerted_at = datetime.utcnow()
+        session.add(job)
+        session.commit()
+        return reply
+    return _alert_failed_reply(reply, client.escalation_phone)
+
+
+def _alert_failed_reply(reply: str, escalation_phone: Optional[str]) -> str:
+    """Never leave a customer holding a promise we failed to keep. The model
+    has already said help is coming; if the page did not go out, say so plainly
+    and give them something they can actually act on."""
+    if escalation_phone:
+        correction = (
+            "I wasn't able to reach the team by text just now — please call "
+            f"{escalation_phone} directly."
+        )
+    else:
+        correction = (
+            "I wasn't able to reach the team by text just now. If anyone is in "
+            "danger, please call 911."
+        )
+    return f"{reply}\n\n{correction}" if reply else correction

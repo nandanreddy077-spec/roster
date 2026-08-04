@@ -130,6 +130,17 @@ def book_job(
 
 ESCALATION_SERVICE_TYPE = "Escalated call"
 
+# Why an escalation needs a time window at all, when a voice call never did:
+# a voice thread is `xai-voice:{call_id}` — unique per call, so "one escalation
+# per thread" is already scoped to one conversation and can never recur. The
+# SMS path threads on the customer's PHONE NUMBER, which is forever. Without a
+# window, the first emergency that number ever reported would permanently
+# suppress the page for every later one — a silently-dropped gas leak months
+# later. Same window as BOOKING_DEDUP_WINDOW_HOURS above, for the same reason:
+# long enough to cover one conversation's retries, short enough that a genuine
+# new emergency pages again.
+ESCALATION_DEDUP_WINDOW_HOURS = 24
+
 
 def record_escalation(
     session: Session,
@@ -140,9 +151,10 @@ def record_escalation(
     customer_id: Optional[int] = None,
 ) -> Tuple[Job, bool]:
     """Upsert an emergency-escalation Job — the same idempotency guarantee
-    book_job gives log_job, for alert_owner. One call thread gets at most one
-    escalation Job; a repeat alert_owner call in the same conversation reuses
-    it instead of creating a second one.
+    book_job gives log_job, for alert_owner. One thread gets at most one
+    escalation Job inside the dedup window; a repeat alert_owner call in the
+    same conversation reuses it instead of creating a second one, while a new
+    emergency from the same number after the window pages the owner again.
 
     Returns (job, should_notify). should_notify is True until the owner has
     actually been successfully paged for THIS job (job.owner_alerted_at is
@@ -150,12 +162,16 @@ def record_escalation(
     retry after a failed page still fires, and only a repeat call after a
     SUCCESSFUL page is deduped.
     """
+    since = datetime.utcnow() - timedelta(hours=ESCALATION_DEDUP_WINDOW_HOURS)
     existing = session.exec(
-        select(Job).where(
+        select(Job)
+        .where(
             Job.business_id == business.id,
             Job.customer_phone == thread,
             Job.service_type == ESCALATION_SERVICE_TYPE,
+            Job.created_at >= since,
         )
+        .order_by(Job.id.desc())  # newest in-window escalation, deterministically
     ).first()
     if existing is not None:
         if customer_id is not None and existing.customer_id is None:
