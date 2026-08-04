@@ -71,7 +71,15 @@ REGISTRY: list[EmployeeDefinition] = [
     # founder deploys per business, not yet a standing self-serve offer.
     EmployeeDefinition("lead_qualifier", "sales", "internal", "Lead Qualifier",
                        mission="Is Lead Qualifier enriching new jobs?"),
-    EmployeeDefinition("quote_chaser", "sales", "internal", "Quote Chaser",
+    # Graduated internal -> live (founder, 2026-08-04) on the same two
+    # conditions Reviews had to meet: the whole journey verified end to end
+    # against real Claude — estimate marked done, auto-enrolled, chased, "yes",
+    # slots offered, slot chosen, job booked, owner texted — and enrolment
+    # gated on the Employee row (recovery_service.enroll_completed_estimates).
+    # Before that gate, `live` would have meant a business could be chased
+    # without ever hiring anyone. Deploying is now a standing console action
+    # with no bespoke work per business.
+    EmployeeDefinition("quote_chaser", "sales", "live", "Quote Chaser",
                        mission="Is Quote Chaser recovering revenue?"),
     EmployeeDefinition("membership_agent", "sales", "planned", "Membership Agent"),
     EmployeeDefinition("upsell_agent", "sales", "planned", "Upsell Agent"),
