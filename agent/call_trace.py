@@ -86,6 +86,7 @@ class CallTrace:
         self.capture_dir = Path(capture_dir) if capture_dir else None
         self._t0 = time.monotonic()
         self.records: list[Dict[str, Any]] = []
+        self.suppressed: Dict[str, int] = {}  # noisy event type -> count
         self._fh = None  # opened once and kept open for the call, not per write
 
     def _elapsed_ms(self) -> float:
@@ -104,8 +105,24 @@ class CallTrace:
     def stage(self, name: str, **extra: Any) -> None:
         self._write({"kind": "stage", "stage": name, **extra})
 
+    # Events that carry base64 AUDIO and arrive continuously (~5/sec each way).
+    # One real 34-second call produced 259 `input_audio_buffer.append` records;
+    # every one wrote the caller's raw voice to the capture file AND a line to
+    # stderr. That is disk bloat on the volume, real signal drowned in noise,
+    # and recorded customer audio sitting in plaintext logs. The TYPE is worth
+    # knowing, the payload never is — nobody debugs base64 audio by eye — so
+    # these are counted and summarised instead of stored.
+    NOISY_EVENT_TYPES = frozenset({
+        "input_audio_buffer.append",
+        "response.output_audio.delta",
+    })
+
     def event(self, event: Dict[str, Any]) -> None:
-        self._write({"kind": "event", "type": event.get("type"), "raw": event})
+        etype = event.get("type")
+        if etype in self.NOISY_EVENT_TYPES:
+            self.suppressed[etype] = self.suppressed.get(etype, 0) + 1
+            return
+        self._write({"kind": "event", "type": etype, "raw": event})
 
     def webhook(self, headers: Dict[str, Any], body: bytes) -> None:
         body_text = body.decode("utf-8", "replace") if isinstance(body, (bytes, bytearray)) else str(body)
@@ -135,6 +152,13 @@ class CallTrace:
         return self._fh
 
     def close(self) -> None:
+        """Write the suppressed-event tally, then release the handle. The counts
+        are the part of a noisy event worth keeping: "audio flowed both ways for
+        the whole call" is answerable from them, without storing the audio."""
+        if self.suppressed:
+            self._write({"kind": "stage", "stage": "audio_stream_summary",
+                         **self.suppressed})
+            self.suppressed = {}
         if self._fh is not None:
             self._fh.close()
             self._fh = None

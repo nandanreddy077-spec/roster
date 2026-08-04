@@ -2018,3 +2018,154 @@ def test_webhook_stale_timestamp_rejected(test_engine, monkeypatch, tmp_path):
 
     assert resp.status_code == 401
     assert recorded.get("scheduled") is None
+
+
+# ---- a normal hangup is not a failure --------------------------------------
+# Three real calls on 2026-08-04 all ended `call_failed`, because
+# participant.disconnected fell through to the unexpected-event branch and the
+# websocket then closed abnormally. Every successful call ended by telling the
+# owner it had dropped. These pin the end-of-call semantics against that.
+
+DISCONNECT_EVENT = {"type": "participant.disconnected"}
+AUDIO_DELTA = {"type": "response.output_audio.delta", "delta": "AAAA"}
+
+
+class HangUpWS(FakeWS):
+    """What a REAL hangup looks like on the wire: xAI sends
+    participant.disconnected and then the socket dies. A plain FakeWS that
+    simply stops iterating does NOT reproduce this — under it the loop exits
+    cleanly and every assertion below passes with or without the fix, which is
+    how the first version of these tests gave a false pass. Verified by
+    reverting the fix and watching them fail."""
+
+    async def __aiter__(self):
+        for raw in self._raw:
+            yield raw
+        raise RuntimeError("socket closed after participant disconnected")
+
+
+def _stages(trace):
+    return [r.get("stage") for r in trace.records if r["kind"] == "stage"]
+
+
+def test_a_caller_hanging_up_completes_the_call(test_engine):
+    from xai_voice_adapter import run_call
+    from call_trace import CallTrace
+
+    client = _seed_business(test_engine)
+    trace = CallTrace("hangup_1")
+    asyncio.run(run_call("hangup_1", client, "+15125559999", lambda: Session(test_engine),
+                         connect=connector_for(HangUpWS([GREETING_DONE, DISCONNECT_EVENT])),
+                         trace=trace))
+
+    stages = _stages(trace)
+    assert "caller_hung_up" in stages
+    assert "call_completed" in stages
+    assert "call_failed" not in stages, "a normal hangup was recorded as a failure"
+
+
+def test_a_caller_hanging_up_does_not_page_the_owner(test_engine, monkeypatch):
+    """The bug in customer terms: after every successful call the owner got
+    'the AI call with this customer dropped mid-call — call them back'."""
+    import xai_voice_adapter
+    from xai_voice_adapter import run_call
+
+    paged = []
+    monkeypatch.setattr(xai_voice_adapter, "notify_owner_of_escalation",
+                        lambda *a, **k: (paged.append(a), True)[1])
+
+    client = _seed_business(test_engine)
+    asyncio.run(run_call("hangup_2", client, "+15125559999", lambda: Session(test_engine),
+                         connect=connector_for(HangUpWS([GREETING_DONE, DISCONNECT_EVENT]))))
+
+    assert paged == [], "owner was paged about a call the customer simply ended"
+
+
+def test_a_hangup_after_a_booking_keeps_the_job_and_stays_clean(test_engine, monkeypatch):
+    import xai_voice_adapter
+    from xai_voice_adapter import run_call
+    from call_trace import CallTrace
+
+    monkeypatch.setattr(xai_voice_adapter, "notify_owner_of_booking", lambda *a, **k: True)
+    client = _seed_business(test_engine)
+    trace = CallTrace("hangup_3")
+    asyncio.run(run_call("hangup_3", client, "+15125559999", lambda: Session(test_engine),
+                         connect=connector_for(HangUpWS([LOG_JOB_EVENT, DISCONNECT_EVENT])),
+                         trace=trace))
+
+    with Session(test_engine) as s:
+        assert s.exec(select(Job).where(Job.business_id == client.id)).first() is not None
+    stages = _stages(trace)
+    assert "call_completed" in stages
+    assert "call_failed" not in stages
+
+
+def test_a_real_drop_is_still_reported_as_a_failure(test_engine, monkeypatch):
+    """The fix must not swallow genuine failures: a socket that dies WITHOUT a
+    disconnect event is still a dropped call the owner needs to hear about."""
+    import xai_voice_adapter
+    from xai_voice_adapter import run_call
+    from call_trace import CallTrace
+
+    paged = []
+    monkeypatch.setattr(xai_voice_adapter, "notify_owner_of_escalation",
+                        lambda *a, **k: (paged.append(a), True)[1])
+
+    client = _seed_business(test_engine)
+    trace = CallTrace("real_drop")
+    asyncio.run(run_call("real_drop", client, "+15125559999", lambda: Session(test_engine),
+                         connect=connector_for(ExplodingWS([])), trace=trace))
+
+    assert "call_failed" in _stages(trace)
+    assert paged, "a genuine mid-call drop no longer alerts the owner"
+
+
+# ---- instrumentation honesty ----------------------------------------------
+
+def test_time_to_first_audio_is_traced_separately_from_response_complete(test_engine):
+    """`first_ai_response` fires on response.done — the greeting FINISHING.
+    Reading it as time-to-first-audio turned a real 2.3s answer into an
+    apparent 6.9s of dead air and sent a debugging session chasing a bug that
+    did not exist. What the caller actually experiences now has its own stage."""
+    from xai_voice_adapter import run_call
+    from call_trace import CallTrace
+
+    client = _seed_business(test_engine)
+    trace = CallTrace("timing")
+    asyncio.run(run_call("timing", client, "+15125559999", lambda: Session(test_engine),
+                         connect=connector_for(FakeWS([AUDIO_DELTA, GREETING_DONE, DISCONNECT_EVENT])),
+                         trace=trace))
+
+    stages = _stages(trace)
+    assert stages.index("first_audio_to_caller") < stages.index("first_ai_response")
+
+
+def test_streaming_audio_is_never_flagged_as_an_unexpected_event(test_engine):
+    from xai_voice_adapter import run_call
+    from call_trace import CallTrace
+
+    client = _seed_business(test_engine)
+    trace = CallTrace("audio_noise")
+    asyncio.run(run_call("audio_noise", client, "+15125559999", lambda: Session(test_engine),
+                         connect=connector_for(FakeWS([AUDIO_DELTA, DISCONNECT_EVENT])),
+                         trace=trace))
+
+    assert "unexpected_event" not in _stages(trace)
+
+
+def test_raw_audio_never_reaches_the_capture_or_the_logs(tmp_path):
+    """259 audio events in one 34s call wrote the caller's voice, base64, to
+    the volume and to stderr. Keep the count, drop the payload."""
+    from call_trace import CallTrace
+
+    trace = CallTrace("audio_privacy", capture_dir=tmp_path)
+    for _ in range(50):
+        trace.event({"type": "input_audio_buffer.append", "audio": "U2VjcmV0Q2FsbGVyVm9pY2U="})
+    trace.event({"type": "response.done", "response": {}})
+    trace.close()
+
+    body = (tmp_path / "audio_privacy.jsonl").read_text()
+    assert "U2VjcmV0Q2FsbGVyVm9pY2U" not in body, "caller audio was written to disk"
+    assert "input_audio_buffer.append" in body, "the fact audio flowed was lost entirely"
+    assert '"audio_stream_summary"' in body or "audio_stream_summary" in body
+    assert body.count("U2VjcmV0") == 0

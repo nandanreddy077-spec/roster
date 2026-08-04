@@ -283,12 +283,21 @@ texting naturally."""
 
 
 def build_voice_system_prompt(client: ClientConfig, now: Optional[datetime] = None) -> str:
+    # Keep the opening SHORT. Measured on a real call (2026-08-04): the greeting
+    # ran 4.5 seconds of speech before the caller could get a word in. A real
+    # receptionist says one line and stops. Nothing else about the call is
+    # length-limited — this is only about the first turn.
     if client.answer_mode == "primary":
-        greeting_note = "You are the first point of contact — answer warmly like a normal receptionist."
+        greeting_note = (
+            "You are the first point of contact. Open with ONE short sentence — "
+            "greet them with the business name and ask how you can help. Nothing "
+            "more until they've spoken."
+        )
     else:
         greeting_note = (
-            "The caller just had their call go unanswered — open by acknowledging "
-            "that before helping them."
+            "The caller just had their call go unanswered — open with ONE short "
+            "sentence acknowledging that and asking how you can help. Nothing "
+            "more until they've spoken."
         )
 
     return f"""You are the AI receptionist for {client.business_name}, a {client.trade} business, \
