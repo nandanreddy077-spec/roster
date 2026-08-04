@@ -11,6 +11,7 @@ from sqlmodel import Session, select
 from channels import get_channel
 from db_models import Business, Job, ReferralLead
 from engine import AgentEngine
+from runner import is_active
 from referral_engine import (
     RECORD_REFERRAL_TOOL,
     REFERRAL_DELAY_DAYS,
@@ -43,6 +44,15 @@ def send_due_referral_asks(session: Session) -> List[Job]:
     for job in jobs:
         client = session.get(Business, job.business_id)
         if client is None or not client.referral_incentive or not job.callback_number:
+            continue
+        # Same deployment invariant as Reviews and Recovery: the Employee row
+        # IS the deployment record, and `referral_incentive` is configuration,
+        # not consent to text a business's customers. Referral's registry
+        # status is `planned`, which deploy_role refuses to deploy — so this
+        # gate makes the registry, the console and the tick agree instead of
+        # contradicting each other. Graduating the registry entry is what
+        # turns it back on, deliberately.
+        if not is_active(session, client, "referral"):
             continue
 
         try:

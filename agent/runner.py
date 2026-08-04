@@ -109,11 +109,27 @@ def dispatch_tick(session: Session, role_key: str, capability: TickCapability) -
     """The tick-triggered counterpart to dispatch_job_completed: resolve
     which businesses have `role_key` deployed, and only then call
     `capability(session, business)` for each — once per deployed business,
-    never for anything else. This is the single path every tick-based
-    employee's own processing function is reached through; none of them
-    queries Job/JobQualification/etc. across businesses on its own, so there
-    is no reachable code path to an undeployed business's data to forget to
-    guard.
+    never for anything else.
+
+    THE INVARIANT (one rule, two shapes): every tick-based employee must gate
+    on the Employee row before it touches a customer. There are two ways to
+    satisfy it, because tick work comes in two shapes, and BOTH read the same
+    Employee-row source of truth through canonical_role_key:
+
+      - business-shaped ("for each deployed business, do X") -> dispatch_tick.
+        Used by Lead Qualifier and Dispatcher.
+      - job-shaped ("scan due jobs across all businesses, act on each") ->
+        an `is_active(session, business, role_key)` check inside the loop.
+        Used by Recovery, Reviews and Referral, whose queries start from due
+        jobs rather than from businesses.
+
+    This docstring previously claimed dispatch_tick was the SINGLE path every
+    tick employee is reached through, and that no such employee queried jobs
+    across businesses on its own. That was false for Reviews and Referral,
+    which did exactly that and were called straight from recovery_tick.run —
+    so the comment asserting the invariant became the reason the invariant
+    kept being missed. Both are gated now; the rule is stated as what it
+    actually is, so the next tick employee is written against something true.
 
     Aggregates and returns whatever each capability call returns (typically
     the rows it created), matching the existing return shape of
