@@ -403,6 +403,20 @@ class _CallBudgetExceeded(Exception):
 USER_TRANSCRIPT_COMPLETED = "conversation.item.input_audio_transcription.completed"
 USER_TRANSCRIPT_DELTA = "conversation.item.input_audio_transcription.delta"
 
+# CONFIRMED against real calls (2026-08-04): xAI sends this when the caller
+# hangs up. It is a NORMAL end of call, not a fault — but it used to fall
+# through to the unexpected-event branch, after which the websocket closed
+# abnormally and run_call's generic handler texted the owner "the AI call with
+# this customer dropped mid-call". Three real calls, three false alarms: every
+# successful call ended by telling the owner it had failed.
+PARTICIPANT_DISCONNECTED = "participant.disconnected"
+
+# The caller starts HEARING the greeting on the first of these, several
+# seconds before response.done reports it finished. Tracing only response.done
+# as "first_ai_response" made a 2.3s time-to-audio read as 6.9s of latency and
+# sent a real debugging session chasing dead air that never existed.
+ASSISTANT_AUDIO_DELTA = "response.output_audio.delta"
+
 
 def _persist_user_transcript(session: Session, business_id: int, thread: str,
                              event: Dict[str, Any]) -> None:
@@ -567,12 +581,27 @@ async def _run_call_session(connect, call_id, client, caller_number, session_fac
         await ws.send(json.dumps({"type": "response.create"}))
 
         first_response_seen = False
+        first_audio_seen = False
         flagged_types: set = set()
         total_tokens_used = 0
         async for raw in ws:
             event = json.loads(raw)
             trace.event(event)
             etype = event.get("type")
+
+            if etype == PARTICIPANT_DISCONNECTED:
+                # The caller hung up. Ending the loop here is what makes this a
+                # completed call rather than a crash: falling through to the
+                # websocket's own abnormal close raises, and run_call's generic
+                # handler would page the owner about a call that went fine.
+                trace.stage("caller_hung_up")
+                break
+
+            if etype == ASSISTANT_AUDIO_DELTA:
+                if not first_audio_seen:
+                    trace.stage("first_audio_to_caller")
+                    first_audio_seen = True
+                continue
 
             if etype == "response.function_call_arguments.done":
                 with session_factory() as session:
@@ -581,7 +610,10 @@ async def _run_call_session(connect, call_id, client, caller_number, session_fac
 
             elif etype == "response.done":
                 if not first_response_seen:
-                    trace.stage("first_ai_response")
+                    # Response COMPLETE, not response started — the caller has
+                    # been hearing audio since first_audio_to_caller above. Kept
+                    # under the old name so existing traces stay comparable.
+                    trace.stage("first_ai_response", meaning="first response finished")
                     first_response_seen = True
                 transcript = _extract_transcript(event)
                 if transcript:
