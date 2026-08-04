@@ -10,10 +10,14 @@ from sqlmodel import Session, select
 
 from conftest import StubAgent
 from db_models import Business, Job, OwnerNotification, ReviewReply
+from deployment import deploy_role
 import review_service
 
 
-def make_client(session: Session, review_link=None) -> Business:
+def make_client(session: Session, review_link=None, deployed=True) -> Business:
+    """A business with Reviews deployed, since that Employee row — not
+    review_link — is what authorises Reviews to text anyone. `deployed=False`
+    builds the un-hired case the gate exists to block."""
     client = Business(
         business_name="Ridgeline Plumbing", trade="Plumbing", hours="9-5",
         pricing_faq="n/a", escalation_phone="+15550000000",
@@ -22,6 +26,9 @@ def make_client(session: Session, review_link=None) -> Business:
     session.add(client)
     session.commit()
     session.refresh(client)
+    if deployed:
+        deploy_role(session, client.id, "reviews")
+        session.refresh(client)
     return client
 
 
@@ -579,3 +586,46 @@ def test_handle_review_reply_business_isolation(session, monkeypatch):
     review_service.handle_review_reply(session, client_a, job_a, "left a review")
 
     assert review_service.find_active_review_ask(session, client_b.id, "+15551234567") is None
+
+
+# --- deployment gate ---------------------------------------------------------
+# Reviews went `live` in employees.REGISTRY on 2026-08-04. "Live" means a
+# business can hire it — which is only true if NOT hiring it means it stays
+# quiet. review_link is configuration; the Employee row is the deployment
+# record (ARCHITECTURE.md invariant 8), and it is what these two guard.
+
+def test_no_review_request_when_reviews_is_not_deployed(session, monkeypatch):
+    fake_channel = FakeSMSChannel()
+    monkeypatch.setattr(review_service, "sms_channel", fake_channel)
+
+    client = make_client(session, review_link="https://g.page/r/test", deployed=False)
+    job = Job(
+        business_id=client.id, service_type="AC repair", urgency="routine",
+        callback_number="+15551234567",
+        completed_at=datetime.utcnow() - timedelta(days=2),
+    )
+    session.add(job)
+    session.commit()
+
+    assert review_service.send_due_review_requests(session) == []
+    assert fake_channel.sent == []
+    session.refresh(job)
+    assert job.review_requested_at is None
+
+
+def test_no_review_followup_when_reviews_is_not_deployed(session, monkeypatch):
+    fake_channel = FakeSMSChannel()
+    monkeypatch.setattr(review_service, "sms_channel", fake_channel)
+
+    client = make_client(session, review_link="https://g.page/r/test", deployed=False)
+    job = Job(
+        business_id=client.id, service_type="AC repair", urgency="routine",
+        callback_number="+15551234567",
+        completed_at=datetime.utcnow() - timedelta(days=10),
+        review_requested_at=datetime.utcnow() - timedelta(days=9),
+    )
+    session.add(job)
+    session.commit()
+
+    assert review_service.send_due_review_followups(session) == []
+    assert fake_channel.sent == []
