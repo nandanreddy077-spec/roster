@@ -18,6 +18,7 @@ from notifications import (
     notify_owner_of_escalation,
     record_owner_notification,
 )
+from runner import is_active
 from review_engine import (
     OUTCOME_REPLIES,
     RECORD_REVIEW_REPLY_TOOL,
@@ -53,6 +54,13 @@ def send_due_review_requests(session: Session) -> List[Job]:
     for job in jobs:
         client = session.get(Business, job.business_id)
         if client is None or not client.review_link or not job.callback_number:
+            continue
+        # Reviews only works for a business that actually hired it. The
+        # Employee row IS the deployment record (ARCHITECTURE.md invariant 8);
+        # review_link alone is configuration, not consent to text customers.
+        # ponytail: one Employee query per due job — fine at this volume,
+        # hoist to a per-business set if the daily due list ever gets large.
+        if not is_active(session, client, "reviews"):
             continue
 
         try:
@@ -99,6 +107,8 @@ def send_due_review_followups(session: Session) -> List[Job]:
     for job in jobs:
         client = session.get(Business, job.business_id)
         if client is None or not client.review_link or not job.callback_number:
+            continue
+        if not is_active(session, client, "reviews"):
             continue
         settled_reply = session.exec(
             select(ReviewReply).where(

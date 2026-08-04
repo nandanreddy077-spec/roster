@@ -55,7 +55,13 @@ REGISTRY: list[EmployeeDefinition] = [
     # (founder, 2026-07-28). roles.ROLE_KEYS already emits this key, so real
     # Employee rows can carry it — it was missing from the registry, not
     # from the product.
-    EmployeeDefinition("reviews", "customer_service", "internal", "Reviews",
+    # Graduated internal -> live (founder, 2026-08-04): the engine, the tick,
+    # the reply classification and the negative-reply escalation are all
+    # built, and deploying it is now a standing console action with no
+    # bespoke work per business. review_service gates its sends on the
+    # Employee row (runner.is_active), so hiring actually turns it on —
+    # before that gate existed, "live" would have meant nothing.
+    EmployeeDefinition("reviews", "customer_service", "live", "Reviews",
                        mission="Is Reviews requesting feedback?"),
     # Sales
     # Deterministic — no AgentEngine, no LLM call (2026-07-30 design review):
