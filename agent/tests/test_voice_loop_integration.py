@@ -1537,10 +1537,19 @@ def test_a_transport_send_failure_is_unrecoverable_and_ends_the_call(test_engine
 # branch, and notifies the owner the same honest way.
 
 def _response_done_with_usage(total_tokens: int, transcript: str = "") -> dict:
+    """The REAL response.done shape, captured from a live xAI session
+    2026-08-04: usage at the top level, `response.usage` an empty dict.
+
+    This helper previously emitted usage nested under `response`, matching the
+    same assumption the parser made — so every budget test below passed while
+    production counted zero tokens on every turn and the cap could never fire.
+    A fixture that encodes the code's own guess cannot falsify it; see
+    test_xai_live_payloads.py."""
     output = [{"content": [{"transcript": transcript}]}] if transcript else []
     return {
         "type": "response.done",
-        "response": {"output": output, "usage": {"total_tokens": total_tokens}},
+        "response": {"output": output, "usage": {}},
+        "usage": {"total_tokens": total_tokens},
     }
 
 

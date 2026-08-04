@@ -343,23 +343,45 @@ def _extract_transcript(response_done_event: Dict[str, Any]) -> str:
 
 
 def _extract_response_tokens(response_done_event: Dict[str, Any]) -> int:
-    """Best-effort: pull total token usage out of a response.done event's
-    `usage` field. Same OpenAI-Realtime-compatible assumption as
-    _extract_transcript — unconfirmed against a real payload until one is
-    captured. Malformed or missing usage is treated as zero, never raises:
-    a usage-reporting hiccup must not itself break the call the budget cap
-    exists to protect."""
-    usage = response_done_event.get("response", {}).get("usage")
-    if not isinstance(usage, dict):
-        return 0
-    total = usage.get("total_tokens")
-    if isinstance(total, int) and not isinstance(total, bool) and total >= 0:
-        return total
-    parts = [
-        v for v in (usage.get("input_tokens"), usage.get("output_tokens"))
-        if isinstance(v, int) and not isinstance(v, bool) and v >= 0
-    ]
-    return sum(parts) if parts else 0
+    """Pull total token usage out of a response.done event.
+
+    CONFIRMED against a live xAI realtime session (2026-08-04): usage rides at
+    the TOP LEVEL of the event, and `response.usage` — the OpenAI-Realtime-
+    compatible location this originally assumed — is an empty dict:
+
+        {"type": "response.done",
+         "response": {..., "usage": {}},
+         "usage": {"input_tokens": 10, "output_tokens": 277,
+                   "total_tokens": 287, ...}}
+
+    Reading only the nested one returned 0 for every turn, so
+    `total_tokens_used` never incremented and MAX_CALL_TOKEN_BUDGET could
+    never fire — the per-call cost cap was inert. Both locations are checked,
+    confirmed one first, so a future version that populates the nested field
+    still works.
+
+    Malformed or missing usage is treated as zero and never raises: a
+    usage-reporting hiccup must not break the call the budget exists to
+    protect.
+    """
+    response = response_done_event.get("response")
+    candidates = (
+        response_done_event.get("usage"),
+        response.get("usage") if isinstance(response, dict) else None,
+    )
+    for usage in candidates:
+        if not isinstance(usage, dict) or not usage:
+            continue
+        total = usage.get("total_tokens")
+        if isinstance(total, int) and not isinstance(total, bool) and total >= 0:
+            return total
+        parts = [
+            v for v in (usage.get("input_tokens"), usage.get("output_tokens"))
+            if isinstance(v, int) and not isinstance(v, bool) and v >= 0
+        ]
+        if parts:
+            return sum(parts)
+    return 0
 
 
 class _CallBudgetExceeded(Exception):
