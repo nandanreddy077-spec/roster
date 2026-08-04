@@ -6,6 +6,7 @@ from sqlmodel import Session, select
 from db_models import Business, Job, OwnerNotification, RecoveryCampaign, RecoveryJob, RecoveryMessageLog
 import recovery_service
 from conftest import StubAgent
+from deployment import deploy_role
 
 
 def make_client(session: Session) -> Business:
@@ -17,6 +18,11 @@ def make_client(session: Session) -> Business:
     session.add(client)
     session.commit()
     session.refresh(client)
+    # Quote Chaser's auto-enrolment is gated on the Employee row like every
+    # other tick worker (see test_tick_deployment_gate.py): these tests'
+    # premise is a business that HAS it, which now means hired rather than
+    # merely existing. Founder-created campaigns are unaffected either way.
+    deploy_role(session, client.id, "quote_chaser")
     return client
 
 
@@ -639,6 +645,7 @@ def test_enroll_completed_estimates_business_isolation(session):
     session.add(client_b)
     session.commit()
     session.refresh(client_b)
+    deploy_role(session, client_b.id, "quote_chaser")
 
     job_a = _completed_estimate_job(session, client_a, callback_number="+1")
     job_b = _completed_estimate_job(session, client_b, callback_number="+2")

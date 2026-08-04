@@ -26,6 +26,22 @@ from datetime import datetime, timedelta
 from db_models import Business, Employee, Job
 from deployment import deploy_role
 
+# Every function recovery_tick.run() drives, in its order — the ONE list, used
+# both to exercise the tick below and to check itself against the scheduler
+# (test_the_guard_covers_every_function_the_scheduler_drives). The first
+# version of this guard hardcoded only the three review/referral calls while
+# its docstring claimed to run "the whole production tick", so it would not
+# have caught Quote Chaser — the very gap this file now exists to prevent.
+TICK_FUNCTIONS = (
+    ("lead_qualifier_service", "qualify_new_jobs"),
+    ("dispatcher_service", "recommend_dispatch"),
+    ("recovery_service", "enroll_completed_estimates"),
+    ("recovery_service", "tick"),
+    ("referral_service", "send_due_referral_asks"),
+    ("review_service", "send_due_review_requests"),
+    ("review_service", "send_due_review_followups"),
+)
+
 
 @pytest.fixture
 def tick(monkeypatch):
@@ -46,14 +62,18 @@ def tick(monkeypatch):
     review_service.sms_channel = Spy()
     referral_service.sms_channel = Spy()
 
+    import recovery_service
+    recovery_service.sms_channel = Spy()
+
     class Tick:
         messages = sent
 
         @staticmethod
         def run_all(session):
-            review_service.send_due_review_requests(session)
-            review_service.send_due_review_followups(session)
-            referral_service.send_due_referral_asks(session)
+            """Drives TICK_FUNCTIONS — resolved through sys.modules at call
+            time so the reloads above are respected."""
+            for module_name, function_name in TICK_FUNCTIONS:
+                getattr(importlib.import_module(module_name), function_name)(session)
 
     yield Tick
     monkeypatch.undo()
@@ -80,16 +100,32 @@ def _fully_configured_business(session, **overrides):
 
 
 def _completed_job(session, business, phone="+15125550001"):
+    """is_estimate=True on purpose: it is Quote Chaser's ONLY trigger, and
+    without it enroll_completed_estimates silently matches nothing — the guard
+    would call the function, assert silence, and pass no matter how ungated it
+    was. Reviews and Referral ignore the flag, so one job exercises all three."""
     job = Job(
         business_id=business.id, customer_phone=phone, customer_name="Dana Cruz",
         service_type="AC compressor replacement", urgency="same_day",
-        callback_number=phone,
+        callback_number=phone, is_estimate=True,
         completed_at=datetime.utcnow() - timedelta(hours=2),
     )
     session.add(job)
     session.commit()
     session.refresh(job)
     return job
+
+
+def _queued_contacts(session, business_id):
+    """Rows that PUT a customer in line to be texted, whether or not a message
+    has left yet. Quote Chaser's harm is enrolment: it creates a multi-touch
+    campaign that tick() drains later, so asserting only on sent SMS would
+    call an ungated enrolment clean."""
+    from db_models import RecoveryJob
+
+    return session.exec(
+        select(RecoveryJob).where(RecoveryJob.business_id == business_id)
+    ).all()
 
 
 def test_a_fully_configured_business_that_hired_nobody_is_never_texted(test_engine, tick):
@@ -104,6 +140,10 @@ def test_a_fully_configured_business_that_hired_nobody_is_never_texted(test_engi
         assert tick.messages == [], (
             "a business that hired nobody was texted by the tick — "
             "configuration is not consent"
+        )
+        assert _queued_contacts(session, business.id) == [], (
+            "a business that hired nobody had customers enrolled into a "
+            "texting sequence — the send is only delayed, not prevented"
         )
 
 
@@ -173,3 +213,29 @@ def test_firing_an_employee_stops_the_texts(test_engine, tick):
             tick.run_all(session)
 
         assert tick.messages == []
+
+
+# ---- the guard must not silently fall behind the scheduler -----------------
+
+def test_the_guard_covers_every_function_the_scheduler_drives():
+    """The failure this file exists to prevent, applied to the file itself.
+
+    The invariant was missed twice because a stale description was trusted
+    over the code. So this guard's coverage is checked against
+    recovery_tick.run's actual source rather than against a hand-kept belief:
+    adding a worker to the scheduler without adding it to TICK_FUNCTIONS fails
+    HERE, at the moment it is introduced, instead of shipping ungated.
+    """
+    import inspect
+    import re
+
+    import recovery_tick
+
+    driven = set(re.findall(r"(\w+)\(session\)", inspect.getsource(recovery_tick.run)))
+    covered = {name for _, name in TICK_FUNCTIONS}
+
+    missing = driven - covered
+    assert not missing, (
+        f"recovery_tick.run drives {sorted(missing)}, which this guard never "
+        "exercises — an ungated worker there would pass unnoticed"
+    )
