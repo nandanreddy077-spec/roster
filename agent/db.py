@@ -162,6 +162,7 @@ def _migrate_add_columns():
         "ALTER TABLE job ADD COLUMN is_estimate BOOLEAN DEFAULT 0",
         "ALTER TABLE recoveryjob ADD COLUMN source_job_id INTEGER",
         "ALTER TABLE recoveryjob ADD COLUMN escalation_reason VARCHAR",
+        "ALTER TABLE business ADD COLUMN voice_provisioning_error VARCHAR",
     )
     with engine.connect() as conn:
         for ddl in statements:

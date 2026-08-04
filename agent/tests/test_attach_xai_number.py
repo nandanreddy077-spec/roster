@@ -10,6 +10,7 @@ from sqlmodel import Session
 import app as app_module
 import db as db_module
 import portal as portal_module
+import provisioning as provisioning_module
 from conftest import DASH_AUTH
 from db_models import Business
 from starlette.testclient import TestClient
@@ -126,11 +127,16 @@ def test_retry_xai_registration_succeeds_without_rebuying_number(test_engine, mo
         raise AssertionError("must not re-purchase a number on retry")
 
     monkeypatch.setattr(app_module, "buy_twilio_number", _boom_if_called)
+    # Patched on `provisioning`, not `app`: the route now delegates to
+    # provisioning.provision_voice, so this exercises the real ordering
+    # (secret persisted before the retryable trunk step) rather than stubbing
+    # the whole voice half out of the route.
     monkeypatch.setattr(
-        app_module, "register_number_with_xai",
+        provisioning_module, "register_number_with_xai",
         lambda phone_number: {"signing_secret": "whsec_retry123"},
     )
-    monkeypatch.setattr(app_module, "attach_number_to_xai_trunk", lambda sid, phone_number: None)
+    monkeypatch.setattr(provisioning_module, "attach_number_to_xai_trunk",
+                        lambda sid, phone_number: None)
 
     r = client.post(f"/clients/{bid}/retry-xai-registration", headers=DASH_AUTH, follow_redirects=False)
 
@@ -163,7 +169,7 @@ def test_retry_xai_registration_surfaces_error_without_crashing(test_engine, mon
     def _fail(phone_number):
         raise ProvisioningError("xAI registration returned no signing secret — webhook keys: ['url']")
 
-    monkeypatch.setattr(app_module, "register_number_with_xai", _fail)
+    monkeypatch.setattr(provisioning_module, "register_number_with_xai", _fail)
 
     r = client.post(f"/clients/{bid}/retry-xai-registration", headers=DASH_AUTH, follow_redirects=False)
 

@@ -15,6 +15,7 @@ Two halves:
    (docs.x.ai/developers/model-capabilities/audio/voice-agent/sip).
 """
 import os
+import sys
 from typing import Optional
 
 import httpx
@@ -106,6 +107,144 @@ def attach_number_to_xai_trunk(phone_number_sid: str, phone_number: str) -> None
         raise
     except Exception as e:
         raise ProvisioningError(f"attaching number to xAI trunk failed: {e}") from e
+
+
+def provision_voice(session, client: Business) -> Optional[str]:
+    """Take a business that already owns a Twilio number all the way to a
+    call-answering voice line. Returns None on success, or an error string.
+
+    THE ORDERING HERE IS THE WHOLE POINT — it is a correctness constraint, not
+    style. xAI returns a number's webhook signing secret exactly ONCE, at
+    registration: there is no read-back endpoint (GET /v2/webhooks is a 404),
+    and re-registering the same number answers 409 (see register_number_with_xai).
+    So the secret is irreplaceable, while attaching the number to a Twilio SIP
+    trunk is an ordinary retryable API call.
+
+    All three call sites used to run:
+
+        registration = register_number_with_xai(...)   # once-only secret
+        attach_number_to_xai_trunk(...)                # retryable, and it threw
+        client.xai_signing_secret = registration[...]  # never reached
+
+    which destroyed an irreplaceable secret whenever a retryable step failed,
+    permanently bricking the number for voice — the only recovery being to buy
+    a different one. That is what happened to +16187473488 (registered with
+    xAI 2026-07-21, no Twilio trunk ever created, no secret stored).
+
+    So: persist the secret the instant it exists, THEN do the retryable work.
+    Every step after registration can be re-run safely, which is what makes
+    this function idempotent — a second call with a secret already stored skips
+    registration entirely and just finishes the trunk wiring.
+    """
+    if not client.inbound_number or not client.twilio_number_sid:
+        return "No purchased Twilio number to wire up for voice yet."
+
+    try:
+        if not client.xai_signing_secret:
+            registration = register_number_with_xai(client.inbound_number)
+            # COMMIT BEFORE the retryable step below. If the process dies on the
+            # next line, the secret is still on disk and this is resumable.
+            client.xai_phone_number = client.inbound_number
+            client.xai_signing_secret = registration["signing_secret"]
+            session.add(client)
+            session.commit()
+
+        attach_number_to_xai_trunk(client.twilio_number_sid, client.inbound_number)
+    except ProvisioningError as e:
+        return _record_voice_error(session, client, str(e))
+    except Exception as e:
+        # Anything unexpected is still a failed provision, not a crashed
+        # signup: record it and degrade to SMS-only like the callers expect.
+        return _record_voice_error(session, client, f"unexpected error: {e}")
+
+    _record_voice_error(session, client, None)
+    return None
+
+
+def _record_voice_error(session, client: Business, error: Optional[str]) -> Optional[str]:
+    """Persist (or clear) the last voice-provisioning failure and return it, so
+    a failure is visible in the founder console instead of only on stderr."""
+    client.voice_provisioning_error = error
+    session.add(client)
+    session.commit()
+    if error:
+        print(f"[provisioning] voice provisioning failed for business {client.id}: {error}",
+              file=sys.stderr)
+    return error
+
+
+def verify_voice_wiring(client: Business) -> dict:
+    """Read-only preflight: is this number actually able to receive a call?
+
+    Checks the four independent things that must ALL be true, because each can
+    fail on its own and three of them are invisible from our own database:
+    xAI registration, our stored signing secret, the number's Twilio trunk
+    attachment, and that trunk's origination URI pointing at xAI.
+
+    Returns {"ready": bool, "checks": {name: (ok, detail)}}. Makes no changes.
+    A True here means the wiring is complete — it does NOT mean a call has been
+    proven to work end to end; only a real phone call establishes that.
+    """
+    checks: dict = {}
+
+    checks["signing_secret_stored"] = (
+        bool(client.xai_signing_secret),
+        "stored" if client.xai_signing_secret else
+        "MISSING — webhooks cannot be verified; the number must be re-registered",
+    )
+    checks["xai_number_stored"] = (
+        bool(client.xai_phone_number),
+        client.xai_phone_number or "MISSING — inbound calls cannot be routed to this business",
+    )
+
+    number = client.xai_phone_number or client.inbound_number
+    try:
+        registered = {n["phoneNumber"] for n in _list_xai_numbers()}
+        checks["registered_with_xai"] = (
+            number in registered,
+            "registered" if number in registered else f"{number} not registered with xAI",
+        )
+    except Exception as e:
+        checks["registered_with_xai"] = (False, f"could not check: {e}")
+
+    try:
+        twilio = _twilio_client()
+        attached = False
+        origination = False
+        for trunk in twilio.trunking.v1.trunks.list(limit=20):
+            numbers = twilio.trunking.v1.trunks(trunk.sid).phone_numbers.list(limit=50)
+            if any(n.phone_number == number for n in numbers):
+                attached = True
+                urls = twilio.trunking.v1.trunks(trunk.sid).origination_urls.list(limit=50)
+                origination = any(
+                    number in (u.sip_url or "") and u.enabled for u in urls
+                )
+                break
+        checks["twilio_trunk_attached"] = (
+            attached, "attached" if attached else "NOT attached to any SIP trunk — calls reach nothing",
+        )
+        checks["trunk_origination_uri"] = (
+            origination, "points at xAI" if origination else
+            "no enabled origination URI for this number — calls cannot reach xAI",
+        )
+    except Exception as e:
+        checks["twilio_trunk_attached"] = (False, f"could not check: {e}")
+        checks["trunk_origination_uri"] = (False, f"could not check: {e}")
+
+    return {"ready": all(ok for ok, _ in checks.values()), "checks": checks}
+
+
+def _list_xai_numbers() -> list:
+    api_key = os.environ.get("XAI_API_KEY")
+    if not api_key:
+        raise ProvisioningError("XAI_API_KEY is not set")
+    resp = httpx.get(
+        XAI_PHONE_NUMBERS_URL,
+        headers={"Authorization": f"Bearer {api_key}"},
+        timeout=30.0,
+    )
+    resp.raise_for_status()
+    return resp.json().get("phoneNumbers", [])
 
 
 def _extract_signing_secret(payload: dict) -> Optional[str]:

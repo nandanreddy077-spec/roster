@@ -514,9 +514,12 @@ def test_provisioning_a_number_twice_does_not_buy_a_second_one(test_engine, monk
         return {"phone_number": f"+1512555{len(purchases):04d}", "sid": f"PN{len(purchases)}"}
 
     monkeypatch.setattr(app_module, "buy_twilio_number", _fake_buy)
-    monkeypatch.setattr(app_module, "register_number_with_xai",
+    # On `provisioning`: the route delegates the voice half to
+    # provisioning.provision_voice (see test_voice_provisioning.py).
+    import provisioning as provisioning_module
+    monkeypatch.setattr(provisioning_module, "register_number_with_xai",
                         lambda n: {"signing_secret": "sec"})
-    monkeypatch.setattr(app_module, "attach_number_to_xai_trunk", lambda sid, n: None)
+    monkeypatch.setattr(provisioning_module, "attach_number_to_xai_trunk", lambda sid, n: None)
     with Session(test_engine) as s:
         bid = _business(s).id
     client = TestClient(app_module.app, headers=DASH_AUTH)

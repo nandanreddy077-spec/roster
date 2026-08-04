@@ -24,6 +24,13 @@ class Business(SQLModel, table=True):
     inbound_number: Optional[str] = None  # the business line customers text/call; routes inbound SMS
     xai_phone_number: Optional[str] = None  # number registered with xAI's Voice Agent API (see xai_voice_adapter.py); unset = no live-voice receptionist configured for this client yet
     xai_signing_secret: Optional[str] = None  # webhook signing secret returned when xai_phone_number was registered (per-number, not account-wide — see provisioning.py)
+    # Why the failure needs to be a ROW, not a log line: voice provisioning is
+    # multi-step and partially retryable, and the self-serve activation path has
+    # no request to redirect an error onto. Printing to stderr is what let a
+    # half-provisioned number sit undetected — the number looked bought and
+    # SMS-ready while voice silently never worked. Set on every failed step,
+    # cleared on success (provisioning.provision_voice).
+    voice_provisioning_error: Optional[str] = None
     twilio_number_sid: Optional[str] = None  # Twilio's SID for the purchased number, needed to later attach it to a SIP trunk
     review_link: Optional[str] = None  # owner's Google/Yelp review URL; unset until they provide one
     referral_incentive: Optional[str] = None  # e.g. "$25 off"; unset = referrals off for this client

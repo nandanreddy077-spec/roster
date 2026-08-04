@@ -43,7 +43,7 @@ from db_models import (
     WebhookDelivery,
 )
 from portal import router as portal_router
-from provisioning import ProvisioningError, attach_number_to_xai_trunk, buy_twilio_number, register_number_with_xai
+from provisioning import ProvisioningError, buy_twilio_number, provision_voice, verify_voice_wiring
 from recovery_engine import FACE_DISPLAY_NAMES
 from recovery_service import create_campaign, find_active_recovery_job, handle_recovery_reply
 from referral_service import find_active_referral_ask, handle_referral_reply
@@ -492,19 +492,13 @@ def provision_number(client_id: int, area_code: str = Form("")):
             session.add(client)
             session.commit()
 
-            # Voice is best-effort: register with xAI first, and only route the
-            # number's voice to xAI once that succeeds (see activation.py).
-            try:
-                xai_registration = register_number_with_xai(purchase["phone_number"])
-                attach_number_to_xai_trunk(purchase["sid"], purchase["phone_number"])
-                client.xai_phone_number = purchase["phone_number"]
-                client.xai_signing_secret = xai_registration["signing_secret"]
-                session.add(client)
-                session.commit()
-            except ProvisioningError as e:
+            # Voice half — see provisioning.provision_voice for why the signing
+            # secret is persisted before the trunk work rather than after.
+            voice_error = provision_voice(session, client)
+            if voice_error:
                 error = (
                     f"Number {purchase['phone_number']} bought and SMS-ready, but voice "
-                    f"registration with xAI didn't complete: {e}"
+                    f"registration with xAI didn't complete: {voice_error}"
                 )
         except ProvisioningError as e:
             error = str(e)
@@ -528,15 +522,10 @@ def retry_xai_registration(client_id: int):
         client = session.get(Business, client_id)
         if not client.inbound_number or not client.twilio_number_sid:
             raise HTTPException(status_code=400, detail="No purchased number to retry xAI registration for")
-        try:
-            xai_registration = register_number_with_xai(client.inbound_number)
-            attach_number_to_xai_trunk(client.twilio_number_sid, client.inbound_number)
-            client.xai_phone_number = client.inbound_number
-            client.xai_signing_secret = xai_registration["signing_secret"]
-            session.add(client)
-            session.commit()
-        except ProvisioningError as e:
-            error = str(e)
+        # Idempotent: if registration already succeeded and only the trunk work
+        # failed, this resumes from there instead of re-registering (which would
+        # 409) — the whole reason the secret is now persisted separately.
+        error = provision_voice(session, client)
 
     redirect_url = f"/clients/{client_id}"
     if error:
@@ -544,6 +533,28 @@ def retry_xai_registration(client_id: int):
 
         redirect_url += f"?provision_error={quote(error)}"
     return RedirectResponse(redirect_url, status_code=303)
+
+
+@app.get("/clients/{client_id}/voice-preflight")
+def voice_preflight(client_id: int):
+    """Read-only check of every link in the voice chain, so a broken one is
+    found before someone dials instead of by hearing silence. Changes nothing.
+
+    `ready: true` means the wiring is complete — NOT that voice is proven to
+    work. Only a real inbound call exercises xAI's realtime session, the audio
+    path, and the tool round-trip (see agent/README.md)."""
+    with Session(engine) as session:
+        client = session.get(Business, client_id)
+        if client is None:
+            raise HTTPException(status_code=404, detail="No such client")
+        result = verify_voice_wiring(client)
+    return {
+        "business": client.business_name,
+        "number": client.xai_phone_number or client.inbound_number,
+        "ready": result["ready"],
+        "checks": {k: {"ok": ok, "detail": detail} for k, (ok, detail) in result["checks"].items()},
+        "last_error": client.voice_provisioning_error,
+    }
 
 
 @app.post("/clients/{client_id}/attach-xai-number")
