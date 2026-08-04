@@ -10,8 +10,26 @@ module structure.
 # settle before asking. One follow-up only, well after the first ask, never
 # more than once (2026-07-30: negative-sentiment handling and the
 # never-spam guarantee both depend on this staying a two-touch maximum).
-REVIEW_DELAY_DAYS = 1
-REVIEW_FOLLOWUP_DELAY_DAYS = 4
+#
+# Both delays are env-overridable so an end-to-end test on a real deployment
+# can run in one sitting (REVIEW_DELAY_DAYS=0) instead of waiting a day for
+# the first text — the alternative was a test-only "send now" route living
+# permanently in production. Fractional days are allowed (0.01 ≈ 15 min).
+# Defaults are the real product behaviour; a malformed value falls back to
+# the default rather than crashing boot (same rule as
+# app.scheduler_interval_seconds).
+import os
+
+
+def _delay_days(name: str, default: float) -> float:
+    try:
+        return float(os.environ.get(name, default))
+    except (TypeError, ValueError):
+        return default
+
+
+REVIEW_DELAY_DAYS = _delay_days("REVIEW_DELAY_DAYS", 1)
+REVIEW_FOLLOWUP_DELAY_DAYS = _delay_days("REVIEW_FOLLOWUP_DELAY_DAYS", 4)
 REVIEW_REPLY_WINDOW_DAYS = 14
 
 # Same wording the old synchronous send in app.py already used — preserved

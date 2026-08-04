@@ -3,7 +3,7 @@ from datetime import datetime, timedelta
 
 from sqlmodel import Session, select
 
-from db_models import Business, Job, ReferralLead
+from db_models import Business, Employee, Job, ReferralLead
 from conftest import StubAgent
 import referral_service
 
@@ -17,6 +17,16 @@ def make_client(session: Session, referral_incentive=None) -> Business:
     session.add(client)
     session.commit()
     session.refresh(client)
+    if referral_incentive:
+        # These tests' premise is a business with referrals turned ON, which
+        # now means hired, not merely configured (see
+        # test_tick_deployment_gate.py). The row is inserted directly because
+        # deploy_role deliberately refuses Referral while its registry status
+        # is `planned` — this exercises the send path that graduating the
+        # registry entry would enable, without pretending it's deployable today.
+        session.add(Employee(business_id=client.id, role_key="referral",
+                             display_name="Referral"))
+        session.commit()
     return client
 
 

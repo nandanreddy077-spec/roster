@@ -27,6 +27,7 @@ from notifications import (
     record_owner_notification,
 )
 from repositories import get_or_create_customer
+from runner import is_active
 from recovery_engine import (
     CONFIRM_SLOT_TOOL,
     ESCALATE_TOOL,
@@ -111,6 +112,19 @@ def enroll_completed_estimates(session: Session) -> List[RecoveryJob]:
 
     for job in jobs:
         if not job.callback_number:
+            continue
+        # The deployment invariant, at the point where automatic enrollment
+        # begins (see runner.dispatch_tick). This is the ONLY place a campaign
+        # gets created without a human asking for one: create_campaign is a
+        # founder action and is consent by definition, but auto-enrollment has
+        # no action behind it at all. Unlike Reviews and Referral, nothing here
+        # required any configuration either — a completed estimate alone put a
+        # real customer into a multi-touch texting sequence, for every business
+        # on the platform. Gating enrollment is sufficient to gate the sends:
+        # tick() only ever works campaigns that were founder-created or
+        # enrolled here, so there is no third way for one to exist.
+        client = session.get(Business, job.business_id)
+        if client is None or not is_active(session, client, "quote_chaser"):
             continue
         already_enrolled = session.exec(
             select(RecoveryJob).where(RecoveryJob.source_job_id == job.id)

@@ -87,7 +87,16 @@ def recent_notifications(session, business_id: int, limit: int = 50):
 def build_escalation_message(business: Business, caller_number: str, reason: str) -> str:
     """One builder for both the SMS body and the logged message — built
     separately they would drift, and the owner's dashboard would show
-    something subtly different from the text they actually got."""
+    something subtly different from the text they actually got.
+
+    Trailing punctuation is stripped from `reason` because this sentence
+    supplies its own. Most reasons reach here already ending in a period —
+    review_service passes a fixed sentence, and alert_owner/recovery pass
+    whatever the model wrote — which rendered as "...review request.. Call
+    them back". Normalizing here rather than at each call site is what makes
+    that true for model-authored reasons too, which no call site controls.
+    """
+    reason = (reason or "").strip().rstrip(".").strip()
     return (
         f"URGENT — {business.business_name or 'your business'}: caller "
         f"{caller_number} needs you NOW. Reason: {reason}. "

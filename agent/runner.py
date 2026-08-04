@@ -109,11 +109,41 @@ def dispatch_tick(session: Session, role_key: str, capability: TickCapability) -
     """The tick-triggered counterpart to dispatch_job_completed: resolve
     which businesses have `role_key` deployed, and only then call
     `capability(session, business)` for each — once per deployed business,
-    never for anything else. This is the single path every tick-based
-    employee's own processing function is reached through; none of them
-    queries Job/JobQualification/etc. across businesses on its own, so there
-    is no reachable code path to an undeployed business's data to forget to
-    guard.
+    never for anything else.
+
+    THE INVARIANT (one rule, two shapes): every tick-based employee must gate
+    on the Employee row before it touches a customer. There are two ways to
+    satisfy it, because tick work comes in two shapes, and BOTH read the same
+    Employee-row source of truth through canonical_role_key:
+
+      - business-shaped ("for each deployed business, do X") -> dispatch_tick.
+        Used by qualify_new_jobs (Lead Qualifier) and recommend_dispatch
+        (Dispatcher).
+      - job-shaped ("scan due jobs across all businesses, act on each") ->
+        an `is_active(session, business, role_key)` check inside the loop,
+        because the query starts from due jobs rather than from businesses.
+        Used by send_due_review_requests / send_due_review_followups
+        (Reviews), send_due_referral_asks (Referral), and
+        enroll_completed_estimates (Quote Chaser).
+
+    recovery_service.tick() is the one tick function with NO gate of its own,
+    and that is deliberate rather than an omission: it only ever works
+    RecoveryJobs belonging to a campaign, and a campaign has exactly two
+    origins — create_campaign, which is a founder action and therefore consent
+    by definition, and enroll_completed_estimates, which is gated above. There
+    is no third way for a campaign to exist, so gating enrollment gates the
+    sends. Adding a redundant check in tick() would imply a fourth gating
+    style and invite the next author to invent a fifth.
+
+    WHY THIS DOCSTRING IS WORDED SO EXACTLY: it previously claimed
+    dispatch_tick was the SINGLE path every tick employee is reached through,
+    and that no such employee queried jobs across businesses on its own. That
+    was false for Reviews, Referral and Quote Chaser, all of which did exactly
+    that and were called straight from recovery_tick.run. The comment
+    asserting the invariant is what let the invariant keep being missed —
+    twice — so it now names the actual functions rather than describing a
+    rule in the abstract. If you add a tick worker, add it to a list here and
+    to test_tick_deployment_gate.py's TICK_FUNCTIONS.
 
     Aggregates and returns whatever each capability call returns (typically
     the rows it created), matching the existing return shape of
