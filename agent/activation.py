@@ -12,7 +12,7 @@ from sqlmodel import Session
 
 from db_models import Business
 from deployment import deploy_role
-from provisioning import attach_number_to_xai_trunk, buy_twilio_number, register_number_with_xai
+from provisioning import buy_twilio_number, provision_voice
 
 
 def activate_frontdesk(session: Session, client: Business) -> None:
@@ -21,20 +21,18 @@ def activate_frontdesk(session: Session, client: Business) -> None:
             purchase = buy_twilio_number()
             client.inbound_number = purchase["phone_number"]
             client.twilio_number_sid = purchase["sid"]
-            # Voice is best-effort. Register with xAI first; only route the
-            # Twilio number's voice to xAI once that succeeds, so a failed
-            # registration leaves a fully working SMS-only number rather than
-            # voice calls routed to a number xAI doesn't recognize.
-            try:
-                xai_registration = register_number_with_xai(purchase["phone_number"])
-                attach_number_to_xai_trunk(purchase["sid"], purchase["phone_number"])
-                client.xai_phone_number = purchase["phone_number"]
-                client.xai_signing_secret = xai_registration["signing_secret"]
-            except Exception as e:
-                # SMS-only (e.g. no XAI_API_KEY, or xAI/trunk error); founder can
-                # finish voice from /clients/{id}. Log loudly — must never crash
-                # onboarding, but the reason must be visible.
-                print(f"[activation] voice provisioning failed for business {client.id}: {e}", file=sys.stderr)
+            # Commit the purchase BEFORE attempting voice: the number is real
+            # and billable the moment Twilio returns, so it must be on file even
+            # if everything after this fails — otherwise a crash here loses track
+            # of a number we are now paying for.
+            session.add(client)
+            session.commit()
+            # Voice is best-effort and SMS-only is a fully working Frontdesk, so
+            # this never raises. provision_voice persists the once-only xAI
+            # signing secret before any retryable step and records the reason on
+            # the business row, so a failure is visible in the founder console
+            # (voice_provisioning_error) and retryable rather than silent.
+            provision_voice(session, client)
         except Exception as e:
             # No number purchased (no Twilio creds, trial account can't buy a
             # number, no funds, geo-permissions, etc.) — still go live SMS-less;
