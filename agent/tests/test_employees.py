@@ -4,12 +4,17 @@ Nothing else in the app imports this module yet — see spec §4."""
 from employees import REGISTRY
 
 
-def test_the_live_employees_are_frontdesk_and_reviews():
-    """Reviews graduated internal -> live on 2026-08-04 (registry governance
-    rule: "internal" is not a resting state). Every other entry must still
-    earn its graduation, so this stays an exact set, not a lower bound."""
+def test_the_live_employees_are_frontdesk_reviews_and_quote_chaser():
+    """Reviews and Quote Chaser both graduated internal -> live on 2026-08-04
+    (registry governance rule: "internal" is not a resting state), each on the
+    same two conditions: the whole journey verified end to end against real
+    Claude, and its tick worker gated on the Employee row — without which
+    `live` would mean a business gets worked without hiring anyone.
+
+    Deliberately an EXACT set, not a lower bound: graduation is a decision, so
+    a new one must fail here and be argued for rather than drift in."""
     live = {e.key for e in REGISTRY if e.status == "live"}
-    assert live == {"frontdesk", "reviews"}
+    assert live == {"frontdesk", "reviews", "quote_chaser"}
 
 
 def test_registry_keys_are_unique():
@@ -17,9 +22,12 @@ def test_registry_keys_are_unique():
     assert len(keys) == len(set(keys))
 
 
-def test_quote_chaser_and_retention_manager_are_internal_not_live():
+def test_retention_manager_is_still_internal_not_live():
+    """Quote Chaser left this list on 2026-08-04 by earning it. Retention
+    Manager has NOT been verified end to end and has no gated tick worker of
+    its own, so it stays internal — the founder deploys it per business on
+    request rather than it being a standing offer."""
     by_key = {e.key: e for e in REGISTRY}
-    assert by_key["quote_chaser"].status == "internal"
     assert by_key["retention_manager"].status == "internal"
 
 
