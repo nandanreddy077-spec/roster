@@ -236,3 +236,42 @@ def test_the_purchased_number_is_saved_even_if_everything_after_it_fails(test_en
             row = fresh.get(Business, client.id)
             assert row.inbound_number == "+15125550001"
             assert row.twilio_number_sid == "PN1000"
+
+
+# ---- xAI's real response shape, confirmed against a live registration ------
+
+def test_the_real_xai_response_shape_yields_the_secret():
+    """The exact payload xAI returned on 2026-08-04. `dispatchSigningSecret`
+    matched none of the names originally guessed from the docs, and that miss
+    burned a registration — the secret is returned only once."""
+    from provisioning import _extract_signing_secret
+
+    payload = {
+        "phoneNumber": {"phoneNumberId": "phone_abc", "phoneNumber": "+16187473488"},
+        "webhook": {"dispatchSigningSecret": "whsec_realone", "webhookId": "webhook_xyz"},
+    }
+    assert _extract_signing_secret(payload) == "whsec_realone"
+
+
+def test_a_renamed_secret_field_still_resolves():
+    """Matching on shape, not an exact name, so the next rename doesn't cost
+    another phone number."""
+    from provisioning import _extract_signing_secret
+
+    for key in ("dispatch_signing_secret", "signingSecret", "webhook_signing_secret"):
+        assert _extract_signing_secret({"webhook": {key: "whsec_x"}}) == "whsec_x"
+    assert _extract_signing_secret({"signing_secret": "whsec_top"}) == "whsec_top"
+
+
+def test_a_response_with_no_secret_still_fails_loud():
+    """Never store None — an unverifiable webhook fails silently forever."""
+    from provisioning import _extract_signing_secret
+
+    assert _extract_signing_secret({"webhook": {"webhookId": "webhook_only"}}) is None
+    assert _extract_signing_secret({"phoneNumber": {"phoneNumber": "+1"}}) is None
+
+
+def test_a_non_string_secret_field_is_not_mistaken_for_the_secret():
+    from provisioning import _extract_signing_secret
+
+    assert _extract_signing_secret({"webhook": {"hasSecret": True, "secretCount": 1}}) is None
