@@ -4,10 +4,12 @@ Nothing else in the app imports this module yet — see spec §4."""
 from employees import REGISTRY
 
 
-def test_exactly_one_live_employee_and_it_is_frontdesk():
-    live = [e for e in REGISTRY if e.status == "live"]
-    assert len(live) == 1
-    assert live[0].key == "frontdesk"
+def test_the_live_employees_are_frontdesk_and_reviews():
+    """Reviews graduated internal -> live on 2026-08-04 (registry governance
+    rule: "internal" is not a resting state). Every other entry must still
+    earn its graduation, so this stays an exact set, not a lower bound."""
+    live = {e.key for e in REGISTRY if e.status == "live"}
+    assert live == {"frontdesk", "reviews"}
 
 
 def test_registry_keys_are_unique():
@@ -42,5 +44,5 @@ def test_reviews_is_registered_under_customer_service():
     follows the product architecture, not the implementation."""
     by_key = {e.key: e for e in REGISTRY}
     assert by_key["reviews"].department == "customer_service"
-    assert by_key["reviews"].status == "internal"
+    assert by_key["reviews"].status == "live"
     assert by_key["retention_manager"].department == "customer_success"
