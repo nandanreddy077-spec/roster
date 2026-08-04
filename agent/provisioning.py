@@ -248,26 +248,33 @@ def _list_xai_numbers() -> list:
 
 
 def _extract_signing_secret(payload: dict) -> Optional[str]:
-    """xAI's docs say the response "includes a signing secret" but don't name
-    the field, so check the plausible locations — both snake_case and
-    camelCase, since xAI's confirmed response shape uses camelCase
-    (`phoneNumber`). Fail loud (caller raises) if none are present, rather
-    than silently storing None — a None secret would make every real webhook
-    fail signature verification, invisibly."""
+    """Pull the webhook signing secret out of xAI's registration response.
+
+    CONFIRMED AGAINST A LIVE REGISTRATION (2026-08-04): the real shape is
+
+        {"phoneNumber": {...}, "webhook": {"dispatchSigningSecret": "...",
+                                           "webhookId": "..."}}
+
+    `dispatchSigningSecret` matched none of the names originally guessed from
+    the docs, which say only that the response "includes a signing secret".
+    That miss cost a burned registration — the secret is returned exactly once,
+    so failing to read it is indistinguishable from never having registered.
+
+    So this matches on SHAPE rather than an exact name list: any string field
+    whose key contains "secret", at the top level or inside `webhook`. A future
+    rename (dispatch_signing_secret, signingSecret, ...) keeps working instead
+    of costing another number. Still fails loud when nothing matches — the
+    caller raises rather than storing None, because a None secret would make
+    every real webhook fail verification, invisibly.
+    """
     if not isinstance(payload, dict):
         return None
-    keys = (
-        "signing_secret", "webhook_signing_secret", "signing_key", "secret",
-        "signingSecret", "webhookSigningSecret", "signingKey",
-    )
-    for key in keys:
-        if payload.get(key):
-            return payload[key]
-    webhook = payload.get("webhook")
-    if isinstance(webhook, dict):
-        for key in keys:
-            if webhook.get(key):
-                return webhook[key]
+    for scope in (payload, payload.get("webhook")):
+        if not isinstance(scope, dict):
+            continue
+        for key, value in scope.items():
+            if "secret" in key.lower() and isinstance(value, str) and value:
+                return value
     return None
 
 
