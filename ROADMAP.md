@@ -43,6 +43,31 @@
 > sixth destination. Engineering effort shifts from dashboard architecture
 > to AI employee capability from here.
 
+## Development Policy
+
+Roster is under active development.
+
+Prioritize shipping customer value while maintaining a clean, maintainable
+codebase.
+
+Refactors are allowed when they:
+- Preserve application behavior.
+- Keep all tests passing.
+- Improve maintainability, readability, or developer experience.
+- Are completed in small, reviewable commits.
+
+Avoid unnecessary rewrites that provide little practical value.
+
+This permanent policy governs engineering decisions — it replaces any
+calendar-dated build freeze from earlier sprint documents (e.g.
+`SPRINT-10-CUSTOMERS.md`), which remain as historical/operational records
+but no longer gate refactor decisions. The frozen invariants in
+[`ARCHITECTURE.md`](ARCHITECTURE.md) are a separate, non-calendar contract
+and are unaffected by this policy — they still require explicit approval to
+change.
+
+---
+
 **Mission:** make a home-service business owner believe they **hired an
 office**, not installed software. Every feature, screen, notification,
 onboarding step, and workflow reinforces that.
@@ -57,8 +82,9 @@ it goes in the "Deferred" table below, not the codebase. **Assume Avoca can
 match any feature within a year — so we never justify a build by "a competitor
 has it," only by "it helps a customer adopt, trust, or expand Roster."**
 
-Grounding docs: [`SALES.md`](SALES.md) (does it close deals?),
-[`CUSTOMER.md`](CUSTOMER.md) (what real customers actually said),
+Grounding docs: `../roster-gtm/SALES.md` (does it close deals?),
+`../roster-gtm/CUSTOMER.md` (what real customers actually said) — both live
+outside this repo, see README "Where the GTM material went" — and the
 architecture PRD in `docs/superpowers/specs/`.
 
 ---
@@ -70,7 +96,7 @@ Business · Customer · Employee models · shared Memory · EventBus · 217 test
 merged to `main` (PR #1). The architecture is frozen — no more platform work
 without a real customer forcing it.
 
-### Phase B — Trust *(current)*
+### Phase B — Trust *(superseded — see banner at the top of this file; M1-M4's build order was replaced by the departments migration, and M2's "AI Office dashboard" goal was fulfilled there)*
 Goal: an owner watches it work and believes it. Nothing here adds new revenue
 mechanics — it makes the existing product *trustable* and *feel like employees*.
 - **M1 — Owner SMS** *(complete, PR #2)* — booked job → owner gets a text in seconds.
@@ -91,9 +117,10 @@ mechanics — it makes the existing product *trustable* and *feel like employees
 >    call has been verified. See `CUSTOMER.md` Open Risk #1.)
 > 2. **≥3 real customer demos observed AND founder gives explicit approval** to proceed.
 >
-> If gate 1 fails, the only work is fixing Frontdesk — not new features. A fresh
-> session must honor this freeze and confirm both gates with the founder before
-> writing any M2+ code.
+> ~~If gate 1 fails, the only work is fixing Frontdesk — not new features. A
+> fresh session must honor this freeze and confirm both gates with the founder
+> before writing any M2+ code.~~ **Void, per the "LIFTED" annotation above —
+> do not follow this literally.**
 
 - **M2 — AI Office dashboard** *(frozen — see gate above)* — reframe from a feature list to an office of
   named employees showing today's activity ("👩 Frontdesk — 19 calls, 7 booked, Working").
@@ -158,10 +185,14 @@ this list or intuition.** Track the recurring bottleneck pattern in
 field). If 15 of 20 discovery calls surface unclosed estimates, Quote
 Chaser graduates next — not because it's next in `employees.py`.
 
-**When an entry actually graduates to `live`:** the dashboard's fixed
-"Your office" template stops being acceptable — see the platform PRD §11a
-(`docs/superpowers/specs/2026-07-13-roster-platform-architecture-prd.md`)
-for the deployment-model principle that governs the rebuild (Founder Admin
-configures/deploys, Customer Portal only reflects what's actually deployed
-— never a catalog). That's a trigger for future work, not something to
-build now.
+**When an entry actually graduates to `live`:** the customer-facing dashboard
+must reflect what's actually deployed (Founder Admin configures/deploys,
+Customer Portal only ever reflects that — never a catalog). At the time this
+was written (2026-07-21), that meant a future rebuild per the platform PRD
+§11a (`docs/superpowers/specs/2026-07-13-roster-platform-architecture-prd.md`).
+**That rebuild has since happened:** the departments migration (closed
+2026-07-29) built exactly this — `workspace.py`'s view models derive
+deployment state from real `Employee` rows, per
+[`ARCHITECTURE.md`](ARCHITECTURE.md) invariant 8. Nothing further to build on
+this specifically; the quarterly registry-review practice above is the part
+of this section that's still ongoing.

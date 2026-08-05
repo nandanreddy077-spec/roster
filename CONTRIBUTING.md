@@ -40,7 +40,7 @@ customer trust — before writing code. Save the resulting spec + plan under
    `docs: Phase 5 audit + task plan` — see `git log` for more examples.
 4. Keep changes scoped to one responsibility per commit; frequent small
    commits over one large one. Current practice is committing directly to
-   the working branch rather than a PR-per-change (see `CUSTOMER.md`) — a
+   the working branch rather than a PR-per-change — a
    handful of larger integrations have used a merge commit instead (`git log
    --merges`); follow whichever the change's size actually warrants.
 
