@@ -42,6 +42,47 @@ def session(test_engine):
         yield s
 
 
+def provisioned_business(test_engine, **overrides):
+    """A business as the FOUNDER creates it, without walking any wizard.
+
+    Self-registration is closed (portal.py), so tests can no longer set
+    themselves up by POSTing /signup + /onboarding/*. This mirrors what
+    /clients/new actually writes. `frontdesk_live` defaults False on purpose —
+    that is the true state of a founder-provisioned shop, and several bugs
+    came from tests only ever exercising the self-serve shape where it's True.
+    """
+    import json as _json
+
+    from db_models import Business
+
+    fields = {
+        "business_name": "Ridgeline Plumbing",
+        "trade": "Plumbing",
+        "services_json": _json.dumps(["Drains"]),
+        "hours": "9-5",
+        "pricing_faq": "Diagnostic visit: $89.",
+        "escalation_phone": "+15555550101",
+        "email": "owner@example.com",
+    }
+    fields.update(overrides)
+    with Session(test_engine) as s:
+        business = Business(**fields)
+        s.add(business)
+        s.commit()
+        s.refresh(business)
+        return business.id
+
+
+def login_as(client, business_id: int) -> None:
+    """Give a TestClient a session for this business, the way a real owner
+    gets one now: the founder-issued access link."""
+    import os
+
+    from auth import make_access_token
+
+    client.get(f"/access/{make_access_token(business_id, os.environ)}")
+
+
 class StubAgent:
     """Test double for AgentEngine — returns a canned respond() result."""
 

@@ -78,15 +78,21 @@ def test_landing_stylesheet_served(monkeypatch):
     assert response.headers["content-type"].startswith("text/css")
 
 
-def test_signup_flow_is_public(monkeypatch):
+def test_the_login_page_is_public(monkeypatch):
+    """The customer's own door. It replaced /signup as the public entry point
+    when self-registration closed — /signup now just bounces to the landing
+    (see test_signup_is_closed_but_not_behind_the_founder_gate)."""
     monkeypatch.delenv("ADMIN_PASSWORD", raising=False)
     client = TestClient(app_module.app)
-    response = client.get("/signup")
+    response = client.get("/login")
     assert response.status_code == 200
     assert "Roster" in response.text
 
 
-def test_signup_submit_is_public(monkeypatch, test_engine):
+def test_signup_is_closed_but_not_behind_the_founder_gate(monkeypatch, test_engine):
+    """Self-registration is closed, so /signup redirects to the landing. It
+    must redirect, not 401 — it's a public URL people have bookmarked, and the
+    founder's HTTP-Basic gate must never be what they hit."""
     monkeypatch.delenv("ADMIN_PASSWORD", raising=False)
     monkeypatch.setattr(app_module, "engine", test_engine)
     monkeypatch.setattr(db_module, "engine", test_engine)
@@ -98,7 +104,7 @@ def test_signup_submit_is_public(monkeypatch, test_engine):
         follow_redirects=False,
     )
     assert response.status_code == 303
-    assert response.headers["location"] == "/onboarding/business"
+    assert response.headers["location"] == portal_module.SIGNUP_CLOSED_REDIRECT
 
 
 def test_api_docs_are_not_published(monkeypatch):
