@@ -163,7 +163,7 @@ def test_retention_manager_hire_form_blocked_before_quote_chaser(monkeypatch, te
 
     response = client.get("/roster/hire/retention-manager", follow_redirects=False)
     assert response.status_code == 303
-    assert response.headers["location"] == "/dashboard"
+    assert response.headers["location"] == portal_module.DASHBOARD_HOME
 
 
 def test_retention_manager_hire_saves_review_link_and_referral_incentive(monkeypatch, test_engine):
@@ -184,7 +184,7 @@ def test_retention_manager_hire_saves_review_link_and_referral_incentive(monkeyp
         follow_redirects=False,
     )
     assert response.status_code == 303
-    assert response.headers["location"] == "/dashboard"
+    assert response.headers["location"] == portal_module.DASHBOARD_HOME
 
     with Session(test_engine) as session:
         owner = session.exec(select(Business).where(Business.email == "owner@example.com")).first()

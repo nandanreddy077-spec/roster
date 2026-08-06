@@ -273,3 +273,12 @@ h1, h2, .logo { font-family: var(--serif); font-weight: 600; color: var(--ink); 
   box-shadow: 0 2px 10px rgba(31, 27, 22, 0.08);
 }
 .portal-gateway-card { max-width: 100%; margin: 0; }
+
+/* Settings — the only page an owner changes anything from. The save button
+   sits inline with its field rather than spanning the card: full-width
+   .btn-primary is for the one action a page exists for (sign in, activate),
+   and two of those stacked read as a wizard the owner is being marched
+   through, not two small independent edits. */
+.settings-form { display: flex; align-items: flex-start; gap: 12px; flex-wrap: wrap; }
+.settings-form .field { margin-bottom: 0; flex: 1 1 260px; }
+.portal-saved { color: var(--good, #4B7A5B); font-size: 14px; margin-bottom: 16px; }

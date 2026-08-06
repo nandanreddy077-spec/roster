@@ -247,3 +247,25 @@ a { color: var(--accent); text-decoration: none; }
   .client-list { grid-template-columns: 1fr; }
   .detail-grid { grid-template-columns: 1fr; }
 }
+
+/* Setup checklist (founder client page). Derived state only — a done item is
+   a fact on the row, never a "marked complete" flag, so the list is safe to
+   read as the answer to "is this shop live?". */
+.setup-checklist { list-style: none; padding: 0; margin: 0; }
+.setup-checklist li { padding: 8px 0; border-bottom: 1px solid var(--border); }
+.setup-checklist li:last-child { border-bottom: none; }
+.setup-checklist li.is-done > strong { color: var(--good); }
+.setup-checklist li.is-todo > strong { color: var(--text-dim); }
+
+/* The access link is meant to be selected and pasted into a text message, so
+   it gets a full-width monospace field rather than wrapping prose. */
+.access-link-field {
+  width: 100%;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-alt);
+  color: var(--text);
+}

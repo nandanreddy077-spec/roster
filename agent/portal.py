@@ -4,6 +4,7 @@ customer-facing dashboard. Fully separate from the founder's HTTP-Basic
 in app.py), one client per logged-in session.
 """
 import json
+import os
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Optional
@@ -17,7 +18,7 @@ from sqlmodel import Session, select
 from authlib.integrations.starlette_client import OAuthError
 
 from activation import activate_frontdesk
-from auth import hash_password, verify_password
+from auth import hash_password, read_access_token, verify_password
 from channels import normalize_phone
 from db import engine
 from db_models import Business, Employee, Job, Message
@@ -64,12 +65,19 @@ templates.env.globals["briefing_label"] = BRIEFING_LABEL
 #
 # Every visible label lives here so renaming one — including the provisional
 # Briefing name — never means editing templates.
+# Where a logged-in owner lands, and where every action redirects back to. One
+# constant because the Phase 6 cutover found TWELVE hardcoded "/dashboard"
+# redirects, all of which had to move together — the next move should be one
+# line, not another twelve-site sweep.
+DASHBOARD_HOME = "/v2/dashboard"
+SETTINGS_HOME = "/v2/dashboard/settings"
+
 NAV_ITEMS = (
-    {"key": "overview", "label": "Overview", "href": "/v2/dashboard"},
+    {"key": "overview", "label": "Overview", "href": DASHBOARD_HOME},
     {"key": "departments", "label": "Departments", "href": "/v2/dashboard/departments"},
     {"key": "briefing", "label": BRIEFING_LABEL, "href": "/v2/dashboard/briefing"},
     {"key": "notifications", "label": "Notifications", "href": "/v2/dashboard/notifications"},
-    {"key": "settings", "label": "Settings", "href": "/v2/dashboard/settings"},
+    {"key": "settings", "label": "Settings", "href": SETTINGS_HOME},
 )
 templates.env.globals["nav_items"] = NAV_ITEMS
 
@@ -185,13 +193,64 @@ def login_submit(request: Request, email: str = Form(...), password: str = Form(
                 status_code=400,
             )
         request.session["client_id"] = client.id
-    return RedirectResponse("/dashboard", status_code=303)
+        # The decision has to happen HERE now. It used to be delegated to
+        # /dashboard, which bounced un-activated shops into onboarding; that
+        # route is gone (Phase 6 cutover) and /v2/dashboard deliberately does
+        # not bounce, so a plain password login would otherwise drop a shop
+        # that never onboarded onto an empty dashboard and never ask its name.
+        return _post_login_redirect(session, client)
 
 
 @router.post("/logout")
 def logout(request: Request):
     request.session.clear()
     return RedirectResponse("/login", status_code=303)
+
+
+@router.get("/access/{token}")
+def dashboard_access(request: Request, token: str):
+    """A founder-issued dashboard link — the door for hand-provisioned
+    customers.
+
+    Roster provisions every business through the ops console, which never sets
+    a password for the owner. Before this route existed, a shop the founder had
+    fully set up — number bought, voice wired, departments staffed — had no way
+    at all to see its own dashboard: /login needs a password_hash the founder
+    can't create, and Google sign-in only helps once someone put an email on
+    the row. This is the link the founder texts them.
+
+    Straight to the dashboard, never onboarding: the founder already did the
+    setup, and bouncing an owner into a wizard for work that's finished is
+    exactly the confusion this replaces.
+    """
+    business_id = read_access_token(token, os.environ)
+    if business_id is not None:
+        with Session(engine) as session:
+            # Re-check the business still exists: a link outlives a deletion,
+            # and a session pointing at a dead id 500s on the next page.
+            if session.get(Business, business_id) is not None:
+                request.session["client_id"] = business_id
+                return RedirectResponse(DASHBOARD_HOME, status_code=303)
+    return templates.TemplateResponse(request, "access_expired.html", {}, status_code=400)
+
+
+def _post_login_redirect(session: Session, client: Business) -> RedirectResponse:
+    """The one rule for where an authenticated owner goes. Shared by password
+    login and Google so the two doors can't drift apart.
+
+    Deployment state decides, not `frontdesk_live` alone: that column is set by
+    the retired self-serve activation flow, so a business the FOUNDER
+    provisioned has real Employee rows and a live phone number while
+    `frontdesk_live` is still False — and would have been bounced into an
+    onboarding wizard it already finished. Same rule as ARCHITECTURE.md
+    invariant 8: state derives from Employee rows, never from a status column.
+    """
+    staffed = session.exec(
+        select(Employee).where(Employee.business_id == client.id, Employee.status != "fired")
+    ).first()
+    if client.frontdesk_live or staffed is not None:
+        return RedirectResponse(DASHBOARD_HOME, status_code=303)
+    return RedirectResponse("/onboarding/business", status_code=303)
 
 
 def _login_or_create_by_email(request: Request, session: Session, email: str) -> RedirectResponse:
@@ -214,9 +273,7 @@ def _login_or_create_by_email(request: Request, session: Session, email: str) ->
         else:
             session.refresh(client)
     request.session["client_id"] = client.id
-    if client.frontdesk_live:
-        return RedirectResponse("/dashboard", status_code=303)
-    return RedirectResponse("/onboarding/business", status_code=303)
+    return _post_login_redirect(session, client)
 
 
 @router.get("/auth/google/login")
@@ -261,7 +318,7 @@ def onboarding_business_form(request: Request):
         if client is None:
             return RedirectResponse("/login", status_code=303)
         if client.frontdesk_live:
-            return RedirectResponse("/dashboard", status_code=303)
+            return RedirectResponse(DASHBOARD_HOME, status_code=303)
     prefill_trade = request.session.get("prefill_trade", "")
     return templates.TemplateResponse(request, "onboarding_business.html", {"prefill_trade": prefill_trade})
 
@@ -297,7 +354,7 @@ def onboarding_receptionist_form(request: Request):
         if client is None:
             return RedirectResponse("/login", status_code=303)
         if client.frontdesk_live:
-            return RedirectResponse("/dashboard", status_code=303)
+            return RedirectResponse(DASHBOARD_HOME, status_code=303)
         if not client.business_name:
             return RedirectResponse("/onboarding/business", status_code=303)
     return templates.TemplateResponse(request, "onboarding_receptionist.html", {})
@@ -659,6 +716,31 @@ def v2_notifications(request: Request):
         )
 
 
+@router.get("/v2/dashboard/settings")
+def v2_settings(request: Request):
+    """The only page in the dashboard an owner CHANGES something from —
+    everything else reports, and Roster provisions.
+
+    It holds exactly the two things the owner genuinely owns (their review
+    link, their referral offer) plus read-only proof of what Roster set up for
+    them. Anything else is a conversation with Roster, not a form: the owner
+    can't repoint their own phone number or staff a department, and a field
+    that silently does nothing is worse than no field.
+
+    No view model, same reasoning as notifications above: these are columns on
+    the business row, not a composition over departments and metrics.
+    """
+    with Session(engine) as session:
+        business = _current_client(request, session)
+        if business is None:
+            return RedirectResponse("/login", status_code=303)
+        return templates.TemplateResponse(
+            request,
+            "dashboard_v2/settings.html",
+            {"business": business, "active_nav": "settings", "saved": "saved" in request.query_params},
+        )
+
+
 @router.post("/dashboard/test")
 def dashboard_test(request: Request, message: str = Form(...)):
     with Session(engine) as session:
@@ -677,7 +759,7 @@ def dashboard_test(request: Request, message: str = Form(...)):
                 client.tested_at = datetime.utcnow()
                 session.add(client)
                 session.commit()
-    return RedirectResponse("/dashboard", status_code=303)
+    return RedirectResponse(DASHBOARD_HOME, status_code=303)
 
 
 @router.post("/dashboard/source")
@@ -692,7 +774,7 @@ def set_source(request: Request, source: str = Form("")):
         client.source_prompt_dismissed = True
         session.add(client)
         session.commit()
-    return RedirectResponse("/dashboard", status_code=303)
+    return RedirectResponse(DASHBOARD_HOME, status_code=303)
 
 
 @router.post("/dashboard/review-link")
@@ -704,7 +786,7 @@ def set_review_link(request: Request, review_link: str = Form("")):
         client.review_link = review_link.strip() or None
         session.add(client)
         session.commit()
-    return RedirectResponse("/dashboard", status_code=303)
+    return RedirectResponse(f"{SETTINGS_HOME}?saved=1", status_code=303)
 
 
 @router.post("/dashboard/referral-incentive")
@@ -716,7 +798,7 @@ def set_referral_incentive(request: Request, referral_incentive: str = Form(""))
         client.referral_incentive = referral_incentive.strip() or None
         session.add(client)
         session.commit()
-    return RedirectResponse("/dashboard", status_code=303)
+    return RedirectResponse(f"{SETTINGS_HOME}?saved=1", status_code=303)
 
 
 @router.post("/roster/hire")
@@ -732,7 +814,7 @@ def roster_hire(request: Request, role: str = Form(...)):
             session.add(client)
             _hire_employee(session, client.id, role)
             session.commit()
-    return RedirectResponse("/dashboard", status_code=303)
+    return RedirectResponse(DASHBOARD_HOME, status_code=303)
 
 
 @router.get("/roster/hire/retention-manager")
@@ -743,7 +825,7 @@ def roster_hire_retention_manager_form(request: Request):
             return RedirectResponse("/login", status_code=303)
         requested = json.loads(client.requested_roster) if client.requested_roster else []
         if next_hire(requested) != "Retention Manager":
-            return RedirectResponse("/dashboard", status_code=303)
+            return RedirectResponse(DASHBOARD_HOME, status_code=303)
     return templates.TemplateResponse(request, "roster_hire_retention_manager.html", {})
 
 
@@ -757,7 +839,7 @@ def roster_hire_retention_manager_submit(
             return RedirectResponse("/login", status_code=303)
         requested = json.loads(client.requested_roster) if client.requested_roster else []
         if next_hire(requested) != "Retention Manager":
-            return RedirectResponse("/dashboard", status_code=303)
+            return RedirectResponse(DASHBOARD_HOME, status_code=303)
         if review_link.strip():
             client.review_link = review_link.strip()
         if referral_incentive.strip():
@@ -767,4 +849,4 @@ def roster_hire_retention_manager_submit(
         session.add(client)
         _hire_employee(session, client.id, "Retention Manager")
         session.commit()
-    return RedirectResponse("/dashboard", status_code=303)
+    return RedirectResponse(DASHBOARD_HOME, status_code=303)

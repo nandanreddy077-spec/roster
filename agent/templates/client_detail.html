@@ -6,6 +6,45 @@
 <span class="trade-tag">{{ client.trade }}</span>
 <span class="trade-tag">{{ client.pipeline_stage }}</span>
 
+{# Setup, in the order it actually gets done, so it stops being a memory game
+   across five scattered panels. Every item is derived from a real column —
+   nothing here can be ticked optimistically. #}
+<section class="agent-roster">
+  <h2 class="agent-roster-heading">Setup</h2>
+  <div class="agent-tile" style="max-width:640px;">
+    <ol class="setup-checklist">
+      {% for step in checklist %}
+      <li class="{{ 'is-done' if step.done else 'is-todo' }}">
+        <strong>{{ "✓" if step.done else "○" }} {{ step.label }}</strong>
+        {% if not step.done %}<div class="agent-tile-desc">{{ step.hint }}</div>{% endif %}
+      </li>
+      {% endfor %}
+    </ol>
+  </div>
+</section>
+
+<section class="agent-roster">
+  <h2 class="agent-roster-heading">Dashboard access</h2>
+  <div class="agent-tile" style="max-width:640px;">
+    <p class="agent-tile-desc">Roster sets every customer up by hand, so the owner never picks a password.
+      This link is how they get into their own dashboard — text it to them. It works for
+      {{ access_link_days }} days, then send a fresh one from this page.</p>
+    <input type="text" class="access-link-field" value="{{ access_link }}" readonly
+           onclick="this.select();" aria-label="Dashboard access link">
+    {% if not access_link.startswith("http") %}
+    <p class="job-notes">PUBLIC_BASE_URL isn't set, so this link has no host on it — set it before sending.</p>
+    {% endif %}
+
+    <p class="agent-tile-desc" style="margin-top:16px;">Their email is a backup door: with it set they can also
+      use Google sign-in, so a lost link isn't a support call. It is not a login on its own.</p>
+    <form method="post" action="/clients/{{ client.id }}/owner-email" class="review-link-form">
+      <input type="email" name="owner_email" placeholder="owner@theirshop.com" value="{{ client.email or '' }}">
+      <button class="btn btn-secondary btn-small" type="submit">Save email</button>
+    </form>
+    {% if access_error %}<p class="job-notes">{{ access_error }}</p>{% endif %}
+  </div>
+</section>
+
 <section class="agent-roster">
   <h2 class="agent-roster-heading">Provisioning pipeline</h2>
   {% if stage_error %}<p class="job-notes">{{ stage_error }}</p>{% endif %}

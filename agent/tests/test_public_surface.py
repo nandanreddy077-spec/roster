@@ -101,6 +101,16 @@ def test_signup_submit_is_public(monkeypatch, test_engine):
     assert response.headers["location"] == "/onboarding/business"
 
 
+def test_api_docs_are_not_published(monkeypatch):
+    """FastAPI's defaults hand out a complete map of every founder and portal
+    route to anyone who asks. The routes are authenticated, so this is not a
+    hole — it's the floor plan, for free (2026-08-04 penetration test, rec 3).
+    Roster has no external API consumers."""
+    client = TestClient(app_module.app)
+    for path in ("/docs", "/redoc", "/openapi.json"):
+        assert client.get(path).status_code == 404, f"{path} is still published"
+
+
 def test_sms_webhook_is_public(monkeypatch, test_engine):
     """Twilio can't do Basic auth — the webhook authenticates by routing to a
     known inbound number and must not be caught by the dashboard gate."""
