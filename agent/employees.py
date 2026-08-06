@@ -67,9 +67,15 @@ REGISTRY: list[EmployeeDefinition] = [
     # Deterministic — no AgentEngine, no LLM call (2026-07-30 design review):
     # enriches every deployed business's new jobs with structured
     # classification (job_type, priority, financing/membership candidacy,
-    # possible_spam). "internal" like Reviews/Quote Chaser/Referral — the
-    # founder deploys per business, not yet a standing self-serve offer.
-    EmployeeDefinition("lead_qualifier", "sales", "internal", "Lead Qualifier",
+    # possible_spam).
+    # Graduated internal -> live (founder, 2026-08-06) on the same two
+    # conditions Reviews and Quote Chaser had to meet. Gated: qualify_new_jobs
+    # goes through runner.dispatch_tick, so only businesses with an Employee
+    # row are ever touched. Verified end to end against production data — three
+    # jobs booked through bookings.book_job came back classified
+    # repair/replacement with the expected priority and financing/membership
+    # flags, and a second tick produced zero rows (idempotent).
+    EmployeeDefinition("lead_qualifier", "sales", "live", "Lead Qualifier",
                        mission="Is Lead Qualifier enriching new jobs?"),
     # Graduated internal -> live (founder, 2026-08-04) on the same two
     # conditions Reviews had to meet: the whole journey verified end to end
@@ -87,7 +93,13 @@ REGISTRY: list[EmployeeDefinition] = [
     # Deterministic, same reasoning as Lead Qualifier above — combines
     # Job.urgency and JobQualification's already-structured output into a
     # scheduling recommendation, no LLM involved.
-    EmployeeDefinition("dispatcher", "operations", "internal", "Dispatcher",
+    # Graduated internal -> live (founder, 2026-08-06) alongside Lead
+    # Qualifier, same two conditions. Gated through runner.dispatch_tick.
+    # Verified end to end on the same three production jobs: emergency ->
+    # immediate + requires_dispatch_review, replacement -> same_day/today via
+    # the qualifier high bump, routine repair -> normal/tomorrow. Second tick
+    # produced zero rows.
+    EmployeeDefinition("dispatcher", "operations", "live", "Dispatcher",
                        mission="Is Dispatcher planning today's work?"),
     EmployeeDefinition("route_optimizer", "operations", "planned", "Route Optimizer"),
     EmployeeDefinition("emergency_coordinator", "operations", "planned", "Emergency Coordinator"),
@@ -99,7 +111,18 @@ REGISTRY: list[EmployeeDefinition] = [
     # (and Reviews, listed under Customer Service there); roles.py already
     # ships this as one employee, so the registry follows the shipped shape
     # rather than the doc's finer split.
-    EmployeeDefinition("retention_manager", "customer_success", "internal", "Retention Manager",
+    # Graduated internal -> live (founder, 2026-08-06). Its gate is the one
+    # dispatch_tick's docstring calls out as deliberate rather than missing:
+    # sends only ever work RecoveryJobs belonging to a campaign, and a campaign
+    # has exactly two origins — create_campaign (a console action, consent by
+    # definition) and enroll_completed_estimates (gated on the Employee row).
+    # The send path itself is the same recovery_service.tick() verified against
+    # real Claude for Quote Chaser on 2026-08-04, and renewal campaigns are
+    # driven through it in test_recovery_service.
+    # HONEST LIMIT: unlike the other two, no real rebooker/renewals campaign
+    # has been run against a live customer — the send path is covered by tests
+    # and shared with a verified employee, not exercised in production.
+    EmployeeDefinition("retention_manager", "customer_success", "live", "Retention Manager",
                        mission="Is Retention Manager bringing customers back?"),
     # Marketing
     EmployeeDefinition("reactivation", "marketing", "planned", "Reactivation"),
