@@ -11,22 +11,28 @@ def test_login_form_renders():
     assert response.status_code == 200
 
 
-def test_login_sends_an_unfinished_signup_back_to_onboarding(monkeypatch, test_engine):
-    """A bare signup has no business name, no number and nobody deployed. It
-    belongs in onboarding, not on an empty dashboard — the old unconditional
-    "/dashboard" redirect hid that, because /dashboard did the bouncing."""
+def test_login_sends_a_half_provisioned_shop_to_the_dashboard_anyway(monkeypatch, test_engine):
+    """A shop mid-provisioning has no number and nobody deployed. It still goes
+    to the dashboard: there is no onboarding wizard to send it to any more, and
+    /v2/dashboard shows honest empty states, which is the truth for a business
+    Roster is still setting up."""
+    from auth import hash_password
+    from conftest import provisioned_business
+
     monkeypatch.setattr(app_module, "engine", test_engine)
     monkeypatch.setattr(db_module, "engine", test_engine)
     monkeypatch.setattr(portal_module, "engine", test_engine)
-    client = TestClient(app_module.app)
-    client.post("/signup", data={"email": "owner@example.com", "password": "hunter22"})
-    client.post("/logout")
+    provisioned_business(
+        test_engine, email="owner@example.com", password_hash=hash_password("hunter22"),
+        business_name="", frontdesk_live=False,
+    )
 
+    client = TestClient(app_module.app)
     response = client.post(
         "/login", data={"email": "owner@example.com", "password": "hunter22"}, follow_redirects=False
     )
     assert response.status_code == 303
-    assert response.headers["location"] == "/onboarding/business"
+    assert response.headers["location"] == portal_module.DASHBOARD_HOME
 
 
 def test_login_sends_a_founder_provisioned_shop_to_the_dashboard(monkeypatch, test_engine):

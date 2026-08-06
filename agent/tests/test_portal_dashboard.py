@@ -9,6 +9,7 @@ import db as db_module
 import portal as portal_module
 import service as service_module
 from conftest import StubAgent
+from conftest import login_as, provisioned_business
 from db_models import Business, Job
 
 
@@ -24,21 +25,15 @@ def _stub_reply(text: str):
     )
 
 
-def _fully_onboarded_client(client: TestClient, monkeypatch):
+def _fully_onboarded_client(client: TestClient, monkeypatch, test_engine):
+    """A live shop, built the way one actually comes into being now: the
+    founder provisions it and hands over an access link. The self-serve
+    signup + wizard this used to walk is retired (2026-08-06)."""
     monkeypatch.delenv("TWILIO_ACCOUNT_SID", raising=False)
     monkeypatch.delenv("TWILIO_AUTH_TOKEN", raising=False)
-    client.post("/signup", data={"email": "owner@example.com", "password": "hunter22"})
-    client.post(
-        "/onboarding/business",
-        data={
-            "business_name": "Ridgeline Plumbing",
-            "trade": "Plumbing",
-            "services": "Drains",
-            "hours": "9-5",
-            "pricing_faq": "Diagnostic visit: $89.",
-        },
-    )
-    client.post("/onboarding/receptionist", data={"escalation_phone": "(555) 555-0101"})
+    business_id = provisioned_business(test_engine, frontdesk_live=True)
+    login_as(client, business_id)
+    return business_id
 
 
 def test_dashboard_requires_login(monkeypatch, test_engine):
@@ -58,7 +53,7 @@ def test_dashboard_untested_shows_ready_not_live(monkeypatch, test_engine):
     monkeypatch.setattr(db_module, "engine", test_engine)
     monkeypatch.setattr(portal_module, "engine", test_engine)
     client = TestClient(app_module.app)
-    _fully_onboarded_client(client, monkeypatch)
+    _fully_onboarded_client(client, monkeypatch, test_engine)
 
     response = client.get("/dashboard")
     assert response.status_code == 200
@@ -73,7 +68,7 @@ def test_dashboard_activity_lists_real_jobs(monkeypatch, test_engine):
     monkeypatch.setattr(db_module, "engine", test_engine)
     monkeypatch.setattr(portal_module, "engine", test_engine)
     client = TestClient(app_module.app)
-    _fully_onboarded_client(client, monkeypatch)
+    _fully_onboarded_client(client, monkeypatch, test_engine)
 
     with Session(test_engine) as session:
         owner = session.exec(select(Business).where(Business.email == "owner@example.com")).first()
@@ -93,7 +88,7 @@ def test_dashboard_test_message_earns_working_status(monkeypatch, test_engine):
     monkeypatch.setattr(portal_module, "engine", test_engine)
     monkeypatch.setattr(service_module, "agent", _stub_reply("Yes — we do same-day drain cleaning!"))
     client = TestClient(app_module.app)
-    _fully_onboarded_client(client, monkeypatch)
+    _fully_onboarded_client(client, monkeypatch, test_engine)
 
     with Session(test_engine) as session:
         owner = session.exec(select(Business).where(Business.email == "owner@example.com")).first()
@@ -126,7 +121,7 @@ def test_roster_hire_queues_quote_chaser(monkeypatch, test_engine):
     monkeypatch.setattr(db_module, "engine", test_engine)
     monkeypatch.setattr(portal_module, "engine", test_engine)
     client = TestClient(app_module.app)
-    _fully_onboarded_client(client, monkeypatch)
+    _fully_onboarded_client(client, monkeypatch, test_engine)
 
     response = client.post("/roster/hire", data={"role": "Quote Chaser"}, follow_redirects=False)
     assert response.status_code == 303
@@ -145,7 +140,7 @@ def test_roster_hire_rejects_out_of_order_role(monkeypatch, test_engine):
     monkeypatch.setattr(db_module, "engine", test_engine)
     monkeypatch.setattr(portal_module, "engine", test_engine)
     client = TestClient(app_module.app)
-    _fully_onboarded_client(client, monkeypatch)
+    _fully_onboarded_client(client, monkeypatch, test_engine)
 
     client.post("/roster/hire", data={"role": "Retention Manager"})
 
@@ -159,7 +154,7 @@ def test_retention_manager_hire_form_blocked_before_quote_chaser(monkeypatch, te
     monkeypatch.setattr(db_module, "engine", test_engine)
     monkeypatch.setattr(portal_module, "engine", test_engine)
     client = TestClient(app_module.app)
-    _fully_onboarded_client(client, monkeypatch)
+    _fully_onboarded_client(client, monkeypatch, test_engine)
 
     response = client.get("/roster/hire/retention-manager", follow_redirects=False)
     assert response.status_code == 303
@@ -171,7 +166,7 @@ def test_retention_manager_hire_saves_review_link_and_referral_incentive(monkeyp
     monkeypatch.setattr(db_module, "engine", test_engine)
     monkeypatch.setattr(portal_module, "engine", test_engine)
     client = TestClient(app_module.app)
-    _fully_onboarded_client(client, monkeypatch)
+    _fully_onboarded_client(client, monkeypatch, test_engine)
     client.post("/roster/hire", data={"role": "Quote Chaser"})
 
     response = client.get("/roster/hire/retention-manager")
@@ -198,7 +193,7 @@ def test_retention_manager_hire_skippable(monkeypatch, test_engine):
     monkeypatch.setattr(db_module, "engine", test_engine)
     monkeypatch.setattr(portal_module, "engine", test_engine)
     client = TestClient(app_module.app)
-    _fully_onboarded_client(client, monkeypatch)
+    _fully_onboarded_client(client, monkeypatch, test_engine)
     client.post("/roster/hire", data={"role": "Quote Chaser"})
 
     client.post("/roster/hire/retention-manager", data={})
@@ -217,7 +212,7 @@ def test_dashboard_review_link_and_referral_incentive_editable_anytime(monkeypat
     monkeypatch.setattr(db_module, "engine", test_engine)
     monkeypatch.setattr(portal_module, "engine", test_engine)
     client = TestClient(app_module.app)
-    _fully_onboarded_client(client, monkeypatch)
+    _fully_onboarded_client(client, monkeypatch, test_engine)
 
     client.post("/dashboard/review-link", data={"review_link": "https://g.page/r/test"})
     client.post("/dashboard/referral-incentive", data={"referral_incentive": "$25 off"})
@@ -237,7 +232,7 @@ def test_source_banner_hidden_before_three_days(monkeypatch, test_engine):
     monkeypatch.setattr(db_module, "engine", test_engine)
     monkeypatch.setattr(portal_module, "engine", test_engine)
     client = TestClient(app_module.app)
-    _fully_onboarded_client(client, monkeypatch)
+    _fully_onboarded_client(client, monkeypatch, test_engine)
 
     response = client.get("/dashboard")
     assert "Where" not in response.text or "hear about Roster" not in response.text
@@ -248,7 +243,7 @@ def test_source_banner_shown_after_three_days(monkeypatch, test_engine):
     monkeypatch.setattr(db_module, "engine", test_engine)
     monkeypatch.setattr(portal_module, "engine", test_engine)
     client = TestClient(app_module.app)
-    _fully_onboarded_client(client, monkeypatch)
+    _fully_onboarded_client(client, monkeypatch, test_engine)
 
     with Session(test_engine) as session:
         owner = session.exec(select(Business).where(Business.email == "owner@example.com")).first()
@@ -265,7 +260,7 @@ def test_dismissing_source_banner_hides_it_going_forward(monkeypatch, test_engin
     monkeypatch.setattr(db_module, "engine", test_engine)
     monkeypatch.setattr(portal_module, "engine", test_engine)
     client = TestClient(app_module.app)
-    _fully_onboarded_client(client, monkeypatch)
+    _fully_onboarded_client(client, monkeypatch, test_engine)
 
     with Session(test_engine) as session:
         owner = session.exec(select(Business).where(Business.email == "owner@example.com")).first()

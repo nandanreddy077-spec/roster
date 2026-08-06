@@ -12,14 +12,11 @@ from typing import Optional
 from fastapi import APIRouter, Form, HTTPException, Request
 from fastapi.responses import RedirectResponse
 from fastapi.templating import Jinja2Templates
-from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, select
 
 from authlib.integrations.starlette_client import OAuthError
 
-from activation import activate_frontdesk
-from auth import hash_password, read_access_token, verify_password
-from channels import normalize_phone
+from auth import read_access_token, verify_password
 from db import engine
 from db_models import Business, Employee, Job, Message
 from departments import department_status_for, get_department
@@ -134,43 +131,37 @@ def _current_client(request: Request, session: Session) -> Optional[Business]:
     return session.get(Business, client_id)
 
 
+# ---- Self-registration is CLOSED (2026-08-06) ------------------------------
+# Roster provisions every business through the founder console after a
+# discovery call — ROADMAP: "no self-serve onboarding ... one onboarding flow,
+# no internal exception". The code kept shipping the old self-serve product
+# alongside that, and it was not merely dead weight:
+#
+#     stranger -> /signup (or Google) -> /onboarding/business
+#              -> /onboarding/receptionist -> activate_frontdesk()
+#              -> buy_twilio_number()        <- real, billed, no founder involved
+#
+# Anyone on the internet could make Roster buy a phone number for a business
+# ops had never heard of. Both public doors are shut here, which leaves the
+# wizard with no entrance at all; the wizard routes below redirect rather than
+# 404 so a stale bookmark lands somewhere sensible. Deleting them outright is
+# the separate Phase 7 cutover.
+SIGNUP_CLOSED_REDIRECT = "/"
+
+
 @router.get("/signup")
 def signup_form(request: Request):
-    trade = request.query_params.get("trade", "")
-    return templates.TemplateResponse(
-        request, "signup.html", {"error": None, "email": "", "trade": trade, "google_enabled": google_enabled()}
-    )
+    """No self-registration. The landing page's request-access form is the
+    front door; a discovery call is the step after it."""
+    return RedirectResponse(SIGNUP_CLOSED_REDIRECT, status_code=303)
 
 
 @router.post("/signup")
-def signup_submit(request: Request, email: str = Form(...), password: str = Form(...), trade: str = Form("")):
-    email = email.strip().lower()
-    with Session(engine) as session:
-        existing = session.exec(select(Business).where(Business.email == email)).first()
-        if existing:
-            return templates.TemplateResponse(
-                request,
-                "signup.html",
-                {"error": "That email's already registered — try logging in instead.", "email": email, "trade": trade},
-                status_code=400,
-            )
-        client = Business(email=email, password_hash=hash_password(password))
-        session.add(client)
-        try:
-            session.commit()
-        except IntegrityError:
-            session.rollback()
-            return templates.TemplateResponse(
-                request,
-                "signup.html",
-                {"error": "That email's already registered — try logging in instead.", "email": email, "trade": trade},
-                status_code=400,
-            )
-        session.refresh(client)
-        request.session["client_id"] = client.id
-        if trade.strip():
-            request.session["prefill_trade"] = trade.strip()
-    return RedirectResponse("/onboarding/business", status_code=303)
+def signup_submit(request: Request):
+    """Closed as a ROUTE, not just as a form — a stale bookmark or a scripted
+    POST must not be able to create a business either. No parameters declared
+    on purpose: whatever is posted, nothing is read and nothing is written."""
+    return RedirectResponse(SIGNUP_CLOSED_REDIRECT, status_code=303)
 
 
 @router.get("/login")
@@ -193,12 +184,12 @@ def login_submit(request: Request, email: str = Form(...), password: str = Form(
                 status_code=400,
             )
         request.session["client_id"] = client.id
-        # The decision has to happen HERE now. It used to be delegated to
-        # /dashboard, which bounced un-activated shops into onboarding; that
-        # route is gone (Phase 6 cutover) and /v2/dashboard deliberately does
-        # not bounce, so a plain password login would otherwise drop a shop
-        # that never onboarded onto an empty dashboard and never ask its name.
-        return _post_login_redirect(session, client)
+        # Always the dashboard. There is no longer anywhere else to send
+        # anyone: self-registration is closed, so every business is
+        # founder-provisioned, and /v2/dashboard deliberately does not bounce —
+        # a shop mid-setup sees honest empty states, which is the truth for a
+        # business Roster is still provisioning.
+        return RedirectResponse(DASHBOARD_HOME, status_code=303)
 
 
 @router.post("/logout")
@@ -234,46 +225,35 @@ def dashboard_access(request: Request, token: str):
     return templates.TemplateResponse(request, "access_expired.html", {}, status_code=400)
 
 
-def _post_login_redirect(session: Session, client: Business) -> RedirectResponse:
-    """The one rule for where an authenticated owner goes. Shared by password
-    login and Google so the two doors can't drift apart.
+def _login_by_email(request: Request, session: Session, email: str) -> RedirectResponse:
+    """Log a VERIFIED email into a business that ALREADY EXISTS.
 
-    Deployment state decides, not `frontdesk_live` alone: that column is set by
-    the retired self-serve activation flow, so a business the FOUNDER
-    provisioned has real Employee rows and a live phone number while
-    `frontdesk_live` is still False — and would have been bounced into an
-    onboarding wizard it already finished. Same rule as ARCHITECTURE.md
-    invariant 8: state derives from Employee rows, never from a status column.
+    This used to create one on first sight, which made Google the second
+    public self-registration door: closing /signup alone would have left it
+    wide open, since every Google account in the world is a verified email.
+    Now the founder putting the owner's address on the business row (the
+    console's "Dashboard access" panel) is what makes Google sign-in work for
+    them — a second door into an existing business, never a way to mint one.
+
+    Testable without any OAuth round-trip; the Google callback just feeds it a
+    verified email.
     """
-    staffed = session.exec(
-        select(Employee).where(Employee.business_id == client.id, Employee.status != "fired")
-    ).first()
-    if client.frontdesk_live or staffed is not None:
-        return RedirectResponse(DASHBOARD_HOME, status_code=303)
-    return RedirectResponse("/onboarding/business", status_code=303)
-
-
-def _login_or_create_by_email(request: Request, session: Session, email: str) -> RedirectResponse:
-    """Log a verified email in — creating a passwordless Business on first sight —
-    and route by the same rules as password login: live shops to the dashboard,
-    everyone else into (or back into) onboarding. Testable without any OAuth
-    network round-trip; the Google callback just feeds it a verified email."""
     email = email.strip().lower()
     client = session.exec(select(Business).where(Business.email == email)).first()
     if client is None:
-        client = Business(email=email)  # no password_hash — Google is their sign-in
-        session.add(client)
-        try:
-            session.commit()
-        except IntegrityError:
-            # Lost a race with a concurrent signup/login for the same email —
-            # that row now exists, so use it instead of failing this request.
-            session.rollback()
-            client = session.exec(select(Business).where(Business.email == email)).first()
-        else:
-            session.refresh(client)
+        return templates.TemplateResponse(
+            request,
+            "login.html",
+            {
+                "error": "We don't have an account for that email yet. "
+                         "Talk to Roster and we'll get you set up.",
+                "email": email,
+                "google_enabled": google_enabled(),
+            },
+            status_code=400,
+        )
     request.session["client_id"] = client.id
-    return _post_login_redirect(session, client)
+    return RedirectResponse(DASHBOARD_HOME, status_code=303)
 
 
 @router.get("/auth/google/login")
@@ -308,84 +288,33 @@ async def google_callback(request: Request):
         )
 
     with Session(engine) as session:
-        return _login_or_create_by_email(request, session, email)
+        return _login_by_email(request, session, email)
 
 
-@router.get("/onboarding/business")
-def onboarding_business_form(request: Request):
-    with Session(engine) as session:
-        client = _current_client(request, session)
-        if client is None:
-            return RedirectResponse("/login", status_code=303)
-        if client.frontdesk_live:
-            return RedirectResponse(DASHBOARD_HOME, status_code=303)
-    prefill_trade = request.session.get("prefill_trade", "")
-    return templates.TemplateResponse(request, "onboarding_business.html", {"prefill_trade": prefill_trade})
+# ---- The self-serve wizard, retired ---------------------------------------
+# These four routes existed only to serve self-registration, which is closed
+# above, so nothing links here any more. They redirect instead of 404ing so a
+# stale bookmark lands somewhere sensible; Phase 7 deletes them outright.
+#
+# Redirecting is not cosmetic. The final POST called activate_frontdesk(),
+# which buys a Twilio number, and its guards keyed on `frontdesk_live` — a
+# column that is False on every FOUNDER-provisioned business. So a legitimate
+# logged-in owner typing the URL would have sailed past every check and
+# triggered a purchase for a shop Roster had already set up by hand. The
+# business fields these forms wrote (name, trade, hours, escalation phone,
+# answer mode) are all captured on /clients/new now.
+_RETIRED_WIZARD_ROUTES = (
+    ("/onboarding/business", ("GET", "POST")),
+    ("/onboarding/receptionist", ("GET", "POST")),
+)
 
 
-@router.post("/onboarding/business")
-def onboarding_business_submit(
-    request: Request,
-    business_name: str = Form(...),
-    trade: str = Form(...),
-    services: str = Form(...),
-    hours: str = Form(...),
-    pricing_faq: str = Form(...),
-):
-    service_list = [s.strip() for s in services.split(",") if s.strip()]
-    with Session(engine) as session:
-        client = _current_client(request, session)
-        if client is None:
-            return RedirectResponse("/login", status_code=303)
-        client.business_name = business_name.strip()
-        client.trade = trade.strip()
-        client.services_json = json.dumps(service_list)
-        client.hours = hours.strip()
-        client.pricing_faq = pricing_faq.strip()
-        session.add(client)
-        session.commit()
-    return RedirectResponse("/onboarding/receptionist", status_code=303)
+def _retired_wizard(request: Request) -> RedirectResponse:
+    return RedirectResponse(DASHBOARD_HOME, status_code=303)
 
 
-@router.get("/onboarding/receptionist")
-def onboarding_receptionist_form(request: Request):
-    with Session(engine) as session:
-        client = _current_client(request, session)
-        if client is None:
-            return RedirectResponse("/login", status_code=303)
-        if client.frontdesk_live:
-            return RedirectResponse(DASHBOARD_HOME, status_code=303)
-        if not client.business_name:
-            return RedirectResponse("/onboarding/business", status_code=303)
-    return templates.TemplateResponse(request, "onboarding_receptionist.html", {})
-
-
-@router.post("/onboarding/receptionist")
-def onboarding_receptionist_submit(
-    request: Request,
-    escalation_phone: str = Form(...),
-    answer_mode: str = Form("backup"),
-    business_phone: str = Form(""),
-):
-    with Session(engine) as session:
-        client = _current_client(request, session)
-        if client is None:
-            return RedirectResponse("/login", status_code=303)
-        if not client.business_name:
-            return RedirectResponse("/onboarding/business", status_code=303)
-        # The owner types this one by hand on their phone, so it arrives in
-        # every shape a human writes a number in. It is also the only way we
-        # reach them when a live call escalates — a wrong shape here is a
-        # missed emergency, not a formatting nit.
-        client.escalation_phone = normalize_phone(escalation_phone)
-        # "primary" = AI answers every call; "backup" = AI catches only missed
-        # calls. Anything unexpected falls back to the safe backup mode.
-        client.answer_mode = answer_mode if answer_mode in ("primary", "backup") else "backup"
-        client.business_phone = normalize_phone(business_phone)
-        session.add(client)
-        session.commit()
-        activate_frontdesk(session, client)
-    return RedirectResponse("/activation/live", status_code=303)
+for _path, _methods in _RETIRED_WIZARD_ROUTES:
+    router.add_api_route(_path, _retired_wizard, methods=list(_methods), include_in_schema=False)
 
 
 @router.get("/activation/live")
