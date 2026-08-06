@@ -62,7 +62,7 @@ def test_existing_live_client_goes_to_dashboard(monkeypatch, test_engine):
     request = _FakeRequest()
     with Session(test_engine) as session:
         resp = portal_module._login_or_create_by_email(request, session, "live@example.com")
-    assert resp.headers["location"] == "/dashboard"
+    assert resp.headers["location"] == portal_module.DASHBOARD_HOME
 
 
 def test_existing_unfinished_client_resumes_onboarding(monkeypatch, test_engine):

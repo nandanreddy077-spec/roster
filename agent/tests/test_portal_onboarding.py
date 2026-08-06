@@ -95,7 +95,10 @@ def test_onboarding_receptionist_activates_and_redirects(monkeypatch, test_engin
 
     with Session(test_engine) as session:
         saved = select_client_by_email("owner@example.com", session)
-    assert saved.escalation_phone == "(555) 555-0101"
+    # Stored E.164, not as typed: this is the number we page the owner on when
+    # a live call escalates, and Twilio silently resolves a non-E.164 number
+    # against the sender's country.
+    assert saved.escalation_phone == "+15555550101"
     assert saved.frontdesk_live is True
     assert saved.pricing_faq == "Diagnostic visit: $89."
 
@@ -131,7 +134,7 @@ def test_onboarding_receptionist_saves_answer_mode_and_business_phone(monkeypatc
     with Session(test_engine) as session:
         saved = select_client_by_email("owner@example.com", session)
     assert saved.answer_mode == "primary"
-    assert saved.business_phone == "(555) 999-1000"
+    assert saved.business_phone == "+15559991000"
 
 
 def test_onboarding_receptionist_defaults_answer_mode_to_backup_on_bad_value(monkeypatch, test_engine):

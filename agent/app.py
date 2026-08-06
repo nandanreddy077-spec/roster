@@ -27,14 +27,16 @@ from sqlmodel import Session, delete, func, select
 from starlette.concurrency import run_in_threadpool
 from starlette.middleware.sessions import SessionMiddleware
 
+from auth import ACCESS_LINK_MAX_AGE_SECONDS, make_access_token, resolve_session_secret
 from call_trace import CallTrace
-from channels import get_channel
+from channels import get_channel, normalize_phone
 import departments
 from db import DATA_DIR, engine, init_db
 from deployment import deploy_department, deploy_role
 from eventbus import bus
 from events import JOB_COMPLETED, DomainEvent
 from expansion import mark_actioned, open_interests_for
+import metrics
 from notifications import is_test_thread
 from locks import conversation_lock
 from db_models import (
@@ -43,7 +45,9 @@ from db_models import (
     WebhookDelivery,
 )
 from portal import router as portal_router
-from provisioning import ProvisioningError, buy_twilio_number, provision_voice, verify_voice_wiring
+from provisioning import (
+    ProvisioningError, buy_twilio_number, provision_voice, public_base_url, verify_voice_wiring,
+)
 from recovery_engine import FACE_DISPLAY_NAMES
 from recovery_service import create_campaign, find_active_recovery_job, handle_recovery_reply
 from referral_service import find_active_referral_ask, handle_referral_reply
@@ -104,17 +108,6 @@ def scheduler_interval_seconds(environ) -> int:
         return DEFAULT_INTERVAL_SECONDS
 
 
-def resolve_session_secret(environ) -> str:
-    secret = environ.get("SESSION_SECRET_KEY")
-    if secret:
-        return secret
-    if environ.get("ROSTER_ENV") == "production":
-        raise RuntimeError(
-            "SESSION_SECRET_KEY must be set in production — refusing to start with the dev fallback."
-        )
-    return "dev-only-insecure-secret-change-in-production"
-
-
 def session_cookie_kwargs(environ) -> dict:
     """Cookie-security flags for the portal session cookie. SameSite=Lax keeps
     the cookie off cross-site POSTs (CSRF defense for the dashboard's
@@ -134,7 +127,12 @@ DASHBOARD_THREAD = "dashboard"
 # {call_id}.jsonl, so the first real calls leave a replayable ground-truth log.
 VOICE_CAPTURE_DIR = DATA_DIR / "call_captures"
 
-app = FastAPI(title="Roster")
+# docs_url/redoc_url/openapi_url off: FastAPI's defaults publish a complete map
+# of every founder and portal route to anyone who asks. The routes themselves
+# are authenticated, so this is not a hole — it's handing an attacker the
+# floor plan for free (2026-08-04 penetration test, recommendation 3). Roster
+# has no external API consumers; nobody needs the schema.
+app = FastAPI(title="Roster", docs_url=None, redoc_url=None, openapi_url=None)
 # Customer-portal session cookie — separate from the founder's HTTP-Basic
 # admin auth above. SESSION_SECRET_KEY signs the cookie. In production
 # (ROSTER_ENV=production) the app fails closed if it's unset — like
@@ -326,6 +324,54 @@ def _founder_department_rows(employees: list) -> list:
     ]
 
 
+def _setup_checklist(client: Business, department_rows: list, real_job_count: int) -> list:
+    """"Is this shop actually live?" answered in one place, in the order the
+    founder does the work, so setup stops being a memory game across five
+    scattered panels.
+
+    Every item is derived from a fact already on the row — never from a
+    "marked done" flag someone could tick optimistically. The last item is
+    deliberately the hardest and cannot be faked: until a real (non-test) job
+    exists, this business has never actually done its job, and the checklist
+    says so no matter how green everything above it is.
+    """
+    staffed = [r for r in department_rows if r["status"].state in ("staffed", "partial")]
+    return [
+        {"label": "Business details captured",
+         "done": bool(client.business_name and client.trade and client.hours),
+         "hint": "Name, trade, hours and pricing — what Frontdesk answers from."},
+        {"label": "AI phone number provisioned",
+         "done": bool(client.inbound_number),
+         "hint": "Buy & wire up a number below. Without one there is no SMS and no voice."},
+        {"label": "Live voice registered with xAI",
+         "done": bool(client.xai_phone_number),
+         "hint": "SMS works without this; answering an actual phone call does not."},
+        {"label": "A department staffed",
+         "done": bool(staffed),
+         "hint": "Deploy at least one department, or nothing runs for this business."},
+        {"label": "Owner can reach their dashboard",
+         "done": bool(client.email),
+         "hint": "Send the access link below. Setting their email adds Google sign-in as a backup."},
+        {"label": "Answered a real customer",
+         "done": real_job_count > 0,
+         "hint": "Not done until a real call or text books a job. Test bookings don't count."},
+    ]
+
+
+def _access_link(client: Business) -> str:
+    """The URL the founder sends the owner so they can see their dashboard.
+
+    Always absolute: this gets pasted into a text message, where a relative
+    path is useless. Falls back to the SAME constant every other public-URL
+    consumer uses (provisioning's webhook registration, the Twilio signature
+    check) rather than inventing a second answer to "where does this app
+    live" — if that fallback were ever wrong, inbound SMS would already be
+    failing its signature check, so a link built from it can't be wrong alone.
+    """
+    base = public_base_url().rstrip("/")
+    return f"{base}/access/{make_access_token(client.id, os.environ)}"
+
+
 @app.get("/clients")
 def list_clients(request: Request):
     with Session(engine) as session:
@@ -405,6 +451,7 @@ def create_client(
     inbound_number: str = Form(""),
     business_phone: str = Form(""),
     department_key: str = Form(""),
+    owner_email: str = Form(""),
 ):
     """The single business-creation path in the product once Phase 7 retires
     /signup — so it must capture everything the retired onboarding wizard
@@ -412,22 +459,35 @@ def create_client(
 
     A department that can't be staffed does NOT lose the business: the
     business is the valuable thing on this form, and the deploy error is
-    reported on its page instead.
+    reported on its page instead. Same rule for the owner's email: a duplicate
+    is reported, never a 500 that discards a whole discovery call's notes.
     """
     service_list = [s.strip() for s in services.split(",") if s.strip()]
-    client = Business(
-        business_name=business_name,
-        trade=trade,
-        services_json=json.dumps(service_list),
-        hours=hours,
-        pricing_faq=pricing_faq,
-        escalation_phone=escalation_phone,
-        answer_mode=answer_mode,
-        inbound_number=inbound_number.strip() or None,
-        business_phone=business_phone.strip(),
-    )
+    email = owner_email.strip().lower() or None
     error = None
+    access_error = None
     with Session(engine) as session:
+        if email and session.exec(select(Business).where(Business.email == email)).first():
+            # Business.email is unique. Keep the business, drop the collision:
+            # the founder fixes the address from the client page, which is a
+            # far smaller loss than discarding a discovery call's notes.
+            access_error = (
+                f"{email} is already on another business — created without an owner email. "
+                "Set the right one below to enable Google sign-in."
+            )
+            email = None
+        client = Business(
+            business_name=business_name,
+            trade=trade,
+            services_json=json.dumps(service_list),
+            hours=hours,
+            pricing_faq=pricing_faq,
+            escalation_phone=normalize_phone(escalation_phone),
+            answer_mode=answer_mode,
+            inbound_number=normalize_phone(inbound_number) or None,
+            business_phone=normalize_phone(business_phone),
+            email=email,
+        )
         session.add(client)
         session.commit()
         session.refresh(client)
@@ -441,11 +501,43 @@ def create_client(
             except ValueError as e:
                 error = str(e)
 
+    from urllib.parse import urlencode
+
+    params = {k: v for k, v in (("deploy_error", error), ("access_error", access_error)) if v}
     redirect_url = f"/clients/{client_id}"
-    if error:
+    if params:
+        redirect_url += f"?{urlencode(params)}"
+    return RedirectResponse(redirect_url, status_code=303)
+
+
+@app.post("/clients/{client_id}/owner-email")
+def set_owner_email(client_id: int, owner_email: str = Form("")):
+    """The owner's email is not a login on its own — Roster provisions every
+    customer by hand and never sets a password for them. It's what lets the
+    owner use Google sign-in as a second door, so a lost access link isn't a
+    support ticket."""
+    email = owner_email.strip().lower() or None
+    access_error = None
+    with Session(engine) as session:
+        client = session.get(Business, client_id)
+        if client is None:
+            raise HTTPException(status_code=404, detail="No such client")
+        taken = (
+            session.exec(select(Business).where(Business.email == email)).first()
+            if email else None
+        )
+        if taken is not None and taken.id != client_id:
+            access_error = f"{email} is already on another business."
+        else:
+            client.email = email
+            session.add(client)
+            session.commit()
+
+    redirect_url = f"/clients/{client_id}"
+    if access_error:
         from urllib.parse import quote
 
-        redirect_url += f"?deploy_error={quote(error)}"
+        redirect_url += f"?access_error={quote(access_error)}"
     return RedirectResponse(redirect_url, status_code=303)
 
 
@@ -571,7 +663,7 @@ def attach_xai_number(
     verifies (`xai_signing_secret`). This is the no-Twilio path to the first
     real call — point the number's webhook at /webhook/xai-incoming-call in the
     xAI console, attach it here, and dial."""
-    number = xai_phone_number.strip()
+    number = normalize_phone(xai_phone_number)
     secret = xai_signing_secret.strip()
     with Session(engine) as session:
         client = session.get(Business, client_id)
@@ -805,7 +897,11 @@ def create_recovery_campaign(
         parts = [p.strip() for p in line.split(",")]
         if len(parts) < 3:
             continue
-        entry = {"phone": parts[0], "name": parts[1], "service_type": parts[2]}
+        # A pasted CRM export is the messiest phone source in the product —
+        # "(770) 288-1238", "770.288.1238" and "7702881238" all arrive in the
+        # same column. Normalize once here so the whole recovery sequence, and
+        # the reply matching that keys off customer_phone, agree on one shape.
+        entry = {"phone": normalize_phone(parts[0]), "name": parts[1], "service_type": parts[2]}
         if len(parts) > 3 and parts[3]:
             if face == "quote":
                 entry["estimate_amount"] = parts[3]
@@ -876,6 +972,12 @@ def client_detail(request: Request, client_id: int):
             {"interest": i, "department": departments.get_department(i.department_key)}
             for i in open_interests_for(session, client_id)
         ]
+        # The ONE definition of a real booked job, shared with the customer
+        # dashboard — not a second count that can drift from theirs.
+        checklist = _setup_checklist(
+            client, department_rows, metrics.booked_jobs(session, client_id)
+        )
+        access_link = _access_link(client)
 
     chat = [
         {"role": m.role, "text": extract_display_text(json.loads(m.content_json))}
@@ -900,8 +1002,12 @@ def client_detail(request: Request, client_id: int):
             "department_rows": department_rows,
             "open_interests": open_interests,
             "pipeline_stages": PIPELINE_STAGES,
+            "checklist": checklist,
+            "access_link": access_link,
+            "access_link_days": ACCESS_LINK_MAX_AGE_SECONDS // 86400,
             "provision_error": request.query_params.get("provision_error"),
             "deploy_error": request.query_params.get("deploy_error"),
+            "access_error": request.query_params.get("access_error"),
             "stage_error": request.query_params.get("stage_error"),
         },
     )
@@ -932,7 +1038,7 @@ def _twilio_signature_ok(request: Request, form) -> bool:
         return True
     from twilio.request_validator import RequestValidator
 
-    base = os.environ.get("PUBLIC_BASE_URL", "https://rosterhires.com").rstrip("/")
+    base = public_base_url().rstrip("/")
     url = f"{base}{request.url.path}"
     signature = request.headers.get("X-Twilio-Signature", "")
     return RequestValidator(token).validate(url, dict(form), signature)

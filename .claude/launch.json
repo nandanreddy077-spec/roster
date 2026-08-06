@@ -7,5 +7,6 @@
       "runtimeArgs": ["app:app", "--reload", "--port", "8722", "--app-dir", "/Users/nandanreddyavanaganti/new_idea/agent"],
       "port": 8722
     }
-  ]
+  ],
+  "autoVerify": true
 }

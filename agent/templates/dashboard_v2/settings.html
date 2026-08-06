@@ -1,0 +1,52 @@
+{% extends "portal_base.html" %}
+{% block heading %}Settings{% endblock %}
+{% block subhead %}
+<p class="portal-lede">The two things you own. Everything else, Roster sets up for you.</p>
+{% endblock %}
+
+{% block content %}
+{% if saved %}
+<p class="portal-saved">Saved.</p>
+{% endif %}
+
+<section class="portal-card portal-card-wide">
+  <h2>Your review link</h2>
+  <p class="portal-lede">Where happy customers go to leave you a review. Roster texts it once a job is marked done — leave it blank and no review requests go out.</p>
+  <form method="post" action="/dashboard/review-link" class="settings-form">
+    <div class="field">
+      <input type="url" name="review_link" placeholder="https://g.page/r/..." value="{{ business.review_link or '' }}">
+    </div>
+    <button class="btn btn-secondary" type="submit">Save</button>
+  </form>
+</section>
+
+<section class="portal-card portal-card-wide">
+  <h2>Your referral offer</h2>
+  <p class="portal-lede">What a customer gets for sending you someone. Roster mentions it a few days after the job — leave it blank and nobody gets asked.</p>
+  <form method="post" action="/dashboard/referral-incentive" class="settings-form">
+    <div class="field">
+      <input type="text" name="referral_incentive" placeholder="$25 off your next service" value="{{ business.referral_incentive or '' }}">
+    </div>
+    <button class="btn btn-secondary" type="submit">Save</button>
+  </form>
+</section>
+
+{# Read-only on purpose. An owner can't repoint their own number or restaff a
+   department, and a field that silently does nothing is worse than no field
+   (ARCHITECTURE.md invariant 9 — no dead controls). #}
+<section class="portal-card portal-card-wide">
+  <h2>Your setup</h2>
+  <p class="portal-lede">Roster manages this for you. Anything wrong here, tell us and we'll change it.</p>
+  <ul class="portal-timeline">
+    <li><span class="portal-timeline-when">Business</span>{{ business.business_name or "Not set" }}{% if business.trade %} &middot; {{ business.trade }}{% endif %}</li>
+    <li><span class="portal-timeline-when">Hours</span>{{ business.hours or "Not set" }}</li>
+    {% if business.inbound_number %}
+    <li><span class="portal-timeline-when">Your Roster line</span>{{ business.inbound_number }}</li>
+    {% endif %}
+    {% if business.escalation_phone %}
+    <li><span class="portal-timeline-when">Urgent calls reach</span>{{ business.escalation_phone }}</li>
+    {% endif %}
+    <li><span class="portal-timeline-when">Answer mode</span>{{ "Every call" if business.answer_mode == "primary" else "Only the calls you miss" }}</li>
+  </ul>
+</section>
+{% endblock %}

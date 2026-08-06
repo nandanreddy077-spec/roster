@@ -9,6 +9,9 @@
   <label>Hours<input name="hours" placeholder="Mon-Sat 7am-7pm" required></label>
   <label>Pricing &amp; FAQ<textarea name="pricing_faq" rows="4" required></textarea></label>
   <label>Escalation phone<input name="escalation_phone" placeholder="+1..." required></label>
+  {# Optional: the access link on the client page is what actually gets them in.
+     This adds Google sign-in as a second door so a lost link isn't a support call. #}
+  <label>Owner email (optional — adds Google sign-in as a backup door)<input type="email" name="owner_email" placeholder="owner@theirshop.com"></label>
   <label>Business line / inbound number<input name="inbound_number" placeholder="+1... (the number customers text)"></label>
   <label>Business phone (the number customers dial today, forwarded to us)<input name="business_phone" placeholder="+1..."></label>
   <label>Answer mode

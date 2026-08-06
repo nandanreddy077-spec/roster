@@ -145,6 +145,36 @@ Railway hosts Postgres natively, so that migration is straightforward later.
   correctly. Chaser, Rebooker, Renewals, Referrals, and Reviews all ride on this
   same Twilio SMS channel.
 
+### A2P 10DLC (required before any real US customer)
+
+US carriers filter automated ("application-to-person") SMS sent from an
+unregistered long code. Filtering is silent: Twilio still accepts the message
+and reports success, the handset never rings. Every SMS thing Roster does rides
+this path — the missed-call text-back, Quote Chaser, Reviews, Referrals, and
+the escalation alert that tells an owner a caller needs them **now**.
+
+Registration is a Twilio Console + legal-entity task, not a code change. It
+needs the operating company's legal name, EIN, and address, and it costs money,
+so **only the founder can complete it**:
+
+1. Twilio Console → **Messaging → Regulatory Compliance → A2P 10DLC**.
+2. Register the **Brand** (legal entity + EIN). Sole proprietor works, with
+   lower throughput.
+3. Register a **Campaign**. Use case is *Mixed* or *Customer Care*; the sample
+   messages must match what Roster actually sends — take real copy from
+   `notifications.py` and `recovery_engine.py`, and include the STOP language,
+   because a campaign whose samples don't match its traffic gets rejected.
+4. Create a **Messaging Service**, add the campaign to it, and add every client
+   number to its sender pool. New numbers bought via `/clients/{id}/provision-number`
+   must be added to the pool too, or their traffic stays unregistered.
+5. Set `TWILIO_MESSAGING_SERVICE_SID` (starts `MG`) in Railway and redeploy —
+   variables only take effect on redeploy.
+
+With that variable set, `channels.TwilioChannel` sends via the Messaging
+Service and lets it choose the sender; without it, sends fall back to the bare
+`from_` number and the app logs a warning at startup. Approval takes days to
+weeks, so start it before a customer is waiting, not after.
+
 ## AI receptionist (xAI Grok Voice Agent API, live voice)
 
 Live voice runs on xAI's Grok Voice Agent API (`xai_voice_adapter.py`), not Vapi —

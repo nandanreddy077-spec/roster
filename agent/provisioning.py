@@ -29,6 +29,17 @@ XAI_PHONE_NUMBERS_URL = "https://api.x.ai/v2/phone-numbers"
 XAI_INCOMING_CALL_PATH = "/webhook/xai-incoming-call"
 
 
+def public_base_url() -> str:
+    """Where this app lives, publicly. THE one answer — webhook registration,
+    the Twilio signature check and the founder's access link must all build
+    URLs against the same host or they disagree silently: a signature check
+    against a host Twilio wasn't configured with 403s every inbound text, and
+    nothing says why. PUBLIC_BASE_URL is unset in production today and the
+    fallback below is the live domain, so setting it changes nothing — which
+    is exactly why it must stay one constant instead of four spellings."""
+    return os.environ.get("PUBLIC_BASE_URL") or DEFAULT_PUBLIC_BASE_URL
+
+
 class ProvisioningError(Exception):
     pass
 
@@ -56,7 +67,7 @@ def buy_twilio_number(area_code: Optional[str] = None) -> dict:
             raise ProvisioningError(
                 f"No numbers available for area_code={area_code!r} — try a different area code"
             )
-        base_url = os.environ.get("PUBLIC_BASE_URL", DEFAULT_PUBLIC_BASE_URL)
+        base_url = public_base_url()
         purchased = client.incoming_phone_numbers.create(
             phone_number=available[0].phone_number,
             sms_url=f"{base_url}/webhook/sms",
@@ -293,7 +304,7 @@ def register_number_with_xai(phone_number: str) -> dict:
     if not api_key:
         raise ProvisioningError("XAI_API_KEY must be set to register a number for live voice")
 
-    base_url = os.environ.get("PUBLIC_BASE_URL", DEFAULT_PUBLIC_BASE_URL)
+    base_url = public_base_url()
     body = {
         "origin": "byo_trunk",
         "name": f"Roster {phone_number}",

@@ -36,6 +36,7 @@ building or selling, not occasional reference:
   invariants, required reading before touching `/v2/dashboard*`
 - [`../DESIGN.md`](../DESIGN.md) — design tokens and decisions, required
   reading before any visual change
-- [`../ROADMAP.md`](../ROADMAP.md), [`../SALES.md`](../SALES.md),
-  [`../CUSTOMER.md`](../CUSTOMER.md), [`../SPRINT-10-CUSTOMERS.md`](../SPRINT-10-CUSTOMERS.md) —
-  current build/sales priorities and the active customer-acquisition sprint
+- [`../ROADMAP.md`](../ROADMAP.md) — current build priorities
+- Sales and outreach material (`SALES.md`, `CUSTOMER.md`,
+  `SPRINT-10-CUSTOMERS.md`, `outreach/`) is **not in this repo** — it lives in
+  `../../roster-gtm`. See the root README, "Where the GTM material went"

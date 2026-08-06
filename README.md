@@ -5,10 +5,12 @@ plumbing, and similar trades first). Instead of selling a tool the owner has
 to configure, Roster builds, deploys, and runs each business's AI employees
 for them — the first being **Frontdesk**: missed call → instant AI text-back
 → answers the customer → books the job. See [`ROSTER.md`](ROSTER.md) for the
-full thesis and [`SALES.md`](SALES.md) for the current pitch.
+full thesis.
 
 This repo is the whole product: one FastAPI application, server-rendered
-dashboard, SQLite/Postgres storage, no separate frontend build.
+dashboard, SQLite/Postgres storage, no separate frontend build. It is code
+only — sales, outreach, and investor material live outside the repo (see
+"Where the GTM material went" below).
 
 ## Repository structure
 
@@ -16,18 +18,32 @@ dashboard, SQLite/Postgres storage, no separate frontend build.
 agent/          the application — see agent/README.md and docs/architecture.md
 docs/           architecture, API, development, deployment, testing reference
 concepts/       exploratory design concepts (explicitly marked, not the live site)
-marketing/      the outbound acquisition system (docs/campaign material)
-outreach/       live sales scripts, CRM (pipeline.csv), and scorecard tooling
-pitch-deck/     investor deck sources + generated PDFs
-archive/        superseded material, kept for reference rather than deleted
 
 ARCHITECTURE.md frozen customer-dashboard invariants — read before touching /v2/dashboard*
 DESIGN.md       design tokens/decisions — read before any visual change
 ROADMAP.md      build priorities and the current build-freeze status
-SALES.md        pitch, ICP, objection handling
-CUSTOMER.md     living log of pilot/customer calls
-SPRINT-10-CUSTOMERS.md   the active 30-day customer-acquisition sprint plan
+ROSTER.md       the product thesis
 ```
+
+## Where the GTM material went
+
+Sales, outreach, lead data, and investor decks are **not in this repo** and
+must not be added back. They live in a separate working directory alongside
+it, so a coding session can never accidentally edit a sales doc — and so
+lead data never lands in a public repo:
+
+```
+../roster-gtm/
+  SALES.md                 pitch, ICP, objection handling
+  CUSTOMER.md              living log of pilot/customer calls
+  SPRINT-10-CUSTOMERS.md   the 30-day customer-acquisition sprint plan
+  marketing/               the outbound acquisition system
+  outreach/                scripts, CRM (pipeline.csv), scorecard tooling
+  pitch-deck/              investor deck sources + generated PDFs
+  archive/                 superseded outreach material
+```
+
+`.gitignore` blocks these paths so they cannot be re-committed by accident.
 
 ## Architecture overview
 

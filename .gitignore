@@ -2,9 +2,43 @@
 __pycache__/
 *.pyc
 .env
+.env.local
 .superpowers/
 *.db
 .gstack/
 *.db-shm
 *.db-wal
 agent/data/
+
+# OS / editor junk
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+
+# Test / lint caches
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
+
+# Strix pentest scan output
+strix_runs/
+
+# GTM material must never live in the code repo — it lives in ../roster-gtm.
+# Lead lists contain real people's names and phone numbers and this repo is
+# public. If any of these paths reappear here, something re-created them by
+# mistake; move them back to ../roster-gtm rather than committing.
+SALES.md
+CUSTOMER.md
+SPRINT-10-CUSTOMERS.md
+marketing/
+outreach/
+pitch-deck/
+archive/
+*leads*.csv
+pipeline.csv
+
+# Scratch git worktree living inside the repo — never commit it as a submodule
+basecheck/
