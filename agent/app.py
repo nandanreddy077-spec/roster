@@ -28,7 +28,7 @@ from starlette.concurrency import run_in_threadpool
 from starlette.middleware.sessions import SessionMiddleware
 
 from call_trace import CallTrace
-from channels import get_channel
+from channels import get_channel, normalize_phone
 import departments
 from db import DATA_DIR, engine, init_db
 from deployment import deploy_department, deploy_role
@@ -421,10 +421,10 @@ def create_client(
         services_json=json.dumps(service_list),
         hours=hours,
         pricing_faq=pricing_faq,
-        escalation_phone=escalation_phone,
+        escalation_phone=normalize_phone(escalation_phone),
         answer_mode=answer_mode,
-        inbound_number=inbound_number.strip() or None,
-        business_phone=business_phone.strip(),
+        inbound_number=normalize_phone(inbound_number) or None,
+        business_phone=normalize_phone(business_phone),
     )
     error = None
     with Session(engine) as session:
@@ -571,7 +571,7 @@ def attach_xai_number(
     verifies (`xai_signing_secret`). This is the no-Twilio path to the first
     real call — point the number's webhook at /webhook/xai-incoming-call in the
     xAI console, attach it here, and dial."""
-    number = xai_phone_number.strip()
+    number = normalize_phone(xai_phone_number)
     secret = xai_signing_secret.strip()
     with Session(engine) as session:
         client = session.get(Business, client_id)
@@ -805,7 +805,11 @@ def create_recovery_campaign(
         parts = [p.strip() for p in line.split(",")]
         if len(parts) < 3:
             continue
-        entry = {"phone": parts[0], "name": parts[1], "service_type": parts[2]}
+        # A pasted CRM export is the messiest phone source in the product —
+        # "(770) 288-1238", "770.288.1238" and "7702881238" all arrive in the
+        # same column. Normalize once here so the whole recovery sequence, and
+        # the reply matching that keys off customer_phone, agree on one shape.
+        entry = {"phone": normalize_phone(parts[0]), "name": parts[1], "service_type": parts[2]}
         if len(parts) > 3 and parts[3]:
             if face == "quote":
                 entry["estimate_amount"] = parts[3]

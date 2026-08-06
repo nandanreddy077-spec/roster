@@ -18,6 +18,7 @@ from authlib.integrations.starlette_client import OAuthError
 
 from activation import activate_frontdesk
 from auth import hash_password, verify_password
+from channels import normalize_phone
 from db import engine
 from db_models import Business, Employee, Job, Message
 from departments import department_status_for, get_department
@@ -315,11 +316,15 @@ def onboarding_receptionist_submit(
             return RedirectResponse("/login", status_code=303)
         if not client.business_name:
             return RedirectResponse("/onboarding/business", status_code=303)
-        client.escalation_phone = escalation_phone.strip()
+        # The owner types this one by hand on their phone, so it arrives in
+        # every shape a human writes a number in. It is also the only way we
+        # reach them when a live call escalates — a wrong shape here is a
+        # missed emergency, not a formatting nit.
+        client.escalation_phone = normalize_phone(escalation_phone)
         # "primary" = AI answers every call; "backup" = AI catches only missed
         # calls. Anything unexpected falls back to the safe backup mode.
         client.answer_mode = answer_mode if answer_mode in ("primary", "backup") else "backup"
-        client.business_phone = business_phone.strip()
+        client.business_phone = normalize_phone(business_phone)
         session.add(client)
         session.commit()
         activate_frontdesk(session, client)

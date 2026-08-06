@@ -82,6 +82,29 @@
       </div>
       {% if client.xai_phone_number %}
       <p class="agent-tile-desc">Live — voice + SMS both wired up. Have the client forward their real number to {{ client.inbound_number }}.</p>
+      {# The activation page promises the owner we'll send these steps, and
+         there is no email sender in the product to keep that promise. Until
+         there is, the founder sends them by hand — so they have to be on the
+         page the founder is already looking at, not in their head. #}
+      <details class="agent-tile-desc" style="margin-top:12px;">
+        <summary><strong>Forwarding steps to send the client</strong></summary>
+        {% if client.answer_mode == "primary" %}
+        <p style="margin-top:8px;">Primary mode — every call goes to Roster first. On the phone with the business line:</p>
+        <ul>
+          <li><strong>Verizon:</strong> dial <code>*72{{ client.inbound_number|replace("+1", "") }}</code> &middot; cancel with <code>*73</code></li>
+          <li><strong>AT&amp;T:</strong> dial <code>*21*{{ client.inbound_number }}#</code> &middot; cancel with <code>#21#</code></li>
+          <li><strong>T-Mobile:</strong> dial <code>**21*{{ client.inbound_number }}#</code> &middot; cancel with <code>##21#</code></li>
+        </ul>
+        {% else %}
+        <p style="margin-top:8px;">Backup mode — Roster only picks up what they miss. On the phone with the business line:</p>
+        <ul>
+          <li><strong>Verizon:</strong> dial <code>*71{{ client.inbound_number|replace("+1", "") }}</code> &middot; cancel with <code>*73</code></li>
+          <li><strong>AT&amp;T:</strong> dial <code>*61*{{ client.inbound_number }}#</code> &middot; cancel with <code>#61#</code></li>
+          <li><strong>T-Mobile:</strong> dial <code>**61*{{ client.inbound_number }}#</code> &middot; cancel with <code>##61#</code></li>
+        </ul>
+        {% endif %}
+        <p>Codes vary by carrier and plan — if one is rejected, the client's carrier support line has the right one. Confirm it worked by dialling their business number yourself and hearing Roster answer.</p>
+      </details>
       {% elif client.twilio_number_sid %}
       <p class="agent-tile-desc">Number bought and SMS-ready ({{ client.inbound_number }}), but voice registration with xAI didn't complete — see server logs.</p>
       <form method="post" action="/clients/{{ client.id }}/retry-xai-registration" class="review-link-form">
