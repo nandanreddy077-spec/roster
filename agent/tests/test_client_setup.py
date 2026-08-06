@@ -161,6 +161,32 @@ def test_setting_an_email_already_on_another_business_is_refused(monkeypatch, te
         assert session.get(Business, 2).email is None
 
 
+def test_the_access_link_is_absolute_even_with_no_env_var(monkeypatch, test_engine):
+    """PUBLIC_BASE_URL is unset in production. A link with no host is useless
+    in the text message it exists to be pasted into, so it must fall back to
+    the same constant webhook registration and the Twilio signature check
+    already use — not to an empty string."""
+    from app import _access_link
+    from provisioning import DEFAULT_PUBLIC_BASE_URL
+
+    monkeypatch.delenv("PUBLIC_BASE_URL", raising=False)
+    link = _access_link(Business(id=1))
+    assert link.startswith(DEFAULT_PUBLIC_BASE_URL + "/access/")
+
+
+def test_every_public_url_consumer_agrees_on_the_host(monkeypatch):
+    """The failure this prevents: the signature check building a URL against a
+    different host than the one Twilio was configured with 403s every inbound
+    text, and nothing says why. One helper, one answer — so overriding the env
+    var has to move the access link and the signature check together."""
+    import app as app_module
+    import provisioning
+
+    monkeypatch.setenv("PUBLIC_BASE_URL", "https://example.test/")
+    assert provisioning.public_base_url() == "https://example.test/"
+    assert app_module._access_link(Business(id=1)).startswith("https://example.test/access/")
+
+
 def test_the_client_page_offers_a_working_access_link(monkeypatch, test_engine):
     """End to end, the thing the founder actually does: open the client page,
     copy the link, and have the owner land on their dashboard."""

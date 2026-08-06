@@ -45,7 +45,9 @@ from db_models import (
     WebhookDelivery,
 )
 from portal import router as portal_router
-from provisioning import ProvisioningError, buy_twilio_number, provision_voice, verify_voice_wiring
+from provisioning import (
+    ProvisioningError, buy_twilio_number, provision_voice, public_base_url, verify_voice_wiring,
+)
 from recovery_engine import FACE_DISPLAY_NAMES
 from recovery_service import create_campaign, find_active_recovery_job, handle_recovery_reply
 from referral_service import find_active_referral_ask, handle_referral_reply
@@ -359,11 +361,14 @@ def _setup_checklist(client: Business, department_rows: list, real_job_count: in
 def _access_link(client: Business) -> str:
     """The URL the founder sends the owner so they can see their dashboard.
 
-    Absolute where possible: this gets pasted into a text message, and a
-    relative path is useless there. PUBLIC_BASE_URL is already the host every
-    webhook is registered against, so it's the same origin the owner reaches.
+    Always absolute: this gets pasted into a text message, where a relative
+    path is useless. Falls back to the SAME constant every other public-URL
+    consumer uses (provisioning's webhook registration, the Twilio signature
+    check) rather than inventing a second answer to "where does this app
+    live" — if that fallback were ever wrong, inbound SMS would already be
+    failing its signature check, so a link built from it can't be wrong alone.
     """
-    base = os.environ.get("PUBLIC_BASE_URL", "").rstrip("/")
+    base = public_base_url().rstrip("/")
     return f"{base}/access/{make_access_token(client.id, os.environ)}"
 
 
@@ -1033,7 +1038,7 @@ def _twilio_signature_ok(request: Request, form) -> bool:
         return True
     from twilio.request_validator import RequestValidator
 
-    base = os.environ.get("PUBLIC_BASE_URL", "https://rosterhires.com").rstrip("/")
+    base = public_base_url().rstrip("/")
     url = f"{base}{request.url.path}"
     signature = request.headers.get("X-Twilio-Signature", "")
     return RequestValidator(token).validate(url, dict(form), signature)

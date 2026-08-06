@@ -31,9 +31,6 @@
       {{ access_link_days }} days, then send a fresh one from this page.</p>
     <input type="text" class="access-link-field" value="{{ access_link }}" readonly
            onclick="this.select();" aria-label="Dashboard access link">
-    {% if not access_link.startswith("http") %}
-    <p class="job-notes">PUBLIC_BASE_URL isn't set, so this link has no host on it — set it before sending.</p>
-    {% endif %}
 
     <p class="agent-tile-desc" style="margin-top:16px;">Their email is a backup door: with it set they can also
       use Google sign-in, so a lost link isn't a support call. It is not a login on its own.</p>
