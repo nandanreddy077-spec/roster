@@ -167,6 +167,7 @@ def _migrate_add_columns():
         "ALTER TABLE business ADD COLUMN membership_plan VARCHAR",
         "ALTER TABLE job ADD COLUMN origin VARCHAR DEFAULT 'inbound'",
         "ALTER TABLE job ADD COLUMN value_cents INTEGER",
+        "ALTER TABLE business ADD COLUMN billing_state VARCHAR DEFAULT 'trial'",
     )
     with engine.connect() as conn:
         for ddl in statements:

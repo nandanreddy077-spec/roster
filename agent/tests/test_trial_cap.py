@@ -1,7 +1,7 @@
 from sqlmodel import Session
 
 import trial_cap
-from db_models import Business
+from db_models import BILLING_PAID, BILLING_TRIAL, Business
 from trial_cap import TRIAL_TURN_COST_CENTS, can_respond, record_usage
 
 
@@ -127,3 +127,44 @@ def test_cap_alert_fires_exactly_once_even_with_stale_clients(test_engine, monke
         trial_cap.record_usage(s2, c2)
 
     assert len(sent) == 1, f"founder must be alerted exactly once, got {len(sent)}"
+
+
+# ---- paid accounts are never gated -------------------------------------------
+# The cap had no exit before this: every business carried a $20 hard stop and
+# nothing in the codebase could lift it, so a paying customer's SMS Frontdesk,
+# Quote Chaser, Reviews, Membership Agent and Referral replies would all go
+# silent after roughly 44 turns.
+
+def test_a_paying_customer_is_never_capped():
+    client = _client(billing_state=BILLING_PAID, trial_spend_cents=999_999,
+                     trial_cap_cents=2000, trial_soft_buffer_cents=200)
+    assert can_respond(client) is True
+
+
+def test_a_trial_customer_is_still_capped():
+    """The guard must keep working — an unattended trial is what it is for."""
+    client = _client(billing_state=BILLING_TRIAL, trial_spend_cents=2200,
+                     trial_cap_cents=2000, trial_soft_buffer_cents=200)
+    assert can_respond(client) is False
+
+
+def test_a_new_business_defaults_to_trial():
+    """Provisioning must not accidentally mint an uncapped account."""
+    assert _client().billing_state == BILLING_TRIAL
+
+
+def test_paid_usage_is_tracked_but_never_alerts(test_engine, monkeypatch):
+    """Spend is still worth knowing on a paid account — it is the input to
+    pricing — but there is no cap to cross, so the founder is not paged and
+    'raise the cap' is never suggested for someone already paying."""
+    alerts = []
+    monkeypatch.setattr(trial_cap, "_notify_founder_cap_reached", lambda c: alerts.append(c))
+    with Session(test_engine) as s:
+        client = _client(billing_state=BILLING_PAID, trial_spend_cents=0,
+                         trial_cap_cents=2000, trial_soft_buffer_cents=200)
+        s.add(client); s.commit(); s.refresh(client)
+        for _ in range(10):
+            record_usage(s, client)
+        assert client.trial_spend_cents == 10 * TRIAL_TURN_COST_CENTS
+        assert client.trial_cap_notified is False
+        assert alerts == []

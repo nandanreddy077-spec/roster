@@ -24,6 +24,18 @@ ORIGIN_REACTIVATION = "reactivation"        # a dormant customer Retention broug
 # and lead_qualifier_service (which was qualifying and dispatching alerts).
 ORIGIN_ESCALATION = "escalation"
 
+# What a business is paying, which decides whether the trial spend cap applies.
+# This exists because the cap had no exit: every business carried a $20 hard
+# stop and there was no route, form, or console action anywhere in the codebase
+# to lift it. A paying customer would have gone silent mid-conversation after
+# roughly 44 turns — the founder console even rendered "raise the cap or move
+# this client to paid" next to a control that did not exist.
+#
+# Deliberately a state, not a bigger number: raising the default would only
+# move the cliff further out and leave a paying customer to fall off it later.
+BILLING_TRIAL = "trial"
+BILLING_PAID = "paid"
+
 
 class Business(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
@@ -76,6 +88,10 @@ class Business(SQLModel, table=True):
     trial_cap_cents: int = 2000  # $20 hard cap
     trial_soft_buffer_cents: int = 200  # $2 grace on top of the hard cap — see trial_cap.py
     trial_cap_notified: bool = False  # set once the founder has been alerted the hard cap was crossed, so the alert fires only once
+    # BILLING_TRIAL (capped) or BILLING_PAID (uncapped). Defaults to trial so a
+    # newly provisioned business is still protected from runaway spend; the
+    # founder flips it from the console when the customer starts paying.
+    billing_state: str = BILLING_TRIAL
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
     @property

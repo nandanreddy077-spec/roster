@@ -11,7 +11,7 @@ from sqlalchemy import update as sa_update
 from sqlmodel import Session
 
 from channels import get_channel
-from db_models import Business
+from db_models import BILLING_PAID, Business
 
 # Flat per-turn estimate, not real per-token billing — matches the founder's
 # own ~$0.30-0.60-per-call all-in cost research (Twilio + orchestration +
@@ -25,6 +25,16 @@ sms_channel = get_channel()
 
 
 def can_respond(client: Business) -> bool:
+    """Whether this business's employees may spend money on a turn.
+
+    A paying customer is never gated. The cap is a guard against an unattended
+    trial running up a bill, and it silently disabled five of the six live
+    employees — Frontdesk over SMS, plus Quote Chaser, Reviews, Membership
+    Agent and Referral replies — the moment it was crossed. On a paid account
+    that is not a safety net, it is an outage.
+    """
+    if client.billing_state == BILLING_PAID:
+        return True
     return client.trial_spend_cents < (client.trial_cap_cents + client.trial_soft_buffer_cents)
 
 
@@ -37,6 +47,12 @@ def record_usage(session: Session, client: Business, cost_cents: int = TRIAL_TUR
         .where(Business.id == client.id)
         .values(trial_spend_cents=Business.trial_spend_cents + cost_cents)
     )
+    # Spend is still tracked on a paid account — knowing what a customer costs
+    # is the input to pricing — but there is no cap to cross, so no alert.
+    if client.billing_state == BILLING_PAID:
+        session.commit()
+        session.refresh(client)
+        return
     # Claim the one-time founder alert in the same atomic style: only the turn
     # whose conditional UPDATE actually flips trial_cap_notified sends it, so
     # two racing turns can never double-alert (and none can miss it).
