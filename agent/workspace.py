@@ -67,6 +67,8 @@ METRIC_LABELS = {
     metrics.FINANCING_CANDIDATES: "Financing candidates",
     metrics.MEMBERSHIP_CANDIDATES: "Membership candidates",
     metrics.POSSIBLE_SPAM_FLAGGED: "Possible spam flagged",
+    metrics.MEMBERSHIP_OFFERS_SENT: "Plan offers sent",
+    metrics.MEMBERSHIPS_ACCEPTED: "Customers who said yes",
     metrics.JOBS_DISPATCHED: "Jobs planned",
     metrics.EMERGENCY_DISPATCHES: "Emergency jobs",
     metrics.SAME_DAY_DISPATCHES: "Same-day jobs",
@@ -80,6 +82,7 @@ NOTIFICATION_KIND_LABELS = {
     "job_booked": "Job booked",
     "escalation": "Sent to you personally",
     "call_dropped": "A call was missed",
+    "membership_accepted": "Wants to join your plan",
 }
 
 

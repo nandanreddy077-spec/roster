@@ -12,7 +12,7 @@ from sqlmodel import Session, select
 
 from bookings import book_job
 from calendar_provider import get_calendar_provider
-from channels import get_channel
+from channels import STOP_KEYWORDS, get_channel
 from db_models import Business, Job, RecoveryCampaign, RecoveryJob, RecoveryMessageLog
 from engine import AgentEngine
 from notifications import (
@@ -274,8 +274,6 @@ def tick(session: Session) -> List[RecoveryJob]:
 
     return sent
 
-
-STOP_KEYWORDS = {"stop", "stopall", "unsubscribe", "cancel", "end", "quit"}
 
 ESCALATED_REPLY = "Thanks for letting us know — someone from our team will reach out to help with that."
 

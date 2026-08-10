@@ -139,16 +139,25 @@ def test_workspace_never_crosses_businesses(session):
     assert build_department_workspace(session, b.id, "customer_service") is None
 
 
-def test_sales_workspace_uses_quote_chaser_and_lead_qualifier(session):
-    """Sales now has two deployable employees — Lead Qualifier joined
-    Quote Chaser once it gained a real deterministic engine (2026-07-30,
-    Critical Finding #2 fix)."""
+def test_sales_workspace_uses_quote_chaser_lead_qualifier_and_membership(session):
+    """Sales now has three deployable employees. Lead Qualifier joined Quote
+    Chaser once it gained a real deterministic engine (2026-07-30, Critical
+    Finding #2 fix); Membership Agent joined on 2026-08-10 when it graduated
+    to `internal`, since deployable_employees_for staffs `live` and `internal`
+    alike.
+
+    Staffing Sales therefore deploys Membership Agent for every new customer,
+    which is safe rather than accidental: it sends nothing until the founder
+    fills in Business.membership_plan on the client console, exactly the way
+    Reviews stays inert without review_link. Deployment is consent; the plan
+    text is configuration; both are required."""
     b = _business(session, "w11@test.io")
     deploy_department(session, b.id, "sales")
 
     ws = build_department_workspace(session, b.id, "sales")
 
-    assert {e.role_key for e in ws.employees} == {"quote_chaser", "lead_qualifier"}
+    assert {e.role_key for e in ws.employees} == {
+        "quote_chaser", "lead_qualifier", "membership_agent"}
 
 
 def test_customer_state_labels_and_active_states_are_consistent():

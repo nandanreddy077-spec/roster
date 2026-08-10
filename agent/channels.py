@@ -33,6 +33,14 @@ def send_hours_ok(now: Optional[datetime] = None) -> bool:
     return 17 <= hour < 24
 
 
+# The words that mean "stop texting me". Lives here, next to send_hours_ok,
+# because it is a compliance rule about the SMS channel itself — not one
+# employee's behaviour. Every employee that runs an outbound sequence checks
+# the SAME set: a second copy drifting out of date is how a business ends up
+# texting someone who opted out.
+STOP_KEYWORDS = {"stop", "stopall", "unsubscribe", "cancel", "end", "quit"}
+
+
 def normalize_phone(raw: str) -> str:
     """Coerce a human-typed number to E.164 so Twilio can't guess wrong.
 

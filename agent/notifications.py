@@ -32,6 +32,10 @@ VOICE_TEST_THREAD_PREFIX = "xai-voice-test:"
 KIND_JOB_BOOKED = "job_booked"
 KIND_ESCALATION = "escalation"
 KIND_CALL_DROPPED = "call_dropped"
+# A customer said yes to a maintenance plan. Its own kind rather than
+# KIND_JOB_BOOKED (no job exists) or KIND_ESCALATION (nothing is wrong, and
+# reusing it would inflate the escalations metric with good news).
+KIND_MEMBERSHIP_ACCEPTED = "membership_accepted"
 
 # WHERE it originated. Operational only, never customer-facing: it exists so
 # an SMS booking and a voice booking (both KIND_JOB_BOOKED) can be told apart
@@ -43,6 +47,8 @@ SOURCE_CALL_DROPPED = "call_dropped"
 SOURCE_NEGATIVE_REVIEW_REPLY = "negative_review_reply"
 SOURCE_RECOVERY_ESCALATION = "recovery_escalation"
 SOURCE_RECOVERY_BOOKING = "recovery_booking"
+SOURCE_MEMBERSHIP_ACCEPTED = "membership_accepted"
+SOURCE_MEMBERSHIP_QUESTION = "membership_question"
 
 # Lazily-built shared channel (avoids rebuilding a Twilio client per booking).
 # Tests inject their own channel via the `channel=` arg and never touch this.
@@ -65,6 +71,42 @@ def build_owner_message(job: Job, employee_name: str) -> str:
         f"\U0001F4CB {employee_name} just booked a job: {job.service_type} "
         f"({job.urgency}) for {who}. Callback: {callback}"
     )
+
+
+def build_membership_message(customer_name: str, customer_phone: str) -> str:
+    """One builder for both the SMS body and the logged row, same rule as
+    build_escalation_message: built separately they drift, and the owner's
+    dashboard ends up showing something subtly different from the text they got.
+
+    Says "wants to sign up", not "signed up": Roster recorded a yes and can't
+    charge a card, so the owner still has to finalize billing. The owner's
+    text is exactly where an overstatement would cost the most trust.
+    """
+    who = customer_name or "A customer"
+    return (
+        f"\U0001F4B3 {who} ({customer_phone}) wants to sign up for your "
+        f"maintenance plan. Give them a call to set it up."
+    )
+
+
+def notify_owner_of_membership(
+    business: Business, customer_name: str, customer_phone: str, channel=None
+) -> bool:
+    """Text the owner that a customer accepted the plan. Best-effort and never
+    raises, same posture as notify_owner_of_booking — the acceptance has
+    already been recorded and matters more than the notification about it."""
+    if not business.escalation_phone:
+        return False
+    ch = _resolve_channel(channel)
+    try:
+        ch.send(
+            business.inbound_number or "",
+            business.escalation_phone,
+            build_membership_message(customer_name, customer_phone),
+        )
+    except Exception:
+        return False
+    return True
 
 
 def recent_notifications(session, business_id: int, limit: int = 50):

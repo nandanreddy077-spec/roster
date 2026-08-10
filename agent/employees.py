@@ -87,7 +87,18 @@ REGISTRY: list[EmployeeDefinition] = [
     # with no bespoke work per business.
     EmployeeDefinition("quote_chaser", "sales", "live", "Quote Chaser",
                        mission="Is Quote Chaser recovering revenue?"),
-    EmployeeDefinition("membership_agent", "sales", "planned", "Membership Agent"),
+    # Graduated planned -> internal (2026-08-10). The engine, the two-touch
+    # sequence, the reply classification, the owner notification and the
+    # handoff to Retention Manager (writing Customer.plan_notes) are all
+    # built and verified end to end locally, including one real Claude call.
+    # NOT `live`, deliberately: no real customer has run a membership offer
+    # through it, so the conversion rate behind its whole ROI argument is
+    # still arithmetic rather than evidence. `live` is earned by a real
+    # deployment, the same bar Reviews and Quote Chaser had to clear.
+    # Consumes JobQualification.membership_candidate, which Lead Qualifier has
+    # computed on every job since 2026-07-30 with no employee reading it.
+    EmployeeDefinition("membership_agent", "sales", "internal", "Membership Agent",
+                       mission="Is Membership Agent signing up plan members?"),
     EmployeeDefinition("upsell_agent", "sales", "planned", "Upsell Agent"),
     # Operations
     # Deterministic, same reasoning as Lead Qualifier above — combines

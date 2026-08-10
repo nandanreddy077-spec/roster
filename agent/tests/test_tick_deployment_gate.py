@@ -23,7 +23,7 @@ from sqlmodel import Session, select
 
 from datetime import datetime, timedelta
 
-from db_models import Business, Employee, Job
+from db_models import Business, Employee, Job, JobQualification
 from deployment import deploy_role
 
 # Every function recovery_tick.run() drives, in its order — the ONE list, used
@@ -40,6 +40,13 @@ TICK_FUNCTIONS = (
     ("referral_service", "send_due_referral_asks"),
     ("review_service", "send_due_review_requests"),
     ("review_service", "send_due_review_followups"),
+    ("membership_service", "send_due_membership_offers"),
+    ("membership_service", "send_due_membership_followups"),
+)
+
+_RELOADED = (
+    "review_engine", "review_service", "referral_engine", "referral_service",
+    "membership_engine", "membership_service",
 )
 
 
@@ -47,11 +54,11 @@ TICK_FUNCTIONS = (
 def tick(monkeypatch):
     """Zero delays so every scheduled send is due immediately — the point is
     which sends are ALLOWED, not when they fire."""
-    for var in ("REVIEW_DELAY_DAYS", "REVIEW_FOLLOWUP_DELAY_DAYS"):
+    for var in ("REVIEW_DELAY_DAYS", "REVIEW_FOLLOWUP_DELAY_DAYS",
+                "MEMBERSHIP_OFFER_DELAY_DAYS", "MEMBERSHIP_FOLLOWUP_DELAY_DAYS"):
         monkeypatch.setenv(var, "0")
-    import referral_engine, referral_service, review_engine, review_service
-    for mod in (review_engine, review_service, referral_engine, referral_service):
-        importlib.reload(mod)
+    for name in _RELOADED:
+        importlib.reload(importlib.import_module(name))
 
     sent = []
 
@@ -59,11 +66,9 @@ def tick(monkeypatch):
         def send(self, from_number, to_number, body):
             sent.append({"to": to_number, "body": body})
 
-    review_service.sms_channel = Spy()
-    referral_service.sms_channel = Spy()
-
-    import recovery_service
-    recovery_service.sms_channel = Spy()
+    import membership_service, recovery_service, referral_service, review_service
+    for mod in (review_service, referral_service, recovery_service, membership_service):
+        mod.sms_channel = Spy()
 
     class Tick:
         messages = sent
@@ -77,8 +82,8 @@ def tick(monkeypatch):
 
     yield Tick
     monkeypatch.undo()
-    for mod in (review_engine, review_service, referral_engine, referral_service):
-        importlib.reload(mod)
+    for name in _RELOADED:
+        importlib.reload(importlib.import_module(name))
 
 
 def _fully_configured_business(session, **overrides):
@@ -89,6 +94,7 @@ def _fully_configured_business(session, **overrides):
         escalation_phone="+15125550149", inbound_number="+15125557777",
         review_link="https://g.page/r/ridgeline/review",
         referral_incentive="$25 off your next visit",
+        membership_plan="Comfort Club — $19/month, two tune-ups a year.",
         trial_cap_cents=100000,
     )
     fields.update(overrides)
@@ -103,7 +109,15 @@ def _completed_job(session, business, phone="+15125550001"):
     """is_estimate=True on purpose: it is Quote Chaser's ONLY trigger, and
     without it enroll_completed_estimates silently matches nothing — the guard
     would call the function, assert silence, and pass no matter how ungated it
-    was. Reviews and Referral ignore the flag, so one job exercises all three."""
+    was. Reviews and Referral ignore the flag, so one job exercises all three.
+
+    The JobQualification is written DIRECTLY here rather than left to
+    qualify_new_jobs for exactly the same reason. Lead Qualifier is itself
+    gated, so in the "hired nobody" case it produces no qualification — and
+    without one, Membership Agent's query matches nothing and the guard would
+    call it, assert silence, and pass however ungated it was. Membership's
+    trigger has to exist independently of another employee being deployed.
+    """
     job = Job(
         business_id=business.id, customer_phone=phone, customer_name="Dana Cruz",
         service_type="AC compressor replacement", urgency="same_day",
@@ -113,6 +127,12 @@ def _completed_job(session, business, phone="+15125550001"):
     session.add(job)
     session.commit()
     session.refresh(job)
+    session.add(JobQualification(
+        business_id=business.id, source_job_id=job.id, job_type="repair",
+        financing_candidate=False, membership_candidate=True, priority="normal",
+        possible_spam=False, reasoning="test-fixture",
+    ))
+    session.commit()
     return job
 
 
@@ -120,12 +140,22 @@ def _queued_contacts(session, business_id):
     """Rows that PUT a customer in line to be texted, whether or not a message
     has left yet. Quote Chaser's harm is enrolment: it creates a multi-touch
     campaign that tick() drains later, so asserting only on sent SMS would
-    call an ungated enrolment clean."""
-    from db_models import RecoveryJob
+    call an ungated enrolment clean.
 
-    return session.exec(
-        select(RecoveryJob).where(RecoveryJob.business_id == business_id)
-    ).all()
+    MembershipOffer counts for the same reason with an extra twist: its row is
+    written BEFORE the send as an atomic claim, so an ungated membership tick
+    that failed to text would still leave the row — and a row here also
+    permanently blocks the customer from ever being offered again."""
+    from db_models import MembershipOffer, RecoveryJob
+
+    return (
+        session.exec(
+            select(RecoveryJob).where(RecoveryJob.business_id == business_id)
+        ).all()
+        + session.exec(
+            select(MembershipOffer).where(MembershipOffer.business_id == business_id)
+        ).all()
+    )
 
 
 def test_a_fully_configured_business_that_hired_nobody_is_never_texted(test_engine, tick):
@@ -161,6 +191,8 @@ def test_hiring_reviews_permits_reviews_and_nothing_else(test_engine, tick):
         assert tick.messages, "hiring Reviews did not enable it"
         for msg in tick.messages:
             assert "$25 off" not in msg["body"], "Referral sent without being hired"
+            assert "Comfort Club" not in msg["body"], (
+                "Membership Agent sent without being hired")
 
 
 def test_referral_cannot_be_deployed_while_its_registry_entry_is_planned(test_engine):

@@ -163,6 +163,7 @@ def _migrate_add_columns():
         "ALTER TABLE recoveryjob ADD COLUMN source_job_id INTEGER",
         "ALTER TABLE recoveryjob ADD COLUMN escalation_reason VARCHAR",
         "ALTER TABLE business ADD COLUMN voice_provisioning_error VARCHAR",
+        "ALTER TABLE business ADD COLUMN membership_plan VARCHAR",
     )
     with engine.connect() as conn:
         for ddl in statements:
@@ -294,6 +295,19 @@ def _migrate_add_indexes(engine=None):
     statements = (
         "CREATE UNIQUE INDEX IF NOT EXISTS uq_employee_business_role "
         "ON employee (business_id, role_key)",
+        # Membership Agent's dedup guarantee. create_all() builds this with the
+        # table on a fresh database; this statement is what puts it on a
+        # database where membershipoffer already exists from an earlier deploy.
+        # Without it the "claim is the insert" contract in db_models silently
+        # degrades to "both ticks insert, both text the customer".
+        "CREATE UNIQUE INDEX IF NOT EXISTS uq_membership_offer_source_job "
+        "ON membershipoffer (source_job_id)",
+        # The per-PERSON half of the same guarantee: one plan offer per
+        # customer, not one per completed job. Enforced here because the
+        # service's own check is a read-then-insert, which two concurrent tick
+        # processes can both pass for two different jobs of the same customer.
+        "CREATE UNIQUE INDEX IF NOT EXISTS uq_membership_offer_business_customer "
+        "ON membershipoffer (business_id, customer_phone)",
     )
     with eng.connect() as conn:
         for ddl in statements:

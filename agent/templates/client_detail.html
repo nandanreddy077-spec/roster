@@ -210,6 +210,19 @@
 
     <div class="agent-tile">
       <div class="agent-tile-head">
+        <span class="agent-badge {{ 'agent-badge-active' if client.membership_plan else 'agent-badge-off' }}">
+          Membership{% if client.membership_plan %} &middot; on{% endif %}
+        </span>
+      </div>
+      <p class="agent-tile-desc">Offers the maintenance plan a week after a repair, to customers who don't have one. Quoted word for word — write it exactly as the owner would say it.</p>
+      <form method="post" action="/clients/{{ client.id }}/membership-plan" class="review-link-form">
+        <input type="text" name="membership_plan" placeholder="Comfort Club — $19/month, two tune-ups a year plus priority scheduling." value="{{ client.membership_plan or '' }}">
+        <button class="btn btn-secondary btn-small" type="submit">Save</button>
+      </form>
+    </div>
+
+    <div class="agent-tile">
+      <div class="agent-tile-head">
         <span class="agent-badge {{ 'agent-badge-active' if client.referral_incentive else 'agent-badge-off' }}">
           Lead-gen{% if client.referral_incentive %} &middot; on{% endif %}
         </span>
