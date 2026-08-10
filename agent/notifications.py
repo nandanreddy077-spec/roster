@@ -36,6 +36,11 @@ KIND_CALL_DROPPED = "call_dropped"
 # KIND_JOB_BOOKED (no job exists) or KIND_ESCALATION (nothing is wrong, and
 # reusing it would inflate the escalations metric with good news).
 KIND_MEMBERSHIP_ACCEPTED = "membership_accepted"
+# The owner's AI employees have stopped replying because a trial cap was
+# crossed. This has to reach the OWNER, not just the founder: from their side
+# the office simply went quiet, and every minute they don't know is a customer
+# texting into silence.
+KIND_TRIAL_CAP_REACHED = "trial_cap_reached"
 
 # WHERE it originated. Operational only, never customer-facing: it exists so
 # an SMS booking and a voice booking (both KIND_JOB_BOOKED) can be told apart
@@ -49,6 +54,7 @@ SOURCE_RECOVERY_ESCALATION = "recovery_escalation"
 SOURCE_RECOVERY_BOOKING = "recovery_booking"
 SOURCE_MEMBERSHIP_ACCEPTED = "membership_accepted"
 SOURCE_MEMBERSHIP_QUESTION = "membership_question"
+SOURCE_TRIAL_CAP = "trial_cap"
 
 # Lazily-built shared channel (avoids rebuilding a Twilio client per booking).
 # Tests inject their own channel via the `channel=` arg and never touch this.

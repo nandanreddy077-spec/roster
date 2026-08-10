@@ -69,6 +69,39 @@ def record_usage(session: Session, client: Business, cost_cents: int = TRIAL_TUR
     session.refresh(client)
     if claimed.rowcount == 1:
         _notify_founder_cap_reached(client)
+        _notify_owner_cap_reached(session, client)
+
+
+def _notify_owner_cap_reached(session, client: Business) -> None:
+    """Tell the OWNER their office has gone quiet, and record it.
+
+    Before this, crossing the cap paged the founder and did nothing else: the
+    owner's employees stopped replying with no reply to the customer, no alert,
+    and nothing in their notifications feed. The failure was invisible from the
+    only side that matters. Gated by the same one-time trial_cap_notified claim
+    as the founder alert, so it cannot repeat.
+
+    Best-effort throughout, same posture as every other owner alert — the
+    customer's turn has already been decided and must not fail on a notice.
+    """
+    from notifications import (
+        KIND_TRIAL_CAP_REACHED, SOURCE_TRIAL_CAP, record_owner_notification,
+    )
+
+    message = (
+        f"Your Roster trial has hit its usage limit, so your AI employees have "
+        f"paused answering. Nothing is lost — get in touch and we'll switch you on."
+    )
+    delivered = False
+    if client.escalation_phone:
+        try:
+            sms_channel.send(from_number=client.inbound_number or "",
+                             to_number=client.escalation_phone, body=message)
+            delivered = True
+        except Exception as e:
+            print(f"Trial cap: failed to notify owner for client {client.id}: {e}")
+    record_owner_notification(session, client.id, KIND_TRIAL_CAP_REACHED,
+                              SOURCE_TRIAL_CAP, message, delivered)
 
 
 def _notify_founder_cap_reached(client: Business) -> None:

@@ -533,3 +533,50 @@ def test_provisioning_a_number_twice_does_not_buy_a_second_one(test_engine, monk
     assert "provision_error" in second.headers["location"]
     with Session(test_engine) as s:
         assert s.get(Business, bid).twilio_number_sid == "PN1"
+
+
+# ---- billing state ------------------------------------------------------------
+# The console rendered "raise the cap or move this client to paid" next to a
+# control that did not exist anywhere in the app. This is that control.
+
+def test_the_founder_can_move_a_client_to_paid(test_engine, monkeypatch):
+    monkeypatch.setattr(app_module, "engine", test_engine)
+    with Session(test_engine) as s:
+        bid = _business(s).id
+
+    c = TestClient(app_module.app, headers=DASH_AUTH)
+    c.post(f"/clients/{bid}/billing-state", data={"billing_state": "paid"},
+           follow_redirects=False)
+
+    with Session(test_engine) as s:
+        assert s.get(Business, bid).billing_state == "paid"
+
+
+def test_a_stale_tab_reposting_paid_cannot_flip_a_customer_back_to_trial(test_engine, monkeypatch):
+    """Explicit target, not a toggle — a double-submit must be a no-op, never
+    something that takes a paying customer's office offline."""
+    monkeypatch.setattr(app_module, "engine", test_engine)
+    with Session(test_engine) as s:
+        bid = _business(s).id
+
+    c = TestClient(app_module.app, headers=DASH_AUTH)
+    for _ in range(3):
+        c.post(f"/clients/{bid}/billing-state", data={"billing_state": "paid"},
+               follow_redirects=False)
+
+    with Session(test_engine) as s:
+        assert s.get(Business, bid).billing_state == "paid"
+
+
+def test_an_unknown_billing_state_is_rejected(test_engine, monkeypatch):
+    monkeypatch.setattr(app_module, "engine", test_engine)
+    with Session(test_engine) as s:
+        bid = _business(s).id
+
+    c = TestClient(app_module.app, headers=DASH_AUTH)
+    r = c.post(f"/clients/{bid}/billing-state", data={"billing_state": "free-forever"},
+               follow_redirects=False)
+
+    assert "billing_error" in r.headers["location"]
+    with Session(test_engine) as s:
+        assert s.get(Business, bid).billing_state == "trial"

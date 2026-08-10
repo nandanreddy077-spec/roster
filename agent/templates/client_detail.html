@@ -173,9 +173,27 @@
       {% if provision_error %}
       <p class="job-notes">{{ provision_error }}</p>
       {% endif %}
-      {% if client.trial_spend_cents >= client.trial_cap_cents %}
-      <p class="job-notes">⚠ Trial cap reached (${{ "%.2f"|format(client.trial_spend_cents / 100) }} spent, ${{ "%.2f"|format((client.trial_cap_cents + client.trial_soft_buffer_cents) / 100) }} hard stop) — raise the cap or move this client to paid.</p>
+      {# Billing state decides whether the spend cap can silence this client's
+         employees at all, so it belongs next to the cap reading, not on a
+         separate settings page. #}
+      <p class="job-notes">
+        Billing: <strong>{{ client.billing_state }}</strong>
+        · ${{ "%.2f"|format(client.trial_spend_cents / 100) }} spent
+        {% if client.billing_state == "paid" %}(uncapped){% endif %}
+      </p>
+      {% if client.billing_state != "paid" and client.trial_spend_cents >= client.trial_cap_cents %}
+      <p class="job-notes">⚠ Trial cap reached (${{ "%.2f"|format(client.trial_spend_cents / 100) }} spent, ${{ "%.2f"|format((client.trial_cap_cents + client.trial_soft_buffer_cents) / 100) }} hard stop) — <strong>this client's employees have stopped replying.</strong></p>
       {% endif %}
+      {% if billing_error %}<p class="job-notes">{{ billing_error }}</p>{% endif %}
+      <form method="post" action="/clients/{{ client.id }}/billing-state">
+        {% if client.billing_state == "paid" %}
+        <input type="hidden" name="billing_state" value="trial">
+        <button class="btn btn-secondary btn-small" type="submit">Move back to trial</button>
+        {% else %}
+        <input type="hidden" name="billing_state" value="paid">
+        <button class="btn btn-primary btn-small" type="submit">Move to paid (remove cap)</button>
+        {% endif %}
+      </form>
     </div>
 
     {% for face in ["quote", "reactivation", "membership"] %}

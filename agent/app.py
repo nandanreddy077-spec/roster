@@ -41,6 +41,7 @@ import metrics
 from notifications import is_test_thread
 from locks import conversation_lock
 from db_models import (
+    BILLING_PAID, BILLING_TRIAL,
     AccessRequest, Business, Customer, DepartmentInterest, Employee, Event, Job, Message,
     OwnerNotification, RecoveryCampaign, RecoveryJob, RecoveryMessageLog, ReferralLead,
     WebhookDelivery,
@@ -865,6 +866,44 @@ def set_pipeline_stage(client_id: int, stage: str = Form(...)):
     return RedirectResponse(redirect_url, status_code=303)
 
 
+@app.post("/clients/{client_id}/billing-state")
+def set_billing_state(client_id: int, billing_state: str = Form(...)):
+    """Move a business between trial (spend-capped) and paid (uncapped).
+
+    The control this replaces did not exist. Every business carried a $20 cap
+    that silently stopped five of the six live employees once crossed, and
+    nothing in the app could lift it — the only remedy was SQL against
+    production. This is the exit.
+
+    Explicit target rather than a toggle, for the same reason set_pipeline_stage
+    is: a double-submit from a stale tab must be a no-op, not a flip back to
+    trial that takes a paying customer's office offline.
+    """
+    error = None
+    if billing_state not in (BILLING_TRIAL, BILLING_PAID):
+        error = f"Unknown billing state: {billing_state}"
+    else:
+        with Session(engine) as session:
+            client = session.get(Business, client_id)
+            if client is None:
+                raise HTTPException(status_code=404, detail="No such client")
+            if client.billing_state != billing_state:
+                client.billing_state = billing_state
+                # Clear the one-time alert claim on the way back to trial, so a
+                # business that trials again can still be alerted a second time.
+                if billing_state == BILLING_TRIAL:
+                    client.trial_cap_notified = False
+                session.add(client)
+                session.commit()
+
+    redirect_url = f"/clients/{client_id}"
+    if error:
+        from urllib.parse import quote
+
+        redirect_url += f"?billing_error={quote(error)}"
+    return RedirectResponse(redirect_url, status_code=303)
+
+
 @app.post("/clients/{client_id}/employees/deploy")
 def deploy_employee(
     client_id: int,
@@ -1087,6 +1126,7 @@ def client_detail(request: Request, client_id: int):
             "deploy_error": request.query_params.get("deploy_error"),
             "access_error": request.query_params.get("access_error"),
             "stage_error": request.query_params.get("stage_error"),
+            "billing_error": request.query_params.get("billing_error"),
         },
     )
 

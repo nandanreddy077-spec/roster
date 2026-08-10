@@ -168,3 +168,33 @@ def test_paid_usage_is_tracked_but_never_alerts(test_engine, monkeypatch):
         assert client.trial_spend_cents == 10 * TRIAL_TURN_COST_CENTS
         assert client.trial_cap_notified is False
         assert alerts == []
+
+
+# ---- the owner has to find out ------------------------------------------------
+
+def test_crossing_the_cap_tells_the_owner_not_just_the_founder(test_engine, monkeypatch):
+    """Before this the owner learned nothing: their employees stopped replying,
+    the customer got silence, and only the founder was paged. The failure was
+    invisible from the only side that matters."""
+    from db_models import OwnerNotification
+    from sqlmodel import select
+
+    texts = []
+    class _Rec:
+        def send(self, from_number, to_number, body): texts.append((to_number, body))
+    monkeypatch.setattr(trial_cap, "sms_channel", _Rec())
+    monkeypatch.setattr(trial_cap, "_notify_founder_cap_reached", lambda c: None)
+
+    with Session(test_engine) as s:
+        client = _client(trial_spend_cents=1950, trial_cap_cents=2000,
+                         trial_soft_buffer_cents=200, escalation_phone="+15550001111")
+        s.add(client); s.commit(); s.refresh(client)
+        record_usage(s, client)          # crosses the cap
+        record_usage(s, client)          # must not alert twice
+
+        notes = s.exec(select(OwnerNotification).where(
+            OwnerNotification.business_id == client.id)).all()
+
+    assert len(texts) == 1, f"owner alerted {len(texts)} times"
+    assert texts[0][0] == "+15550001111"
+    assert len(notes) == 1 and notes[0].kind == "trial_cap_reached"
