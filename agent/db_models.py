@@ -34,6 +34,14 @@ class Business(SQLModel, table=True):
     twilio_number_sid: Optional[str] = None  # Twilio's SID for the purchased number, needed to later attach it to a SIP trunk
     review_link: Optional[str] = None  # owner's Google/Yelp review URL; unset until they provide one
     referral_incentive: Optional[str] = None  # e.g. "$25 off"; unset = referrals off for this client
+    # The owner's maintenance plan in THEIR OWN words, e.g. "Comfort Club —
+    # $19/month, two tune-ups a year plus priority scheduling and 15% off
+    # repairs." Unset = Membership Agent sends nothing for this business.
+    # One free-text field rather than name/price/benefits columns on purpose:
+    # the offer text quotes it verbatim, so the agent can never invent a
+    # benefit or a price the owner didn't actually offer (same precedent as
+    # pricing_faq and referral_incentive).
+    membership_plan: Optional[str] = None
     requested_roster: Optional[str] = None  # JSON list of extra roles queued for founder setup — self-serve "Hire" clicks on Quote Chaser/Retention Manager append here (see agent/roles.py), same mechanism the old /hire addons used
     email: Optional[str] = Field(default=None, unique=True, index=True)
     password_hash: Optional[str] = None
@@ -280,6 +288,54 @@ class DispatchPlan(SQLModel, table=True):
     # Comma-joined structured rule-code enums (dispatcher_rules.py), one per
     # axis — never English prose, so analytics can group/count by rule.
     dispatch_reason: str
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class MembershipOffer(SQLModel, table=True):
+    """Membership Agent's record — one row per membership offer, and the
+    employee's whole state machine. A satellite record keyed on source_job_id,
+    the same shape as JobQualification and DispatchPlan, deliberately NOT two
+    more timestamp columns on Job: Job already carries four employee-specific
+    timestamps (review_requested_at, review_followup_sent_at, referral_sent_at,
+    owner_alerted_at) and that pattern doesn't survive a sixth employee.
+
+    THE CLAIM IS THE INSERT. source_job_id is unique, so creating this row is
+    an atomic claim on "nobody has offered on this job yet" — the same
+    technique WebhookDelivery uses for inbound dedup. Two overlapping ticks
+    both find no row, both try to insert, and exactly one wins; the loser
+    catches IntegrityError and skips. That's why the row is written BEFORE the
+    SMS goes out and deleted again if the send fails, rather than recorded
+    after a successful send the way Reviews does it — recording after the send
+    cannot prevent a double-text, it can only notice one.
+
+    NOT called an "enrollment": Roster records that the customer said yes and
+    tells the owner. It cannot charge a card, so the owner still finalizes
+    billing. `accepted` is the honest word for what this table knows, and the
+    metric is named to match (ARCHITECTURE.md invariant 10).
+    """
+    __table_args__ = (
+        Index("uq_membership_offer_source_job", "source_job_id", unique=True),
+    )
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    business_id: int = Field(foreign_key="business.id", index=True)
+    source_job_id: int = Field(foreign_key="job.id")
+    customer_phone: str
+    # None between the claim and a successful send. A row with sent_at unset
+    # is a claim whose send failed and hasn't been cleaned up — it is never
+    # eligible for a follow-up, and never routes an inbound reply.
+    sent_at: Optional[datetime] = None
+    followup_sent_at: Optional[datetime] = None
+    # pending    -> out and unanswered. Routes inbound replies, gets the nudge.
+    # unclear    -> they replied, but said neither yes nor no. Their one
+    #               classification is spent so further texts go to Frontdesk,
+    #               but they STILL get the nudge — an ambiguous reply is the
+    #               warmest lead the sequence produces, not a dead one.
+    # accepted | declined | question | unsubscribed -> decided. No nudge, no
+    #               routing; the customer's next text is normal conversation.
+    outcome: str = "pending"
+    raw_reply_text: Optional[str] = None  # always stored, whatever the classification
+    replied_at: Optional[datetime] = None
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
 

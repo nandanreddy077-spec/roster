@@ -32,8 +32,8 @@ from typing import Callable, Optional
 from sqlmodel import func, select
 
 from db_models import (
-    DispatchPlan, Job, JobQualification, Message, OwnerNotification, RecoveryCampaign,
-    RecoveryJob, ReferralLead, ReviewReply,
+    DispatchPlan, Job, JobQualification, MembershipOffer, Message, OwnerNotification,
+    RecoveryCampaign, RecoveryJob, ReferralLead, ReviewReply,
 )
 from notifications import (
     KIND_CALL_DROPPED, KIND_ESCALATION, is_test_thread,
@@ -62,6 +62,12 @@ HIGH_PRIORITY_LEADS = "high_priority_leads"
 FINANCING_CANDIDATES = "financing_candidates"
 MEMBERSHIP_CANDIDATES = "membership_candidates"
 POSSIBLE_SPAM_FLAGGED = "possible_spam_flagged"
+MEMBERSHIP_OFFERS_SENT = "membership_offers_sent"
+# "accepted", never "enrolled": Roster records that the customer said yes and
+# texts the owner — it cannot charge a card, so the owner finalizes billing.
+# Counting these as enrollments would be exactly the kind of flattering
+# number ARCHITECTURE.md invariant 10 exists to keep off the dashboard.
+MEMBERSHIPS_ACCEPTED = "memberships_accepted"
 JOBS_DISPATCHED = "jobs_dispatched"
 EMERGENCY_DISPATCHES = "emergency_dispatches"
 SAME_DAY_DISPATCHES = "same_day_dispatches"
@@ -89,6 +95,8 @@ METRIC_RECORDS = {
     FINANCING_CANDIDATES: "jobqualification where financing_candidate is true",
     MEMBERSHIP_CANDIDATES: "jobqualification where membership_candidate is true",
     POSSIBLE_SPAM_FLAGGED: "jobqualification where possible_spam is true",
+    MEMBERSHIP_OFFERS_SENT: "membershipoffer where sent_at is not null",
+    MEMBERSHIPS_ACCEPTED: "membershipoffer where outcome == 'accepted'",
     JOBS_DISPATCHED: "dispatchplan",
     EMERGENCY_DISPATCHES: "dispatchplan where dispatch_priority == 'emergency'",
     SAME_DAY_DISPATCHES: "dispatchplan where dispatch_priority == 'same_day'",
@@ -236,6 +244,27 @@ def _job_qualifications(condition=None, kind="lead_qualified"):
     return _fetch
 
 
+def _membership_offers(condition=None, kind="membership_offer"):
+    def _fetch(session, business_id, since=None):
+        # sent_at, not created_at, is the anchor for both the filter and the
+        # activity timestamp: a row exists from the moment the tick claims the
+        # job, but nothing has happened from the customer's point of view until
+        # the text actually goes out. An unsent claim (a send that failed and
+        # hasn't been retried) must never appear as activity.
+        q = select(MembershipOffer).where(
+            MembershipOffer.business_id == business_id,
+            MembershipOffer.sent_at.is_not(None),
+        )
+        if condition is not None:
+            q = q.where(condition)
+        if since is not None:
+            q = q.where(MembershipOffer.sent_at >= since)
+        return [ActivityRow(r.sent_at, kind,
+                            f"Membership offer to {r.customer_phone} — {r.outcome}")
+                for r in session.exec(q).all()]
+    return _fetch
+
+
 def _dispatch_plans(condition=None, kind="dispatch_planned"):
     def _fetch(session, business_id, since=None):
         q = select(DispatchPlan).where(DispatchPlan.business_id == business_id)
@@ -315,6 +344,14 @@ EMPLOYEE_RECORDS = {
                      POSSIBLE_SPAM_FLAGGED,
                      _job_qualifications(JobQualification.possible_spam == True,  # noqa: E712
                                          "possible_spam")),
+    )),
+    "membership_agent": EmployeeRecords("membership_agent", (
+        RecordSource("membership_offers", METRIC_RECORDS[MEMBERSHIP_OFFERS_SENT],
+                     MEMBERSHIP_OFFERS_SENT, _membership_offers()),
+        RecordSource("memberships_accepted", METRIC_RECORDS[MEMBERSHIPS_ACCEPTED],
+                     MEMBERSHIPS_ACCEPTED,
+                     _membership_offers(MembershipOffer.outcome == "accepted",
+                                        "membership_accepted")),
     )),
     "dispatcher": EmployeeRecords("dispatcher", (
         RecordSource("dispatch_plans", METRIC_RECORDS[JOBS_DISPATCHED],

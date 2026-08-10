@@ -49,6 +49,7 @@ from provisioning import (
     ProvisioningError, buy_twilio_number, provision_voice, public_base_url, verify_voice_wiring,
 )
 from recovery_engine import FACE_DISPLAY_NAMES
+from membership_service import find_active_membership_offer, handle_membership_reply
 from recovery_service import create_campaign, find_active_recovery_job, handle_recovery_reply
 from referral_service import find_active_referral_ask, handle_referral_reply
 from review_service import find_active_review_ask, handle_review_reply
@@ -601,6 +602,19 @@ def set_referral_incentive(client_id: int, referral_incentive: str = Form(...)):
     with Session(engine) as session:
         client = session.get(Business, client_id)
         client.referral_incentive = referral_incentive.strip() or None
+        session.add(client)
+        session.commit()
+    return RedirectResponse(f"/clients/{client_id}", status_code=303)
+
+
+@app.post("/clients/{client_id}/membership-plan")
+def set_membership_plan(client_id: int, membership_plan: str = Form(...)):
+    """The owner's plan in their own words — quoted verbatim into the offer
+    text, so this field is the whole of what Membership Agent is allowed to
+    say about the plan. Blank switches the employee off without firing it."""
+    with Session(engine) as session:
+        client = session.get(Business, client_id)
+        client.membership_plan = membership_plan.strip() or None
         session.add(client)
         session.commit()
     return RedirectResponse(f"/clients/{client_id}", status_code=303)
@@ -1197,6 +1211,16 @@ def _process_inbound_sms(from_number: str, to_number: str, body: str,
             recovery_job = find_active_recovery_job(session, client.id, from_number)
             if recovery_job is not None:
                 return handle_recovery_reply(session, client, recovery_job, body)
+            # Ordered by RECENCY of the last outbound touch, not by employee
+            # seniority. A membership offer goes out on day 7, after the
+            # referral ask (day 4) and the review ask (day 1) — but both of
+            # those stay "active" for a 14-day reply window, so checking them
+            # first would hand a reply about the membership offer to the review
+            # classifier. Whoever texted the customer most recently is who they
+            # are answering.
+            membership_offer = find_active_membership_offer(session, client.id, from_number)
+            if membership_offer is not None:
+                return handle_membership_reply(session, client, membership_offer, body)
             referral_job = find_active_referral_ask(session, client.id, from_number)
             if referral_job is not None:
                 return handle_referral_reply(session, client, referral_job, body)
