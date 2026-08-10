@@ -299,14 +299,26 @@ class MembershipOffer(SQLModel, table=True):
     timestamps (review_requested_at, review_followup_sent_at, referral_sent_at,
     owner_alerted_at) and that pattern doesn't survive a sixth employee.
 
-    THE CLAIM IS THE INSERT. source_job_id is unique, so creating this row is
-    an atomic claim on "nobody has offered on this job yet" — the same
+    THE CLAIM IS THE INSERT, and it is claimed on TWO axes:
+
+      source_job_id unique          -> never offer twice for the same job
+      (business_id, customer_phone) -> never offer twice to the same PERSON
+
+    Creating this row is therefore an atomic claim on both — the same
     technique WebhookDelivery uses for inbound dedup. Two overlapping ticks
     both find no row, both try to insert, and exactly one wins; the loser
     catches IntegrityError and skips. That's why the row is written BEFORE the
     SMS goes out and deleted again if the send fails, rather than recorded
     after a successful send the way Reviews does it — recording after the send
     cannot prevent a double-text, it can only notice one.
+
+    The per-person index is the one that needed a database to enforce it. The
+    per-job rule is naturally serial (one job, one row), but "one offer per
+    customer, not per job" was a read-then-insert: two tick processes could
+    each check a DIFFERENT completed job for the SAME customer, both see no
+    prior offer, and both text them. The service still does the cheap read
+    first — it avoids a pointless IntegrityError for a customer with three
+    completed jobs — but correctness now rests here, not on that read.
 
     NOT called an "enrollment": Roster records that the customer said yes and
     tells the owner. It cannot charge a card, so the owner still finalizes
@@ -315,6 +327,8 @@ class MembershipOffer(SQLModel, table=True):
     """
     __table_args__ = (
         Index("uq_membership_offer_source_job", "source_job_id", unique=True),
+        Index("uq_membership_offer_business_customer",
+              "business_id", "customer_phone", unique=True),
     )
 
     id: Optional[int] = Field(default=None, primary_key=True)

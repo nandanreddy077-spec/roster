@@ -273,6 +273,44 @@ def test_a_second_claim_on_the_same_job_is_impossible(session, spy):
     session.rollback()
 
 
+def test_a_second_claim_on_the_same_customer_is_impossible(session, spy):
+    """The race the per-customer index exists to stop: two tick processes
+    each check a DIFFERENT completed job for the SAME customer, both see no
+    prior offer, and both try to claim. The service's own read cannot prevent
+    this — only the database can, so this asserts against the database."""
+    from sqlalchemy.exc import IntegrityError
+
+    b = _business(session)
+    _candidate_job(session, b, phone="+15125550001")
+    other_job = _candidate_job(session, b, phone="+15125550001")
+    send_due_membership_offers(session)
+
+    # Exactly what a concurrent tick would attempt: a fresh claim for the same
+    # person on a different job, bypassing the in-process read check.
+    session.add(MembershipOffer(business_id=b.id, source_job_id=other_job.id,
+                                customer_phone="+15125550001"))
+    with pytest.raises(IntegrityError):
+        session.commit()
+    session.rollback()
+    assert len(spy.sent) == 1
+
+
+def test_the_same_customer_number_at_two_businesses_is_not_blocked(session, spy):
+    """The index is scoped per business, not global. One phone number can be
+    a customer of two different shops on the platform, and each is entitled to
+    make its own offer — tenancy is the boundary everywhere in Roster."""
+    b1 = _business(session)
+    b2 = _business(session, email="second@test.io", business_name="Other Co",
+                   inbound_number="+15125558888")
+    _candidate_job(session, b1, phone="+15125550001")
+    _candidate_job(session, b2, phone="+15125550001")
+
+    send_due_membership_offers(session)
+
+    assert len(spy.sent) == 2
+    assert len(session.exec(select(MembershipOffer)).all()) == 2
+
+
 # ---- the follow-up: exactly one, and only while unanswered -----------------
 
 def test_sends_one_follow_up_and_never_a_second(session, spy):

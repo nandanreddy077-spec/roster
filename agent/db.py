@@ -302,6 +302,12 @@ def _migrate_add_indexes(engine=None):
         # degrades to "both ticks insert, both text the customer".
         "CREATE UNIQUE INDEX IF NOT EXISTS uq_membership_offer_source_job "
         "ON membershipoffer (source_job_id)",
+        # The per-PERSON half of the same guarantee: one plan offer per
+        # customer, not one per completed job. Enforced here because the
+        # service's own check is a read-then-insert, which two concurrent tick
+        # processes can both pass for two different jobs of the same customer.
+        "CREATE UNIQUE INDEX IF NOT EXISTS uq_membership_offer_business_customer "
+        "ON membershipoffer (business_id, customer_phone)",
     )
     with eng.connect() as conn:
         for ddl in statements:

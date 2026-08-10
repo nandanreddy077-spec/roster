@@ -4,8 +4,8 @@ _2026-08-10. Branch `feat/membership-agent`. Commits `fe766c8` (design),
 `cc7e130` (implementation)._
 
 **Verdict: ready to deploy to a real customer, gated on one manual step
-(setting `membership_plan` on the client console) and with three known risks
-below, none of which can produce a duplicate or unsolicited text.**
+(setting `membership_plan` on the client console) and with the risks listed
+below — none of which can produce a duplicate or unsolicited text.**
 
 ---
 
@@ -36,7 +36,7 @@ borrows from Recovery is claim-before-send.
 
 ---
 
-## 1. Unit tests — 32, all passing
+## 1. Unit tests — 34, all passing
 
 `agent/tests/test_membership_service.py`, organised by guarantee:
 
@@ -48,7 +48,9 @@ borrows from Recovery is claim-before-send.
   qualification time; one offer per customer even across several jobs.
 - **Idempotency:** 5 tick runs → 1 text, 1 row.
 - **Claim discipline:** a failed send releases the claim and the next tick
-  retries; a second claim on the same job raises `IntegrityError`.
+  retries; a second claim on the same job raises `IntegrityError`; a second
+  claim on the same *customer* via a different job raises too; the index is
+  scoped per business, so one phone number can be offered by two shops.
 - **Follow-up:** exactly one, never a second; suppressed for every decided
   outcome (parametrised over all four); still fires for `unclear`; never fires
   for a claim that never actually sent.
@@ -86,7 +88,7 @@ Lead Qualifier — Lead Qualifier is itself gated, so in the "hired nobody" case
 it produces no qualification, and the guard would have called the membership
 tick, asserted silence, and passed however ungated it was.
 
-**Full suite: 972 passed, 0 failed** (was 934 before this work).
+**Full suite: 974 passed, 0 failed** (was 934 before this work).
 
 ## 3. End-to-end local run
 
@@ -173,15 +175,22 @@ delivered: no stub would have produced `unclear` for that phrasing.
 
 ## Remaining risks
 
-**1. Per-customer dedup is not atomic across processes.** *(medium, narrow)*
-The per-*job* guarantee is enforced by a unique index and holds everywhere.
-The per-*customer* rule ("one offer per person, not per job") is a
-read-then-insert, so two truly concurrent tick processes could each pass the
-check for two different jobs of the same customer and send two offers. Today
-the scheduler is a single in-process loop that awaits each tick, so this
-requires either >1 Railway replica or a manual `recovery_tick.py` run
-alongside the live one — the latter is realistic given how prod is operated.
-Fix if it matters: a unique index on `(business_id, customer_phone)`.
+**1. ~~Per-customer dedup is not atomic across processes.~~ CLOSED 2026-08-10**
+Was: the per-customer rule was a read-then-insert, so two concurrent tick
+processes could each pass the check for two different jobs of the same
+customer and send two offers. Now enforced by a second unique index on
+`(business_id, customer_phone)`, so the claim is atomic on both axes — per
+job and per person. The service still does the cheap read first (it avoids a
+pointless `IntegrityError` for a customer with three completed jobs), but
+correctness no longer depends on it.
+
+Verified: the index is created on a fresh database *and* added by
+`_migrate_add_indexes` to a database that already has the table without it
+(the shape a redeploy of the previous commit would have), idempotently, with
+existing rows preserved. Two tests pin it — one asserting the database rejects
+a second claim for the same person on a different job, one asserting the index
+is correctly scoped **per business**, since the same phone number can be a
+customer of two different shops and each is entitled to its own offer.
 
 **2. Conversion rate is entirely unproven.** *(the honest one)*
 No real customer has run a membership offer. The ROI model in the design doc

@@ -150,9 +150,17 @@ def send_due_membership_offers(session: Session) -> List[MembershipOffer]:
 
         # One offer per customer, ever — not one per job. A customer with
         # three completed repairs must not be pitched three times.
+        #
+        # This read is an OPTIMISATION, not the guarantee: it skips the common
+        # case cheaply instead of taking an IntegrityError per extra job. The
+        # actual enforcement is the unique index on
+        # (business_id, customer_phone), because this check and the insert
+        # below are not one atomic step — see the IntegrityError branch.
+        #
         # ponytail: no re-ask window, so someone who declined 18 months ago is
         # never asked again. Add a `sent_at < now - N months and outcome ==
         # 'declined'` exception if that turns out to leave money on the table.
+        # NOTE: that change needs the per-customer index relaxed too.
         prior = session.exec(
             select(MembershipOffer).where(
                 MembershipOffer.business_id == client.id,
@@ -162,10 +170,12 @@ def send_due_membership_offers(session: Session) -> List[MembershipOffer]:
         if prior is not None:
             continue
 
-        # CLAIM, then send. The insert IS the claim: source_job_id is unique,
-        # so two overlapping ticks race here and exactly one wins. Recording
-        # the send afterwards (what Reviews does) cannot prevent a double-text,
-        # only notice one after the customer already got it.
+        # CLAIM, then send. The insert IS the claim, on both axes at once:
+        # source_job_id is unique (never twice for a job) and
+        # (business_id, customer_phone) is unique (never twice to a person), so
+        # two overlapping ticks race here and exactly one wins whichever way
+        # they collide. Recording the send afterwards (what Reviews does)
+        # cannot prevent a double-text, only notice one after it arrived.
         offer = MembershipOffer(
             business_id=client.id,
             source_job_id=job.id,
@@ -175,7 +185,10 @@ def send_due_membership_offers(session: Session) -> List[MembershipOffer]:
         try:
             session.commit()
         except IntegrityError:
-            session.rollback()  # another tick claimed this job first
+            # Either index rejected us: another tick claimed this job, or
+            # already offered this customer via a different job. Both mean
+            # "not ours to send" — skipping is correct for both.
+            session.rollback()
             continue
         session.refresh(offer)
 
