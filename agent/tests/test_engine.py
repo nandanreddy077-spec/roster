@@ -103,6 +103,44 @@ def test_respond_captures_log_job_from_same_turn_as_transfer():
     assert result["jobs"][0]["input"]["service_type"] == "gas leak"
 
 
+def test_every_tool_use_written_to_history_gets_a_tool_result():
+    """new_messages is persisted and replayed as history on the customer's NEXT
+    message, and the API rejects a tool_use with no tool_result after it. The
+    emergency path (log_job + alert_owner in one turn) used to write exactly
+    that, which 400'd every later message on the thread — a dead conversation
+    at the worst possible moment."""
+    responses = [
+        FakeResponse([
+            FakeBlock("text", text="I'm alerting the owner now."),
+            FakeBlock("tool_use", name="log_job",
+                      input={"service_type": "gas leak", "urgency": "emergency"}, id="tu_1"),
+            FakeBlock("tool_use", name="alert_owner", input={"reason": "gas leak"}, id="tu_2"),
+        ]),
+    ]
+    agent = AgentEngine(client=FakeAnthropicClient(responses))
+
+    result = agent.respond(
+        make_client_config(),
+        [{"role": "user", "content": [{"type": "text", "text": "I smell gas"}]}],
+        tools=[LOG_JOB_TOOL, TRANSFER_CALL_TOOL],
+    )
+
+    resolved = {
+        block["tool_use_id"]
+        for message in result["new_messages"]
+        for block in message["content"]
+        if isinstance(block, dict) and block.get("type") == "tool_result"
+    }
+    used = {
+        block["id"]
+        for message in result["new_messages"]
+        for block in message["content"]
+        if isinstance(block, dict) and block.get("type") == "tool_use"
+    }
+    assert used == {"tu_1", "tu_2"}
+    assert used == resolved, f"unresolved tool_use ids: {used - resolved}"
+
+
 def test_respond_log_job_still_resolved_internally():
     responses = [
         FakeResponse([

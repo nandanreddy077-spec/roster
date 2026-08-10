@@ -419,12 +419,29 @@ class AgentEngine:
                 tu = passthrough_uses[0]
                 pending_tool_call = {"name": tu.name, "input": tu.input}
                 # Capture any log_job calls made in this same turn (e.g. an
-                # emergency: the model calls both log_job and transfer_call
-                # together) so the lead isn't silently dropped. There's no
-                # further model turn to consume tool_results here, so we just
-                # record the jobs and skip the acknowledgment round-trip.
+                # emergency: the model calls both log_job and alert_owner
+                # together) so the lead isn't silently dropped.
                 for log_tu in log_job_uses:
                     captured_jobs.append({"id": log_tu.id, "input": log_tu.input})
+                # This turn ends here — the CALLER resolves the passthrough — but
+                # every tool_use still needs a matching tool_result, because
+                # new_messages is PERSISTED and replayed as history on the
+                # customer's next message. Without this the API rejects the next
+                # turn outright ("tool_use ids were found without tool_result
+                # blocks"), so an emergency call (the one path where the model
+                # reliably calls log_job and alert_owner together) permanently
+                # bricked that customer's thread. Found by an end-to-end run
+                # against real Claude, 2026-08-10; every prior test stubbed the
+                # engine and therefore never replayed what it had written.
+                new_messages.append({"role": "user", "content": [
+                    {
+                        "type": "tool_result",
+                        "tool_use_id": t.id,
+                        "content": ("Logged. The job is captured for the team."
+                                    if t.name == LOG_JOB_TOOL["name"] else "Acknowledged."),
+                    }
+                    for t in all_tool_uses
+                ]})
                 if text_parts:
                     reply_text = " ".join(text_parts).strip()
                 break
