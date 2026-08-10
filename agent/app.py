@@ -133,6 +133,33 @@ VOICE_CAPTURE_DIR = DATA_DIR / "call_captures"
 # floor plan for free (2026-08-04 penetration test, recommendation 3). Roster
 # has no external API consumers; nobody needs the schema.
 app = FastAPI(title="Roster", docs_url=None, redoc_url=None, openapi_url=None)
+
+
+class HeadAsGetMiddleware:
+    """This FastAPI version doesn't add HEAD to GET-only routes (every route
+    405s on HEAD, confirmed 2026-08-10), which trips crawlers/uptime checks
+    that probe with HEAD before GET. Rewrite HEAD to GET for routing, then
+    drop the body — one middleware covers every route, present and future,
+    instead of listing methods=["GET", "HEAD"] on each."""
+
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http" or scope["method"] != "HEAD":
+            return await self.app(scope, receive, send)
+
+        scope = {**scope, "method": "GET"}
+
+        async def send_no_body(message):
+            if message["type"] == "http.response.body":
+                message = {**message, "body": b""}
+            await send(message)
+
+        await self.app(scope, receive, send_no_body)
+
+
+app.add_middleware(HeadAsGetMiddleware)
 # Customer-portal session cookie — separate from the founder's HTTP-Basic
 # admin auth above. SESSION_SECRET_KEY signs the cookie. In production
 # (ROSTER_ENV=production) the app fails closed if it's unset — like

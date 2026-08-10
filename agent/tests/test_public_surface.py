@@ -78,6 +78,17 @@ def test_landing_stylesheet_served(monkeypatch):
     assert response.headers["content-type"].startswith("text/css")
 
 
+def test_head_request_succeeds_with_empty_body(monkeypatch):
+    """Crawlers/uptime checks probe with HEAD before GET; this FastAPI
+    version doesn't add it to GET routes on its own (see HeadAsGetMiddleware)."""
+    monkeypatch.delenv("ADMIN_PASSWORD", raising=False)
+    client = TestClient(app_module.app)
+    response = client.head("/")
+    assert response.status_code == 200
+    assert response.content == b""
+    assert response.headers["content-type"].startswith("text/html")
+
+
 def test_robots_txt_points_crawlers_at_sitemap_and_blocks_dashboard(monkeypatch):
     client = TestClient(app_module.app)
     response = client.get("/robots.txt")
