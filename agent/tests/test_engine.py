@@ -430,6 +430,30 @@ def test_regression_voice_prompt_still_honest_about_escalation():
     assert "alert_owner" in prompt
 
 
+def test_voice_prompt_does_not_volunteer_the_escalation_number_for_a_plain_emergency():
+    """2026-08-10 fix: a real test call showed the AI reciting the owner's
+    personal cell for every emergency, on top of booking the job — which read
+    to the caller as a punt even though the booking also happened. The number
+    is now a fallback for an alert_owner failure or an explicit request, not
+    the default script; the owner's escalation stays invisible to the caller."""
+    config = make_client_config(escalation_phone="512-555-0148")
+    prompt = build_voice_system_prompt(config, now=FIXED_NOW).lower()
+    assert "never" in prompt and "512-555-0148" in prompt
+    assert "on-call technician" in prompt or "on-call" in prompt
+    assert "failed" in prompt  # the number is a fallback for a failed alert, not the default
+
+
+def test_voice_prompt_instructs_a_spoken_filler_before_a_tool_call():
+    """2026-08-10: real calls showed several seconds of dead air while log_job
+    or alert_owner ran, since the model's tool-only turns carried no spoken
+    acknowledgment. The prompt now asks for a short line in the same reply as
+    the tool call so the caller always hears something first."""
+    prompt = build_voice_system_prompt(make_client_config(), now=FIXED_NOW).lower()
+    assert "log_job or alert_owner" in prompt
+    assert "same reply" in prompt
+    assert "dead air" in prompt
+
+
 def test_regression_service_area_and_estimate_language_still_present():
     config = make_client_config(service_area="within 20 miles of Austin, TX")
     prompt = build_system_prompt(config, now=FIXED_NOW)
