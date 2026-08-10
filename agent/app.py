@@ -1096,20 +1096,24 @@ def _find_client_by_inbound(session: Session, to_number: str) -> Business | None
 
 def _twilio_signature_ok(request: Request, form) -> bool:
     """Verify a webhook really came from Twilio (X-Twilio-Signature = HMAC of
-    the exact URL + params, keyed by the account Auth Token). Only enforced
-    when TWILIO_AUTH_TOKEN is set: in dev/console mode there's no real Twilio
-    traffic to forge, so the endpoints stay open. The URL is rebuilt from
-    PUBLIC_BASE_URL (the host Twilio was configured to call) rather than
-    request.url, which behind Railway's TLS proxy is the internal http host
-    and would never match Twilio's signature."""
+    the exact URL + params, keyed by the account Auth Token). Unenforced only
+    in dev (ROSTER_ENV != production), where there's no real Twilio traffic to
+    forge, so the endpoints stay open with no token configured. In production,
+    a missing token or missing signature header fails closed instead of
+    silently accepting unsigned requests (2026-08-10 pentest, VULN-0001). The
+    URL is rebuilt from PUBLIC_BASE_URL (the host Twilio was configured to
+    call) rather than request.url, which behind Railway's TLS proxy is the
+    internal http host and would never match Twilio's signature."""
     token = os.environ.get("TWILIO_AUTH_TOKEN")
     if not token:
-        return True
+        return os.environ.get("ROSTER_ENV") != "production"
+    signature = request.headers.get("X-Twilio-Signature")
+    if not signature:
+        return False
     from twilio.request_validator import RequestValidator
 
     base = public_base_url().rstrip("/")
     url = f"{base}{request.url.path}"
-    signature = request.headers.get("X-Twilio-Signature", "")
     return RequestValidator(token).validate(url, dict(form), signature)
 
 
@@ -1237,18 +1241,32 @@ async def missed_call(request: Request):
     """Twilio voice status callback. When a call goes unanswered, Roster texts the
     caller first — the missed-call text-back. Needs outbound credentials (or prints
     to console in dev). Signature-verified like /webhook/sms — this endpoint
-    triggers an outbound SMS, so an unverified caller must never reach it."""
+    triggers an outbound SMS, so an unverified caller must never reach it.
+
+    Twilio delivery is at-least-once here too, but unlike /webhook/sms there's
+    no TwiML reply to replay — CallSid is claimed in WebhookDelivery purely to
+    make the send-and-insert a one-time side effect (2026-08-10 pentest,
+    VULN-0002)."""
     form = await request.form()
     if not _twilio_signature_ok(request, form):
         return Response(status_code=403)
     From = form.get("From", "")
     To = form.get("To", "")
+    CallSid = form.get("CallSid", "")
     CallStatus = form.get("CallStatus", "")
     if CallStatus not in ("no-answer", "busy", "failed"):
         return Response(status_code=204)
+    if not CallSid:
+        return Response(status_code=400)
     with Session(engine) as session:
         client = _find_client_by_inbound(session, To)
         if client is None:
+            return Response(status_code=204)
+        session.add(WebhookDelivery(provider="twilio-voice-status", dedup_key=f"twilio-voice-status:{CallSid}"))
+        try:
+            session.commit()
+        except IntegrityError:
+            session.rollback()
             return Response(status_code=204)
         opener = (
             f"Hi! Sorry we missed your call to {client.business_name}. "

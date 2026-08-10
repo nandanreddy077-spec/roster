@@ -285,7 +285,16 @@ def _escalate(session: Session, client: Business, job: RecoveryJob, reason: str)
     query (stops the automated sequence immediately) and from
     ACTIVE_STATUSES (stops find_active_recovery_job from routing this
     customer's further replies back into the rigid intent/slot state
-    machine — a later text falls through to Frontdesk's general handling)."""
+    machine — a later text falls through to Frontdesk's general handling).
+
+    Deliberately NOT gated on send_hours_ok() (flagged as VULN-0003 in the
+    2026-08-10 pentest, declined): that gate protects customers from
+    proactive scheduler-driven texts, not owner pages from a live reply. This
+    fires from an inbound customer reply happening right now, same category
+    as service.py/xai_voice_adapter.py's live-call owner alerts — neither of
+    which are quiet-hours gated either. Gating only this path would delay the
+    owner's escalation notice until 9am while every other live-interaction
+    alert in the app still fires instantly."""
     alerted = notify_owner_of_escalation(client, job.customer_phone, reason)
     record_owner_notification(
         session, client.id, KIND_ESCALATION, SOURCE_RECOVERY_ESCALATION,
@@ -363,7 +372,9 @@ def handle_recovery_reply(session: Session, client: Business, job: RecoveryJob, 
                 reply = f"Perfect, you're booked for {chosen}! We'll text you a reminder. Any questions, just reply here."
                 # Booking notification parity with every other booking path
                 # (service.py's SMS flow): the owner must hear about a real
-                # new job regardless of which employee booked it.
+                # new job regardless of which employee booked it. Also not
+                # send_hours_ok()-gated, same reasoning as _escalate() above
+                # (VULN-0003, declined).
                 delivered = notify_owner_of_booking(client, new_job, employee_name="Quote Chaser")
                 record_owner_notification(
                     session, client.id, KIND_JOB_BOOKED, SOURCE_RECOVERY_BOOKING,

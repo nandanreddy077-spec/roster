@@ -89,3 +89,53 @@ def test_voice_status_accepts_valid_signature(test_engine, monkeypatch):
     r = client.post("/webhook/voice-status", data=params,
                     headers={"X-Twilio-Signature": _sign("/webhook/voice-status", params)})
     assert r.status_code == 204
+
+
+# ---- Production must fail closed when TWILIO_AUTH_TOKEN is missing (2026-08-10 pentest, VULN-0001)
+
+def test_sms_rejected_when_no_token_configured_in_production(test_engine, monkeypatch):
+    monkeypatch.delenv("TWILIO_AUTH_TOKEN", raising=False)
+    monkeypatch.setenv("ROSTER_ENV", "production")
+    client = _app(test_engine, monkeypatch)
+    r = client.post("/webhook/sms",
+                    data={"From": "+15550001111", "To": "+15125550100", "Body": "hi", "MessageSid": "SM1"})
+    assert r.status_code == 403
+
+
+def test_voice_status_rejected_when_no_token_configured_in_production(test_engine, monkeypatch):
+    monkeypatch.delenv("TWILIO_AUTH_TOKEN", raising=False)
+    monkeypatch.setenv("ROSTER_ENV", "production")
+    client = _app(test_engine, monkeypatch)
+    r = client.post("/webhook/voice-status",
+                    data={"From": "+15550001111", "To": "+15125550100", "CallStatus": "no-answer"})
+    assert r.status_code == 403
+
+
+def test_sms_rejected_with_token_set_but_signature_header_missing(test_engine, monkeypatch):
+    monkeypatch.setenv("TWILIO_AUTH_TOKEN", TOKEN)
+    client = _app(test_engine, monkeypatch)
+    r = client.post("/webhook/sms",
+                    data={"From": "+15550001111", "To": "+15125550100", "Body": "hi", "MessageSid": "SM1"})
+    assert r.status_code == 403
+
+
+# ---- /webhook/voice-status replay: CallSid must be claimed once (2026-08-10 pentest, VULN-0002)
+
+def test_voice_status_replay_sends_missed_call_text_once(test_engine, monkeypatch):
+    sent = []
+    client = _app(test_engine, monkeypatch)
+    monkeypatch.setattr(app_module, "sms_channel", type("S", (), {"send": staticmethod(lambda **kw: sent.append(kw))})())
+    form = {"From": "+15550001111", "To": "+15125550100", "CallStatus": "no-answer", "CallSid": "CAdup1"}
+
+    r1 = client.post("/webhook/voice-status", data=form)
+    r2 = client.post("/webhook/voice-status", data=form)
+
+    assert r1.status_code == 204 and r2.status_code == 204
+    assert len(sent) == 1
+
+
+def test_voice_status_missing_call_sid_rejected(test_engine, monkeypatch):
+    client = _app(test_engine, monkeypatch)
+    r = client.post("/webhook/voice-status",
+                    data={"From": "+15550001111", "To": "+15125550100", "CallStatus": "no-answer"})
+    assert r.status_code == 400
