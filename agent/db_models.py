@@ -7,6 +7,23 @@ from sqlmodel import Field, SQLModel
 
 from models import ClientConfig
 
+# What produced a Job row. The owner's dashboard can only claim revenue it can
+# attribute: "62 jobs booked" is a count, "$18,420 you would not have had"
+# needs to name what would have lost each job. That claim is exactly these
+# labels, so they are a first-class column rather than a guess made at read
+# time from notes or thread shape.
+ORIGIN_INBOUND = "inbound"                  # the customer reached us first
+ORIGIN_MISSED_CALL = "missed_call"          # rang out, we texted back, they booked
+ORIGIN_QUOTE_RECOVERY = "quote_recovery"    # a cold estimate Quote Chaser revived
+ORIGIN_REACTIVATION = "reactivation"        # a dormant customer Retention brought back
+# NOT work. bookings.record_escalation writes a Job purely to give alert_owner
+# the same idempotency book_job gives log_job; it represents a page to the
+# owner, never a booking. Every read path that counts or recalls jobs filters
+# this out — metrics (it inflated jobs_booked by one per emergency),
+# memory.build_customer_context (a first-time caller read as a returning one),
+# and lead_qualifier_service (which was qualifying and dispatching alerts).
+ORIGIN_ESCALATION = "escalation"
+
 
 class Business(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
@@ -169,6 +186,16 @@ class Job(SQLModel, table=True):
     # which "Mark done" represents; this field only says which completed
     # jobs qualify.
     is_estimate: bool = False
+    # Which employee's work produced this row (see the ORIGIN_* constants).
+    # Defaults to inbound so an un-attributed job is never counted as
+    # recovered revenue — the conservative direction.
+    origin: str = ORIGIN_INBOUND
+    # What the job was actually worth, entered by the owner at "Mark done".
+    # Cents, not a float, because it is money. Optional because a job has no
+    # value until the owner says so, and an unpriced job must read as UNKNOWN
+    # rather than $0 (ARCHITECTURE.md invariant 10) — a zero would quietly
+    # drag down every total it lands in.
+    value_cents: Optional[int] = None
 
 
 class RecoveryCampaign(SQLModel, table=True):

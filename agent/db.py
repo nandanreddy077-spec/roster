@@ -91,6 +91,7 @@ def _init_db_locked():
     _backfill_customers()
     _backfill_employees()
     _backfill_pipeline_stage()
+    _backfill_job_origin()
     # Order matters: duplicates must be gone before the unique index is built.
     _dedupe_employees()
     _migrate_add_indexes()
@@ -164,6 +165,8 @@ def _migrate_add_columns():
         "ALTER TABLE recoveryjob ADD COLUMN escalation_reason VARCHAR",
         "ALTER TABLE business ADD COLUMN voice_provisioning_error VARCHAR",
         "ALTER TABLE business ADD COLUMN membership_plan VARCHAR",
+        "ALTER TABLE job ADD COLUMN origin VARCHAR DEFAULT 'inbound'",
+        "ALTER TABLE job ADD COLUMN value_cents INTEGER",
     )
     with engine.connect() as conn:
         for ddl in statements:
@@ -172,6 +175,34 @@ def _migrate_add_columns():
                 conn.commit()
             except Exception:
                 conn.rollback()
+
+
+def _backfill_job_origin(engine=None):
+    """Label the escalation Jobs that predate the `origin` column.
+
+    Without this every historical alert_owner row keeps the 'inbound' default
+    and goes on being counted as a booked job — the exact number the new
+    column exists to stop overstating. Matched on the service_type
+    bookings.record_escalation writes, which is the only marker those rows
+    ever had. Idempotent: re-running sets the same rows to the same value."""
+    from sqlmodel import Session, select
+
+    from db_models import ORIGIN_ESCALATION, ORIGIN_INBOUND, Job
+    from bookings import ESCALATION_SERVICE_TYPE
+
+    eng = engine if engine is not None else globals()["engine"]
+    with Session(eng) as s:
+        stale = s.exec(
+            select(Job).where(
+                Job.service_type == ESCALATION_SERVICE_TYPE,
+                Job.origin == ORIGIN_INBOUND,
+            )
+        ).all()
+        for job in stale:
+            job.origin = ORIGIN_ESCALATION
+            s.add(job)
+        if stale:
+            s.commit()
 
 
 def _backfill_customers(engine=None):
