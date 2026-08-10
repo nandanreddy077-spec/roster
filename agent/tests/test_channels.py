@@ -38,6 +38,34 @@ def test_missing_messaging_service_warns_about_carrier_filtering(monkeypatch, ca
     assert "10DLC" in captured.err
 
 
+# ---- send_hours_ok ------------------------------------------------------------
+
+
+def test_send_hours_ok_never_true_outside_9am_8pm_in_any_mainland_us_timezone():
+    """The safety property that matters: whenever the gate says "go ahead and
+    text", it must actually be daytime wherever the recipient is. Checked
+    against real zoneinfo conversions (not hand-derived hours) across both
+    DST states, for every mainland US timezone, at every hour of the day."""
+    from datetime import datetime, timezone
+    from zoneinfo import ZoneInfo
+
+    from channels import send_hours_ok
+
+    mainland_zones = [
+        "America/New_York", "America/Chicago", "America/Denver", "America/Los_Angeles",
+    ]
+    for month in (1, 7):  # opposite DST states
+        for hour in range(24):
+            utc_dt = datetime(2026, month, 15, hour, 30, tzinfo=timezone.utc)
+            if not send_hours_ok(utc_dt):
+                continue
+            for zone in mainland_zones:
+                local_hour = utc_dt.astimezone(ZoneInfo(zone)).hour
+                assert 9 <= local_hour < 20, (
+                    f"{utc_dt} UTC was allowed to send but it's {local_hour}:00 in {zone}"
+                )
+
+
 # ---- normalize_phone ---------------------------------------------------------
 # The bug these pin: an owner typed `770-288-1238`, Twilio resolved it against
 # the US sender, and every escalation alert went to a stranger in Georgia while

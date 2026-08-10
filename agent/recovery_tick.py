@@ -9,6 +9,7 @@ review_requested_at, source_job_id).
 """
 from sqlmodel import Session
 
+from channels import send_hours_ok
 from db import engine, init_db
 from dispatcher_service import recommend_dispatch
 from lead_qualifier_service import qualify_new_jobs
@@ -26,14 +27,21 @@ def run():
         print(f"Dispatcher: planned {len(planned)} job(s).")
         enrolled = enroll_completed_estimates(session)
         print(f"Quote Chaser: enrolled {len(enrolled)} estimate(s).")
-        sent = tick(session)
-        print(f"Recovery tick: sent {len(sent)} message(s).")
-        referral_sent = send_due_referral_asks(session)
-        print(f"Referrals: sent {len(referral_sent)} message(s).")
-        review_sent = send_due_review_requests(session)
-        print(f"Reviews: sent {len(review_sent)} message(s).")
-        review_followup_sent = send_due_review_followups(session)
-        print(f"Review follow-ups: sent {len(review_followup_sent)} message(s).")
+        # Enrollment/qualification/dispatch never contact a customer directly,
+        # so only the four calls below — the ones that actually send a text —
+        # are gated on send_hours_ok. A skipped send is picked up next tick.
+        if send_hours_ok():
+            sent = tick(session)
+            print(f"Recovery tick: sent {len(sent)} message(s).")
+            referral_sent = send_due_referral_asks(session)
+            print(f"Referrals: sent {len(referral_sent)} message(s).")
+            review_sent = send_due_review_requests(session)
+            print(f"Reviews: sent {len(review_sent)} message(s).")
+            review_followup_sent = send_due_review_followups(session)
+            print(f"Review follow-ups: sent {len(review_followup_sent)} message(s).")
+        else:
+            print("Outside send hours (9am-8pm local, every mainland US timezone) — "
+                  "skipping Recovery/Referral/Reviews sends this tick.")
 
 
 if __name__ == "__main__":
