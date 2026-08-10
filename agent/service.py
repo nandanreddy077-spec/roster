@@ -11,7 +11,7 @@ from typing import Any, Dict, List, Optional
 from sqlmodel import Session, select
 
 from bookings import book_job, record_escalation
-from db_models import Business, Job, Message
+from db_models import ORIGIN_INBOUND, ORIGIN_MISSED_CALL, Business, Job, Message
 from engine import (
     LOG_JOB_TOOL,
     TRANSFER_CALL_TOOL,
@@ -130,7 +130,16 @@ def handle_customer_message(
         cust = get_or_create_customer(session, client.id, customer_phone, ji.get("customer_name"))
         # Idempotent booking: a re-call with the same service on this thread
         # merges details into the existing open job instead of duplicating.
-        job, created = book_job(session, client, customer_phone, customer_phone, ji, customer_id=cust.id)
+        # Roster only ever speaks first on the missed-call text-back, so a
+        # thread whose earliest message is ours IS a recovered missed call —
+        # the single most valuable thing this product does, and until now
+        # indistinguishable from a customer who simply texted in. Read off
+        # the history already in hand; no extra query, no string matching on
+        # the opener.
+        origin = (ORIGIN_MISSED_CALL if history and history[0].get("role") == "assistant"
+                  else ORIGIN_INBOUND)
+        job, created = book_job(session, client, customer_phone, customer_phone, ji,
+                                customer_id=cust.id, origin=origin)
         captured.append(job)
         if created:
             newly_created.append(job)

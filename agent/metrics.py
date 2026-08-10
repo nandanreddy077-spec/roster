@@ -32,6 +32,7 @@ from typing import Callable, Optional
 from sqlmodel import func, select
 
 from db_models import (
+    ORIGIN_ESCALATION,
     DispatchPlan, Job, JobQualification, MembershipOffer, Message, OwnerNotification,
     RecoveryCampaign, RecoveryJob, ReferralLead, ReviewReply,
 )
@@ -74,7 +75,7 @@ SAME_DAY_DISPATCHES = "same_day_dispatches"
 MANUAL_REVIEW_FLAGGED = "manual_review_flagged"
 
 METRIC_RECORDS = {
-    JOBS_BOOKED: "job where not is_test_thread(customer_phone)",
+    JOBS_BOOKED: "job where origin != 'escalation' and not is_test_thread(customer_phone)",
     CALLS_ANSWERED: "distinct message.customer_phone starting 'xai-voice:'",
     ESCALATIONS: "ownernotification where kind in ('escalation', 'call_dropped')",
     REVIEW_REQUESTS_SENT: "job where review_requested_at is not null",
@@ -137,7 +138,14 @@ class EmployeeRecords:
 # ---- resolvers: every one returns real rows, business-scoped ----------------
 
 def _jobs(session, business_id, since=None):
-    q = select(Job).where(Job.business_id == business_id)
+    q = select(Job).where(
+        Job.business_id == business_id,
+        # An alert_owner page writes a Job row for idempotency, not because
+        # work was booked. Counting them meant every emergency silently added
+        # one to the owner's headline number and put "Booked Escalated call"
+        # in their activity feed.
+        Job.origin != ORIGIN_ESCALATION,
+    )
     if since is not None:
         q = q.where(Job.created_at >= since)
     return [
@@ -432,11 +440,17 @@ def department_activity(session, business_id: int, role_keys, since=None,
 
 def booked_jobs(session, business_id: int) -> int:
     """Real customer jobs booked. Excludes the owner's own dashboard tests —
-    testing your own AI is not revenue, and both surfaces must agree on that."""
+    testing your own AI is not revenue, and both surfaces must agree on that —
+    and escalation rows, which are pages to the owner rather than work."""
+    real = select(Job).where(
+        Job.business_id == business_id, Job.origin != ORIGIN_ESCALATION
+    )
     return session.exec(
-        select(func.count(Job.id)).where(Job.business_id == business_id)
+        select(func.count()).select_from(real.subquery())
     ).one() - sum(
         1 for phone in session.exec(
-            select(Job.customer_phone).where(Job.business_id == business_id)
+            select(Job.customer_phone).where(
+                Job.business_id == business_id, Job.origin != ORIGIN_ESCALATION
+            )
         ).all() if is_test_thread(phone)
     )

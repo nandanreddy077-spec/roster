@@ -13,7 +13,10 @@ from sqlmodel import Session, select
 from bookings import book_job
 from calendar_provider import get_calendar_provider
 from channels import STOP_KEYWORDS, get_channel
-from db_models import Business, Job, RecoveryCampaign, RecoveryJob, RecoveryMessageLog
+from db_models import (
+    ORIGIN_QUOTE_RECOVERY, ORIGIN_REACTIVATION,
+    Business, Job, RecoveryCampaign, RecoveryJob, RecoveryMessageLog,
+)
 from engine import AgentEngine
 from notifications import (
     KIND_ESCALATION,
@@ -36,6 +39,7 @@ from recovery_engine import (
     SEQUENCE_DAYS,
     TEMPLATES,
     build_recovery_reply_prompt,
+    clean_service_type,
     render_template,
 )
 from trial_cap import can_respond, record_usage
@@ -74,7 +78,7 @@ def create_campaign(
                 business_id=client.id,
                 customer_phone=c["phone"],
                 customer_name=c.get("name"),
-                service_type=c["service_type"],
+                service_type=clean_service_type(c["service_type"]),
                 estimate_amount=c.get("estimate_amount"),
                 days_since=c.get("days_since"),
                 anchor_date=c.get("anchor_date"),
@@ -151,7 +155,7 @@ def enroll_completed_estimates(session: Session) -> List[RecoveryJob]:
             source_job_id=job.id,
             customer_phone=job.callback_number,
             customer_name=job.customer_name,
-            service_type=job.service_type,
+            service_type=clean_service_type(job.service_type),
         )
         session.add(recovery_job)
         session.commit()
@@ -305,6 +309,15 @@ def _escalate(session: Session, client: Business, job: RecoveryJob, reason: str)
     return ESCALATED_REPLY
 
 
+def _origin_for_face(session: Session, job: RecoveryJob) -> str:
+    """Which employee to credit a booking to. The quote face is Quote Chaser;
+    reactivation and membership are both Retention Manager's, matching how
+    metrics.py already groups them."""
+    campaign = session.get(RecoveryCampaign, job.campaign_id)
+    return (ORIGIN_QUOTE_RECOVERY if campaign is not None and campaign.face == "quote"
+            else ORIGIN_REACTIVATION)
+
+
 def handle_recovery_reply(session: Session, client: Business, job: RecoveryJob, text: str) -> Optional[str]:
     """Process an inbound reply to an active Recovery sequence. Returns the text
     to send back to the customer (caller sends it — TwiML for SMS)."""
@@ -366,6 +379,10 @@ def handle_recovery_reply(session: Session, client: Business, job: RecoveryJob, 
                         "notes": f"Booked via Revenue Recovery for {chosen}",
                     },
                     customer_id=cust.id,
+                    # The face that ran the sequence is the face that earned
+                    # the job — this is the attribution behind every recovered
+                    # dollar the owner is ever shown.
+                    origin=_origin_for_face(session, job),
                 )
                 job.booked_job_id = new_job.id
                 job.current_status = "booked"

@@ -275,8 +275,13 @@
       {% if j.notes %}<p class="job-notes">{{ j.notes }}</p>{% endif %}
       {% if j.completed_at %}
       <span class="agent-badge agent-badge-active">Completed</span>
+      {% if j.value_cents %}<span class="agent-badge">${{ '%.2f'|format(j.value_cents / 100) }}</span>{% endif %}
       {% else %}
+      {# The amount is optional on purpose: a blank stays unknown rather than
+         becoming $0, and forcing a number here would just get one invented. #}
       <form method="post" action="/clients/{{ client.id }}/jobs/{{ j.id }}/complete">
+        <input type="text" name="value" placeholder="What was it worth? e.g. 1240"
+               inputmode="decimal" style="width:150px;">
         <button class="btn btn-secondary btn-small" type="submit">Mark done</button>
       </form>
       {% endif %}

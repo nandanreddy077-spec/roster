@@ -28,6 +28,7 @@ from starlette.concurrency import run_in_threadpool
 from starlette.middleware.sessions import SessionMiddleware
 
 from auth import ACCESS_LINK_MAX_AGE_SECONDS, make_access_token, resolve_session_secret
+from bookings import parse_money_cents
 from call_trace import CallTrace
 from channels import get_channel, normalize_phone
 import departments
@@ -761,9 +762,16 @@ def set_review_link(client_id: int, review_link: str = Form(...)):
 
 
 @app.post("/clients/{client_id}/jobs/{job_id}/complete")
-def complete_job(client_id: int, job_id: int):
-    """Marks a job done. The review-request text is no longer sent here —
-    it moved to review_service.send_due_review_requests, run on a delay via
+def complete_job(client_id: int, job_id: int, value: str = Form("")):
+    """Marks a job done, optionally recording what it was worth.
+
+    "Mark done" is the only moment the true value of a job is known, which is
+    why the amount is captured here rather than at booking (a quote is not a
+    sale). Left blank it stays None — an unpriced job reads as unknown, never
+    as $0, so it can't drag down a total it was never counted in.
+
+    The review-request text is no longer sent here — it moved to
+    review_service.send_due_review_requests, run on a delay via
     recovery_tick.py (2026-07-29/30 Reviews plan: "wait an appropriate
     amount of time" before asking, which an instant synchronous send here
     could never do)."""
@@ -774,6 +782,7 @@ def complete_job(client_id: int, job_id: int):
             raise HTTPException(status_code=404, detail="No such job")
         already_completed = job.completed_at is not None
         job.completed_at = job.completed_at or datetime.utcnow()
+        job.value_cents = parse_money_cents(value) or job.value_cents
         session.add(job)
         session.commit()
         if not already_completed:

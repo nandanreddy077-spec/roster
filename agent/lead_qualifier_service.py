@@ -15,7 +15,7 @@ from typing import List, Optional
 
 from sqlmodel import Session, select
 
-from db_models import Business, Customer, Job, JobQualification
+from db_models import ORIGIN_ESCALATION, Business, Customer, Job, JobQualification
 from lead_qualifier_engine import qualify
 
 
@@ -41,7 +41,16 @@ def qualify_jobs_for_business(session: Session, business: Business) -> List[JobQ
     call this directly for a business you haven't already confirmed has
     lead_qualifier deployed."""
     qualified: List[JobQualification] = []
-    jobs = session.exec(select(Job).where(Job.business_id == business.id)).all()
+    # Escalation rows are alert bookkeeping, not leads. Qualifying them
+    # produced a "high priority" classification for a job that doesn't exist,
+    # which Dispatcher then planned and flagged for missing an address.
+    # Filtering here is enough to stop both: dispatcher_service only plans
+    # jobs that already have a qualification.
+    jobs = session.exec(
+        select(Job).where(
+            Job.business_id == business.id, Job.origin != ORIGIN_ESCALATION
+        )
+    ).all()
 
     for job in jobs:
         already = session.exec(

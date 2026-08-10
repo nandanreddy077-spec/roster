@@ -2,7 +2,7 @@ import re
 from datetime import datetime, timedelta
 from typing import List, Optional
 from sqlmodel import Session, or_, select
-from db_models import Business, Customer, Job, Message
+from db_models import ORIGIN_ESCALATION, Business, Customer, Job, Message
 from repositories import get_or_create_customer
 
 _CONTROL_CHARS = re.compile(r"[\x00-\x1f\x7f]")
@@ -48,6 +48,11 @@ def build_customer_context(session: Session, business_id: int, phone: str) -> st
         .where(
             Job.business_id == business_id,
             or_(Job.customer_phone == phone, Job.callback_number == phone),
+            # An escalation row is a page to the owner, not a job we did for
+            # this customer. Recalling one made a first-time caller read as a
+            # returning one ("Past jobs with us: Escalated call"), and the
+            # agent apologised for a problem the customer had never had.
+            Job.origin != ORIGIN_ESCALATION,
         )
         .order_by(Job.created_at.desc())
         .limit(3)

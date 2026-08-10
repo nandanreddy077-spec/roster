@@ -11,6 +11,24 @@ SEQUENCE_DAYS = [1, 3, 7, 14, 21, 28]
 # (before the renewal date) and is anchored per-customer, not per-campaign.
 MEMBERSHIP_OFFSETS = [-30, -14, -7, 0, 7]
 
+def clean_service_type(service_type: str) -> str:
+    """Strip a trailing "estimate"/"quote" from a service description.
+
+    Every quote-face template already supplies that noun itself ("that
+    {service_type} estimate", "your {service_type} quote"), and service_type
+    is free text the model writes — it happily logs "whole-house repipe
+    estimate", which rendered as "that whole-house repipe estimate estimate"
+    in a message to a real customer. Applied where a RecoveryJob is created
+    rather than at render time, so the stored value is the clean one and
+    every template gets it for free.
+    """
+    cleaned = (service_type or "").strip()
+    for suffix in ("estimate", "quote"):
+        if cleaned.lower().endswith(suffix):
+            cleaned = cleaned[: -len(suffix)].strip(" -–—,")
+    return cleaned or (service_type or "").strip()
+
+
 FACE_DISPLAY_NAMES = {
     "quote": "Chaser",
     "reactivation": "Rebooker",

@@ -8,13 +8,15 @@ service_type) inside the dedup window. A re-book of the same service on the
 same thread MERGES new details into the existing job instead of inserting a
 second row; a different service, a completed job, or an old job books fresh.
 """
+import re
 import sys
 from datetime import datetime, timedelta
+from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from typing import Any, Dict, Optional, Tuple
 
 from sqlmodel import Session, select
 
-from db_models import Business, Job
+from db_models import ORIGIN_ESCALATION, ORIGIN_INBOUND, Business, Job
 from eventbus import bus
 from events import JOB_BOOKED, DomainEvent
 
@@ -23,6 +25,36 @@ from events import JOB_BOOKED, DomainEvent
 # single conversation incl. voice retries; short enough that a genuine repeat
 # customer next week books cleanly.
 BOOKING_DEDUP_WINDOW_HOURS = 24
+
+# A residential home-service job above this is a typo (a missing decimal, a
+# phone number pasted into the wrong box), not a sale. Rejecting it keeps one
+# slip from inventing revenue that never existed.
+MAX_JOB_VALUE_DOLLARS = Decimal("1000000")
+
+
+def parse_money_cents(raw: str) -> Optional[int]:
+    """An owner-typed job value -> cents. Accepts "$1,240", "1240", "1,240.50".
+
+    Returns None for blank, negative, absurd, or unparseable input, and the
+    caller leaves value_cents unset — because the honest representation of "I
+    don't know what this job was worth" is UNKNOWN, never 0. A silently
+    coerced 0 would land in a revenue total and quietly understate it, which
+    is the same class of error as the escalation rows that overstated the job
+    count.
+    """
+    text = (raw or "").strip()
+    if not text or "-" in text:
+        return None
+    cleaned = re.sub(r"[^0-9.]", "", text)
+    if not cleaned:
+        return None
+    try:
+        amount = Decimal(cleaned)
+    except InvalidOperation:
+        return None
+    if amount <= 0 or amount > MAX_JOB_VALUE_DOLLARS:
+        return None
+    return int((amount * 100).quantize(Decimal("1"), rounding=ROUND_HALF_UP))
 
 
 def _publish_job_booked(session: Session, job: Job, customer_id: Optional[int]) -> None:
@@ -65,10 +97,16 @@ def book_job(
     caller_number: str,
     args: Dict[str, Any],
     customer_id: Optional[int] = None,
+    origin: str = ORIGIN_INBOUND,
 ) -> Tuple[Job, bool]:
     """Upsert a booking. Returns (job, created) — callers must only fire
     owner notifications when created is True, so a detail-merge never
-    re-texts the owner about a job they already know about."""
+    re-texts the owner about a job they already know about.
+
+    `origin` is set once, at insert, and never revised on a merge: the thing
+    that first produced the job is what earned it, and letting a later
+    detail-merge overwrite that would quietly relabel recovered revenue as
+    ordinary inbound work."""
     service_type = (args.get("service_type") or "").strip()
     since = datetime.utcnow() - timedelta(hours=BOOKING_DEDUP_WINDOW_HOURS)
 
@@ -113,6 +151,7 @@ def book_job(
         notes=args.get("notes"),
         preferred_window=args.get("preferred_window"),
         is_estimate=bool(args.get("is_estimate")),
+        origin=origin,
     )
     session.add(job)
     session.commit()
@@ -189,6 +228,10 @@ def record_escalation(
         urgency="emergency",
         callback_number=caller_number,
         notes=reason,
+        # This row is a page to the owner, not work booked. Labelling it here
+        # is what keeps it out of jobs_booked, out of the customer's recalled
+        # history, and out of Lead Qualifier's queue.
+        origin=ORIGIN_ESCALATION,
     )
     session.add(job)
     session.commit()
