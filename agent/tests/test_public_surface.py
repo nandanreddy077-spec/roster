@@ -78,6 +78,23 @@ def test_landing_stylesheet_served(monkeypatch):
     assert response.headers["content-type"].startswith("text/css")
 
 
+def test_robots_txt_points_crawlers_at_sitemap_and_blocks_dashboard(monkeypatch):
+    client = TestClient(app_module.app)
+    response = client.get("/robots.txt")
+    assert response.status_code == 200
+    assert "Disallow: /clients" in response.text
+    assert "Sitemap: https://rosterhires.com/sitemap.xml" in response.text
+
+
+def test_sitemap_lists_the_evergreen_pages(monkeypatch):
+    client = TestClient(app_module.app)
+    response = client.get("/sitemap.xml")
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("application/xml")
+    assert "<loc>https://rosterhires.com/</loc>" in response.text
+    assert "<loc>https://rosterhires.com/roster</loc>" in response.text
+
+
 def test_the_login_page_is_public(monkeypatch):
     """The customer's own door. It replaced /signup as the public entry point
     when self-registration closed — /signup now just bounces to the landing

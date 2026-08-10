@@ -266,6 +266,34 @@ def roster_page():
     return FileResponse(LANDING_DIR / "roster.html", media_type="text/html")
 
 
+# Nothing was pointing crawlers at the site or telling them what not to index
+# (/clients is credentialed but a Disallow keeps it out of results entirely;
+# /preview is a duplicate alias of "/"). Two evergreen pages exist today.
+_SITEMAP_XML = """<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+<url><loc>https://rosterhires.com/</loc></url>
+<url><loc>https://rosterhires.com/roster</loc></url>
+</urlset>
+"""
+
+_ROBOTS_TXT = """User-agent: *
+Disallow: /clients
+Disallow: /preview
+
+Sitemap: https://rosterhires.com/sitemap.xml
+"""
+
+
+@app.get("/robots.txt")
+def robots_txt():
+    return Response(content=_ROBOTS_TXT, media_type="text/plain")
+
+
+@app.get("/sitemap.xml")
+def sitemap_xml():
+    return Response(content=_SITEMAP_XML, media_type="application/xml")
+
+
 # Kept as an alias after the homepage rewrite shipped (root() above now serves
 # index-v2.html directly). Spec:
 # docs/superpowers/specs/2026-07-27-homepage-craft-pass-design.md
