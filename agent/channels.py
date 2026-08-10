@@ -10,7 +10,27 @@ print to the console so the flow is fully testable without an account.
 import os
 import re
 import sys
-from typing import Protocol
+from datetime import datetime, timezone
+from typing import Optional, Protocol
+
+
+def send_hours_ok(now: Optional[datetime] = None) -> bool:
+    """True only during the UTC window that's guaranteed to be 9am-8pm local
+    time in every mainland US timezone at once (Eastern through Pacific,
+    either side of DST) — so a proactive outbound text (Quote Chaser,
+    Retention Manager, Reviews, Referral) never lands at 3am wherever the
+    recipient actually is. Gates the scheduler's send calls in
+    recovery_tick.py; a skipped send just gets retried next hourly tick.
+
+    ponytail: one fixed UTC window (17:00-23:59 UTC) instead of a real
+    per-business timezone lookup — Business has no timezone field yet. Safe
+    (never sends outside 9am-8pm local anywhere in the mainland US) but
+    conservative (~7 send hours/day instead of the full ~11); also doesn't
+    account for Alaska/Hawaii. Upgrade: add Business.timezone and check
+    against the recipient's actual zone once that's needed.
+    """
+    hour = (now or datetime.now(timezone.utc)).hour
+    return 17 <= hour < 24
 
 
 def normalize_phone(raw: str) -> str:
