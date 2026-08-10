@@ -20,6 +20,7 @@ from lead_qualifier_rules import (
     REASON_JOB_TYPE_REPAIR_DEFAULT,
     REASON_JOB_TYPE_REPLACEMENT_KEYWORD,
     REASON_MEMBERSHIP_ELIGIBLE_NO_PLAN,
+    REASON_MEMBERSHIP_EMERGENCY_EXCLUDED,
     REASON_MEMBERSHIP_HAS_PLAN,
     REASON_MEMBERSHIP_JOB_TYPE_EXCLUDED,
     REASON_PRIORITY_FINANCING_CANDIDATE,
@@ -105,32 +106,32 @@ def test_financing_candidate_false_without_signal():
 # ---- membership_candidate --------------------------------------------------
 
 def test_membership_candidate_true_when_no_plan_and_repair():
-    candidate, reason = classify_membership_candidate("repair", None)
+    candidate, reason = classify_membership_candidate(_job(), "repair", None)
     assert candidate is True
     assert reason == REASON_MEMBERSHIP_ELIGIBLE_NO_PLAN
 
 
 def test_membership_candidate_true_when_no_plan_and_maintenance():
-    candidate, reason = classify_membership_candidate("maintenance", None)
+    candidate, reason = classify_membership_candidate(_job(), "maintenance", None)
     assert candidate is True
     assert reason == REASON_MEMBERSHIP_ELIGIBLE_NO_PLAN
 
 
 def test_membership_candidate_false_when_already_on_a_plan():
     customer = Customer(business_id=1, phone="+1", plan_notes="Quarterly plan")
-    candidate, reason = classify_membership_candidate("repair", customer)
+    candidate, reason = classify_membership_candidate(_job(), "repair", customer)
     assert candidate is False
     assert reason == REASON_MEMBERSHIP_HAS_PLAN
 
 
 def test_membership_candidate_false_for_estimate_job_type():
-    candidate, reason = classify_membership_candidate("estimate", None)
+    candidate, reason = classify_membership_candidate(_job(), "estimate", None)
     assert candidate is False
     assert reason == REASON_MEMBERSHIP_JOB_TYPE_EXCLUDED
 
 
 def test_membership_candidate_false_for_replacement_job_type():
-    candidate, reason = classify_membership_candidate("replacement", None)
+    candidate, reason = classify_membership_candidate(_job(), "replacement", None)
     assert candidate is False
     assert reason == REASON_MEMBERSHIP_JOB_TYPE_EXCLUDED
 
@@ -237,3 +238,24 @@ def test_qualify_reasoning_is_structured_codes_not_english_prose():
     for code in result["reasoning"].split(","):
         assert " " not in code, f"reasoning code {code!r} looks like a sentence, not an enum"
         assert code == code.upper()
+
+
+def test_no_membership_pitch_off_the_back_of_an_emergency():
+    """An emergency repair is still a "repair", so the job-type check passed it
+    and Membership Agent texted a $19/mo plan offer to a customer whose garage
+    had flooded the day before. Found in the 2026-08-10 end-to-end run."""
+    candidate, reason = classify_membership_candidate(
+        _job(service_type="water heater burst, flooding garage", urgency="emergency"),
+        "repair", None,
+    )
+    assert candidate is False
+    assert reason == REASON_MEMBERSHIP_EMERGENCY_EXCLUDED
+
+
+def test_a_same_day_job_is_still_worth_a_membership_offer():
+    """Only a genuine emergency is excluded — narrowing this to every urgent
+    job would quietly delete most of Membership Agent's pipeline."""
+    candidate, _ = classify_membership_candidate(
+        _job(urgency="same_day"), "repair", None,
+    )
+    assert candidate is True

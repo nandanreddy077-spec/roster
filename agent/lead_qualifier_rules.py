@@ -36,6 +36,12 @@ REASON_FINANCING_NO_SIGNAL = "FINANCING_NO_SIGNAL"
 REASON_MEMBERSHIP_HAS_PLAN = "MEMBERSHIP_HAS_PLAN"
 REASON_MEMBERSHIP_JOB_TYPE_EXCLUDED = "MEMBERSHIP_JOB_TYPE_EXCLUDED"
 REASON_MEMBERSHIP_ELIGIBLE_NO_PLAN = "MEMBERSHIP_ELIGIBLE_NO_PLAN"
+# A plan pitch is a good offer at the wrong moment when the last thing we did
+# for someone was an emergency. Their house flooded on Tuesday; a $19/mo
+# upsell on Wednesday reads as opportunism and costs more goodwill than the
+# plan is worth. Judged on the job's own urgency, so a same-day repair still
+# qualifies — only a genuine emergency is excluded.
+REASON_MEMBERSHIP_EMERGENCY_EXCLUDED = "MEMBERSHIP_EMERGENCY_EXCLUDED"
 
 REASON_PRIORITY_URGENCY = "PRIORITY_URGENCY_EMERGENCY_OR_SAME_DAY"
 REASON_PRIORITY_JOB_TYPE_REPLACEMENT = "PRIORITY_JOB_TYPE_REPLACEMENT"

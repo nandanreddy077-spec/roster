@@ -596,6 +596,7 @@ def test_accepting_stops_lead_qualifier_flagging_the_customer_again(session, spy
 
     customer = session.exec(
         select(Customer).where(Customer.phone == "+15125550001")).one()
-    candidate, reason = classify_membership_candidate("repair", customer)
+    candidate, reason = classify_membership_candidate(
+        Job(business_id=1, service_type="drain clear", urgency="routine"), "repair", customer)
     assert candidate is False
     assert reason == REASON_MEMBERSHIP_HAS_PLAN

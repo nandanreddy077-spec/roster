@@ -23,6 +23,7 @@ from lead_qualifier_rules import (
     REASON_JOB_TYPE_REPAIR_DEFAULT,
     REASON_JOB_TYPE_REPLACEMENT_KEYWORD,
     REASON_MEMBERSHIP_ELIGIBLE_NO_PLAN,
+    REASON_MEMBERSHIP_EMERGENCY_EXCLUDED,
     REASON_MEMBERSHIP_HAS_PLAN,
     REASON_MEMBERSHIP_JOB_TYPE_EXCLUDED,
     REASON_PRIORITY_FINANCING_CANDIDATE,
@@ -75,11 +76,18 @@ def classify_financing_candidate(job: Job, job_type: str) -> Tuple[bool, str]:
     return False, REASON_FINANCING_NO_SIGNAL
 
 
-def classify_membership_candidate(job_type: str, customer: Optional[Customer]) -> Tuple[bool, str]:
+def classify_membership_candidate(job: Job, job_type: str,
+                                  customer: Optional[Customer]) -> Tuple[bool, str]:
     if customer and customer.plan_notes:
         return False, REASON_MEMBERSHIP_HAS_PLAN
     if job_type not in MEMBERSHIP_ELIGIBLE_JOB_TYPES:
         return False, REASON_MEMBERSHIP_JOB_TYPE_EXCLUDED
+    # Takes the whole Job, not just job_type, purely to read urgency: an
+    # emergency repair is a repair, so the type check above passes it happily
+    # and Membership Agent then pitched a maintenance plan to someone whose
+    # garage had flooded the day before.
+    if job.urgency == "emergency":
+        return False, REASON_MEMBERSHIP_EMERGENCY_EXCLUDED
     return True, REASON_MEMBERSHIP_ELIGIBLE_NO_PLAN
 
 
@@ -110,7 +118,7 @@ def qualify(job: Job, customer: Optional[Customer]) -> dict:
     parseable for analytics."""
     job_type, job_type_reason = classify_job_type(job)
     financing_candidate, financing_reason = classify_financing_candidate(job, job_type)
-    membership_candidate, membership_reason = classify_membership_candidate(job_type, customer)
+    membership_candidate, membership_reason = classify_membership_candidate(job, job_type, customer)
     priority, priority_reason = classify_priority(job, job_type, financing_candidate)
     possible_spam, spam_reason = classify_possible_spam(job)
 
