@@ -8,15 +8,19 @@ from db_models import (
     Business,
     Customer,
     DepartmentInterest,
+    DispatchPlan,
     Employee,
     Event,
     Job,
+    JobQualification,
+    MembershipOffer,
     Message,
     OwnerNotification,
     RecoveryCampaign,
     RecoveryJob,
     RecoveryMessageLog,
     ReferralLead,
+    ReviewReply,
 )
 from sqlmodel import Session, select
 from starlette.testclient import TestClient
@@ -46,6 +50,44 @@ def _fully_populated_client(test_engine) -> int:
 
         s.add(Employee(business_id=bid, role_key="frontdesk"))
         s.add(Event(business_id=bid, type="job_booked"))
+        # Added 2026-08-11: these four reference Job as well as Business, and
+        # were missing from the cascade entirely. SQLite's silence (no
+        # PRAGMA foreign_keys=ON) let it through undetected; migrating to
+        # Postgres raised ForeignKeyViolation on this exact fixture shape and
+        # the business survived un-deleted. Fixed in the route; this is what
+        # would have failed first.
+        s.add(
+            DispatchPlan(
+                business_id=bid,
+                source_job_id=j.id,
+                dispatch_priority="normal",
+                scheduling_window="tomorrow",
+                requires_dispatch_review=False,
+                dispatch_reason="X",
+            )
+        )
+        s.add(
+            JobQualification(
+                business_id=bid,
+                source_job_id=j.id,
+                job_type="repair",
+                financing_candidate=False,
+                membership_candidate=False,
+                priority="normal",
+                possible_spam=False,
+                reasoning="X",
+            )
+        )
+        s.add(MembershipOffer(business_id=bid, source_job_id=j.id, customer_phone="+15550001111"))
+        s.add(
+            ReviewReply(
+                business_id=bid,
+                source_job_id=j.id,
+                customer_phone="+15550001111",
+                outcome="left_review",
+                raw_reply_text="great job",
+            )
+        )
         # Added Phase 4a (audit F7): the cascade predated both of these tables,
         # and SQLite enforces no foreign keys here (db.py sets no PRAGMA), so
         # the orphans they left behind were silent.
@@ -126,6 +168,12 @@ def test_delete_client_removes_business_and_every_related_row(test_engine, monke
             s.exec(select(OwnerNotification).where(OwnerNotification.business_id == bid)).all()
             == []
         )
+        assert s.exec(select(DispatchPlan).where(DispatchPlan.business_id == bid)).all() == []
+        assert (
+            s.exec(select(JobQualification).where(JobQualification.business_id == bid)).all() == []
+        )
+        assert s.exec(select(MembershipOffer).where(MembershipOffer.business_id == bid)).all() == []
+        assert s.exec(select(ReviewReply).where(ReviewReply.business_id == bid)).all() == []
 
 
 def test_client_detail_404s_after_delete_instead_of_crashing(test_engine, monkeypatch):

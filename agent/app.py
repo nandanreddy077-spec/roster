@@ -32,15 +32,19 @@ from db_models import (
     Business,
     Customer,
     DepartmentInterest,
+    DispatchPlan,
     Employee,
     Event,
     Job,
+    JobQualification,
+    MembershipOffer,
     Message,
     OwnerNotification,
     RecoveryCampaign,
     RecoveryJob,
     RecoveryMessageLog,
     ReferralLead,
+    ReviewReply,
     WebhookDelivery,
 )
 from deployment import deploy_department, deploy_role
@@ -1007,10 +1011,16 @@ def delete_client(client_id: int, confirm_name: str = Form(...)):
     Requires typing the business's exact name to confirm -- irreversible, no
     undo, so a typo'd client_id can't silently wipe the wrong business.
 
-    SQLite doesn't enforce foreign keys here (no PRAGMA foreign_keys=ON in
-    db.py), so a bare Business delete wouldn't error -- it would just leave
-    orphaned rows in every child table. Delete children first, in dependency
-    order, so nothing orphans regardless."""
+    Every table with a foreign key to business or job is deleted here, in
+    dependency order. This list used to be four tables short --
+    DispatchPlan, JobQualification, MembershipOffer and ReviewReply -- which
+    SQLite (no PRAGMA foreign_keys=ON) let through silently, leaving orphaned
+    rows behind a "deleted" business forever. Found migrating to Postgres
+    (2026-08-11): the same delete raises ForeignKeyViolation there and the
+    business survives un-deleted, which is what caught the gap -- Postgres
+    enforces the constraint SQLite was only ever documented as enforcing.
+    Covered by test_delete_client.py so a fifth referencing table added later
+    fails the same way, on either database, before it ships."""
     with Session(engine) as session:
         client = session.get(Business, client_id)
         if client is None:
@@ -1030,6 +1040,12 @@ def delete_client(client_id: int, confirm_name: str = Form(...)):
         session.exec(delete(ReferralLead).where(ReferralLead.business_id == client_id))
         session.exec(delete(RecoveryJob).where(RecoveryJob.business_id == client_id))
         session.exec(delete(RecoveryCampaign).where(RecoveryCampaign.business_id == client_id))
+        # These four reference Job as well as Business, so they must go before
+        # Job is deleted -- the gap Postgres caught (see docstring above).
+        session.exec(delete(DispatchPlan).where(DispatchPlan.business_id == client_id))
+        session.exec(delete(JobQualification).where(JobQualification.business_id == client_id))
+        session.exec(delete(MembershipOffer).where(MembershipOffer.business_id == client_id))
+        session.exec(delete(ReviewReply).where(ReviewReply.business_id == client_id))
         session.exec(delete(Job).where(Job.business_id == client_id))
         session.exec(delete(Message).where(Message.business_id == client_id))
         session.exec(delete(Employee).where(Employee.business_id == client_id))
