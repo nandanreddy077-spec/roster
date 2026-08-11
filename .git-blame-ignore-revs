@@ -1,0 +1,8 @@
+# Commits that changed formatting only, never behaviour. `git blame` skips
+# these so the line that actually introduced a change stays attributable.
+#
+# Enable once per clone:
+#   git config blame.ignoreRevsFile .git-blame-ignore-revs
+
+# style: apply ruff format across the codebase (132 files, no behaviour change)
+b0bc583a2a25b41877c84e452763dd8064860c89
