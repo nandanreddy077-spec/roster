@@ -6,6 +6,7 @@ Anthropic calls happen inside the injected `tick` callable, not here.
 """
 
 import asyncio
+import logging
 
 import pytest
 from scheduler import run_scheduler
@@ -34,7 +35,7 @@ def test_run_scheduler_ticks_immediately_then_sleeps_the_given_interval():
     assert sleeps == [42, 42]
 
 
-def test_run_scheduler_survives_a_crashing_tick(capsys):
+def test_run_scheduler_survives_a_crashing_tick(caplog):
     calls = []
 
     def tick():
@@ -45,11 +46,12 @@ def test_run_scheduler_survives_a_crashing_tick(capsys):
         if len(calls) >= 2:
             raise _StopLoop()
 
-    with pytest.raises(_StopLoop):
-        asyncio.run(run_scheduler(tick, interval_seconds=1, sleep=fake_sleep))
+    with caplog.at_level(logging.ERROR, logger="scheduler"):
+        with pytest.raises(_StopLoop):
+            asyncio.run(run_scheduler(tick, interval_seconds=1, sleep=fake_sleep))
 
     assert len(calls) == 2, "one crashed tick must not stop the next interval from firing"
-    assert "tick failed" in capsys.readouterr().err
+    assert any("tick failed" in r.message for r in caplog.records)
 
 
 def test_run_scheduler_runs_a_blocking_tick_without_a_custom_sleep():

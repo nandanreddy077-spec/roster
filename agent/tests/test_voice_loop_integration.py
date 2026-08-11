@@ -1361,7 +1361,9 @@ def test_run_call_survives_ws_drop_and_alerts_owner(test_engine, monkeypatch):
     assert "dropped" in alerts[0][1].lower() or "call them back" in alerts[0][1].lower()
 
 
-def test_supervised_call_task_logs_crash_and_is_released(capsys):
+def test_supervised_call_task_logs_crash_and_is_released(caplog):
+    import logging
+
     import app as app_module
 
     async def scenario():
@@ -1374,11 +1376,16 @@ def test_supervised_call_task_logs_crash_and_is_released(capsys):
         await asyncio.sleep(0)
         return task
 
-    asyncio.run(scenario())
+    with caplog.at_level(logging.ERROR, logger="app"):
+        asyncio.run(scenario())
 
     assert len(app_module._active_call_tasks) == 0, "finished task must be released"
-    err = capsys.readouterr().err
-    assert "call_sup" in err and "exploded" in err
+    assert any(
+        getattr(r, "call_id", None) == "call_sup"
+        and r.exc_info is not None
+        and "exploded" in str(r.exc_info[1])
+        for r in caplog.records
+    )
 
 
 # ---- Maximum call duration: no session can run forever ----------------------

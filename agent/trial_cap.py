@@ -6,12 +6,15 @@ one-time best-effort SMS alert. See
 docs/superpowers/specs/2026-07-10-self-serve-signup-dashboard-design.md.
 """
 
+import logging
 import os
 
 from channels import get_channel
 from db_models import BILLING_PAID, Business
 from sqlalchemy import update as sa_update
 from sqlmodel import Session
+
+logger = logging.getLogger(__name__)
 
 # Flat per-turn estimate, not real per-token billing — matches the founder's
 # own ~$0.30-0.60-per-call all-in cost research (Twilio + orchestration +
@@ -106,7 +109,11 @@ def _notify_owner_cap_reached(session, client: Business) -> None:
             )
             delivered = True
         except Exception as e:
-            print(f"Trial cap: failed to notify owner for client {client.id}: {e}")
+            logger.error(
+                "failed to notify owner of trial cap",
+                exc_info=e,
+                extra={"business_id": client.id},
+            )
     record_owner_notification(
         session, client.id, KIND_TRIAL_CAP_REACHED, SOURCE_TRIAL_CAP, message, delivered
     )
@@ -130,4 +137,8 @@ def _notify_founder_cap_reached(client: Business) -> None:
             ),
         )
     except Exception as e:
-        print(f"Trial cap: failed to notify founder for client {client.id}: {e}")
+        logger.error(
+            "failed to notify founder of trial cap",
+            exc_info=e,
+            extra={"business_id": client.id},
+        )

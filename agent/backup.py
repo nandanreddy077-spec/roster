@@ -27,11 +27,14 @@ it, and that gap is the reason the runbook exists.
 
 from __future__ import annotations
 
+import logging
 import os
 import sqlite3
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
+
+logger = logging.getLogger(__name__)
 
 # Keep a month of dailies. The database is ~180 KB against a 4.6 GB volume, so
 # retention costs nothing and the failure this protects against — noticing a
@@ -194,7 +197,7 @@ def run(now: Optional[datetime] = None) -> Optional[Path]:
     from db import DATA_DIR, engine
 
     if engine.dialect.name != "sqlite":
-        print("[backup] not a SQLite deployment — managed backups apply, skipping")
+        logger.info("not a SQLite deployment — managed backups apply, skipping")
         return None
 
     source = DATA_DIR / "roster.db"
@@ -202,15 +205,24 @@ def run(now: Optional[datetime] = None) -> Optional[Path]:
     today = (now or datetime.utcnow()).strftime("%Y%m%d")
     existing = existing_snapshots(dest_dir)
     if existing and _snapshot_date(existing[-1]) == today:
-        print(f"[backup] already have a snapshot for {today} — skipping ({existing[-1].name})")
+        logger.info(
+            "already have a snapshot for today — skipping",
+            extra={"date": today, "snapshot": existing[-1].name},
+        )
         return existing[-1]
 
     snapshot, counts = take_snapshot(source, dest_dir, now=now)
     removed = prune(dest_dir)
     total = sum(counts.values())
-    print(
-        f"[backup] {snapshot.name} verified — {total} rows across {len(counts)} tables, "
-        f"{len(existing_snapshots(dest_dir))} kept, {len(removed)} pruned"
+    logger.info(
+        "snapshot verified",
+        extra={
+            "snapshot": snapshot.name,
+            "rows": total,
+            "tables": len(counts),
+            "kept": len(existing_snapshots(dest_dir)),
+            "pruned": len(removed),
+        },
     )
     return snapshot
 

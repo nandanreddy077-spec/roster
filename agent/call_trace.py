@@ -13,7 +13,8 @@ with a millisecond offset from call receipt:
 Records are kept in memory (so tests can assert on them) and, once capture is
 enabled, appended as JSONL to `{capture_dir}/{call_id}.jsonl` so an
 authenticated call leaves a complete, replayable ground-truth log. A one-line
-summary of each record also goes to stderr for live tailing.
+structured summary of each record also goes to the standard logger, for live
+tailing and log aggregation alike.
 
 Two capture safety rules matter here: (1) the per-call file is only opened via
 `enable_capture()` *after* the inbound webhook is signature-verified, so an
@@ -37,11 +38,13 @@ record can never straddle the rotation boundary.
 """
 
 import json
+import logging
 import re
-import sys
 import time
 from pathlib import Path
 from typing import Any, Dict, Optional
+
+logger = logging.getLogger(__name__)
 
 # call_id is validated at the webhook trust boundary, but the capture file is a
 # filesystem path built from it, so we defensively re-sanitize here as well: a
@@ -175,7 +178,15 @@ class CallTrace:
             fh.write(json.dumps(rec, default=str) + "\n")
             fh.flush()
         label = rec.get("stage") or rec.get("type") or rec["kind"]
-        print(f"[call {self.call_id}] +{rec['t_ms']}ms {rec['kind']}: {label}", file=sys.stderr)
+        logger.info(
+            "call event",
+            extra={
+                "call_id": self.call_id,
+                "t_ms": rec["t_ms"],
+                "kind": rec["kind"],
+                "stage": label,
+            },
+        )
 
     @staticmethod
     def capture_unverified(

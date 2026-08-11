@@ -4,6 +4,7 @@ of Recovery/Referral — no campaigns, no manually-pasted list, mirroring
 referral_service.py's own shape.
 """
 
+import logging
 from datetime import datetime, timedelta
 from typing import List, Optional
 
@@ -34,6 +35,7 @@ from trial_cap import can_respond, record_usage
 
 agent = AgentEngine()
 sms_channel = get_channel()
+logger = logging.getLogger(__name__)
 
 
 def send_due_review_requests(session: Session) -> List[Job]:
@@ -77,7 +79,11 @@ def send_due_review_requests(session: Session) -> List[Job]:
             session.commit()
             sent.append(job)
         except Exception as e:
-            print(f"Reviews: failed to send review request for job {job.id}: {e}")
+            logger.error(
+                "Reviews failed to send review request",
+                exc_info=e,
+                extra={"business_id": job.business_id, "job_id": job.id},
+            )
             session.rollback()
             continue
 
@@ -135,7 +141,11 @@ def send_due_review_followups(session: Session) -> List[Job]:
             session.commit()
             sent.append(job)
         except Exception as e:
-            print(f"Reviews: failed to send review follow-up for job {job.id}: {e}")
+            logger.error(
+                "Reviews failed to send review follow-up",
+                exc_info=e,
+                extra={"business_id": job.business_id, "job_id": job.id},
+            )
             session.rollback()
             continue
 

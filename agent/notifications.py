@@ -10,10 +10,12 @@ subscriber ever appears (see ROADMAP.md). Best-effort by design: a failed
 owner-text must never break the booking that already committed.
 """
 
-import sys
+import logging
 
 from channels import get_channel
 from db_models import Business, Job, OwnerNotification
+
+logger = logging.getLogger(__name__)
 
 # Threads that are the owner testing their own AI, not real customer bookings —
 # we don't text the owner about their own dashboard test message.
@@ -220,9 +222,10 @@ def record_owner_notification(
         # Loud, unlike the sends above: a lost notification row is invisible
         # everywhere else, and this is the module meant to end exactly that
         # class of silence.
-        print(
-            f"[notifications] failed to record {kind} for business {business_id}: {e}",
-            file=sys.stderr,
+        logger.error(
+            "failed to record owner notification",
+            exc_info=e,
+            extra={"business_id": business_id, "kind": kind},
         )
         try:
             session.rollback()

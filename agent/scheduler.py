@@ -9,11 +9,12 @@ inside whatever `tick` callable the caller passes in.
 """
 
 import asyncio
-import sys
-import traceback
+import logging
 from typing import Callable
 
 from starlette.concurrency import run_in_threadpool
+
+logger = logging.getLogger(__name__)
 
 DEFAULT_INTERVAL_SECONDS = 3600  # hourly — nothing scheduled here needs to wait longer
 
@@ -31,7 +32,6 @@ async def run_scheduler(
     while True:
         try:
             await run_in_threadpool(tick)
-        except Exception:
-            print("[scheduler] tick failed:", file=sys.stderr)
-            traceback.print_exc()
+        except Exception as e:
+            logger.error("scheduler tick failed", exc_info=e)
         await sleep(interval_seconds)

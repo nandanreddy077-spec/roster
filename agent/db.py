@@ -1,9 +1,12 @@
 import fcntl
+import logging
 import os
 from pathlib import Path
 
 from sqlalchemy import event, text
 from sqlmodel import Session, SQLModel, create_engine
+
+logger = logging.getLogger(__name__)
 
 DATA_DIR = Path(os.environ.get("ROSTER_DATA_DIR") or (Path(__file__).parent / "data"))
 DATA_DIR.mkdir(exist_ok=True, parents=True)
@@ -299,8 +302,6 @@ def _dedupe_employees(engine=None) -> list:
     state that another lacks. Must run BEFORE _migrate_add_indexes: the unique
     index cannot be created while violations exist.
     """
-    import sys
-
     from db_models import Employee
     from sqlmodel import Session, select
 
@@ -317,10 +318,7 @@ def _dedupe_employees(engine=None) -> list:
                 seen.add(key)
         if removed:
             s.commit()
-            print(
-                f"[migration] removed {len(removed)} duplicate employee rows: {removed}",
-                file=sys.stderr,
-            )
+            logger.warning("removed duplicate employee rows", extra={"employee_ids": removed})
     return removed
 
 
@@ -333,8 +331,6 @@ def _migrate_add_indexes(engine=None):
 
     Idempotent via IF NOT EXISTS. Run only after _dedupe_employees.
     """
-    import sys
-
     from sqlalchemy import text
 
     eng = engine if engine is not None else globals()["engine"]
@@ -364,7 +360,7 @@ def _migrate_add_indexes(engine=None):
                 # A pre-existing violation is the real failure mode here, and it
                 # must be loud: the constraint silently not existing is exactly
                 # the state this migration exists to end.
-                print(f"[migration] FAILED to create index: {ddl} — {e}", file=sys.stderr)
+                logger.error("failed to create index", exc_info=e, extra={"ddl": ddl})
                 conn.rollback()
 
 

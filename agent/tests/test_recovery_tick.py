@@ -1,3 +1,4 @@
+import logging
 from datetime import datetime
 
 import pytest
@@ -6,37 +7,48 @@ from db_models import SchedulerHeartbeat
 from sqlmodel import Session, select
 
 
-def test_run_executes_without_error(monkeypatch, test_engine, capsys):
+def _messages(caplog) -> list[str]:
+    return [r.message for r in caplog.records]
+
+
+def test_run_executes_without_error(monkeypatch, test_engine, caplog):
     monkeypatch.setattr(recovery_tick, "engine", test_engine)
     # Deterministic regardless of wall-clock time: this test is about run()
     # wiring every step together, not about send_hours_ok's own boundary
     # (that's covered by test_channels.py).
     monkeypatch.setattr(recovery_tick, "send_hours_ok", lambda: True)
-    recovery_tick.run()
-    captured = capsys.readouterr()
-    assert "Recovery tick: sent 0 message(s)." in captured.out
-    assert "Referrals: sent 0 message(s)." in captured.out
-    assert "Reviews: sent 0 message(s)." in captured.out
-    assert "Review follow-ups: sent 0 message(s)." in captured.out
-    assert "Quote Chaser: enrolled 0 estimate(s)." in captured.out
-    assert "Lead Qualifier: qualified 0 job(s)." in captured.out
-    assert "Dispatcher: planned 0 job(s)." in captured.out
+
+    with caplog.at_level(logging.INFO, logger="recovery_tick"):
+        recovery_tick.run()
+
+    by_message = {r.message: r for r in caplog.records}
+    assert by_message["Recovery tick sent"].sent == 0
+    assert by_message["Referrals tick sent"].sent == 0
+    assert by_message["Reviews tick sent"].sent == 0
+    assert by_message["Review follow-ups tick sent"].sent == 0
+    assert by_message["Quote Chaser tick"].enrolled == 0
+    assert by_message["Lead Qualifier tick"].qualified == 0
+    assert by_message["Dispatcher tick"].planned == 0
 
 
 def test_run_skips_sends_but_still_qualifies_and_dispatches_outside_send_hours(
-    monkeypatch, test_engine, capsys
+    monkeypatch, test_engine, caplog
 ):
     monkeypatch.setattr(recovery_tick, "engine", test_engine)
     monkeypatch.setattr(recovery_tick, "send_hours_ok", lambda: False)
-    recovery_tick.run()
-    captured = capsys.readouterr()
-    assert "Quote Chaser: enrolled 0 estimate(s)." in captured.out
-    assert "Lead Qualifier: qualified 0 job(s)." in captured.out
-    assert "Dispatcher: planned 0 job(s)." in captured.out
-    assert "Outside send hours" in captured.out
-    assert "Recovery tick:" not in captured.out
-    assert "Referrals:" not in captured.out
-    assert "Reviews:" not in captured.out
+
+    with caplog.at_level(logging.INFO, logger="recovery_tick"):
+        recovery_tick.run()
+
+    messages = _messages(caplog)
+    by_message = {r.message: r for r in caplog.records}
+    assert by_message["Quote Chaser tick"].enrolled == 0
+    assert by_message["Lead Qualifier tick"].qualified == 0
+    assert by_message["Dispatcher tick"].planned == 0
+    assert any("outside send hours" in m for m in messages)
+    assert "Recovery tick sent" not in messages
+    assert "Referrals tick sent" not in messages
+    assert "Reviews tick sent" not in messages
 
 
 # ---- the heartbeat /health reads -------------------------------------------

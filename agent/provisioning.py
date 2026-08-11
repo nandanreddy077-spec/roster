@@ -15,13 +15,15 @@ Two halves:
    (docs.x.ai/developers/model-capabilities/audio/voice-agent/sip).
 """
 
+import logging
 import os
-import sys
 from typing import Optional
 
 import httpx
 from db_models import Business
 from twilio.rest import Client as TwilioRestClient
+
+logger = logging.getLogger(__name__)
 
 XAI_TRUNK_FRIENDLY_NAME = "Roster - xAI Voice"
 DEFAULT_PUBLIC_BASE_URL = "https://rosterhires.com"
@@ -179,10 +181,7 @@ def _record_voice_error(session, client: Business, error: Optional[str]) -> Opti
     session.add(client)
     session.commit()
     if error:
-        print(
-            f"[provisioning] voice provisioning failed for business {client.id}: {error}",
-            file=sys.stderr,
-        )
+        logger.error("voice provisioning failed", extra={"business_id": client.id, "error": error})
     return error
 
 

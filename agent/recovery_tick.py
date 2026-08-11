@@ -10,7 +10,7 @@ review_requested_at, source_job_id) or, for Membership, by a unique index that
 makes a duplicate claim impossible rather than merely unlikely.
 """
 
-import sys
+import logging
 from datetime import datetime
 
 import backup
@@ -27,6 +27,8 @@ from recovery_service import enroll_completed_estimates, tick
 from referral_service import send_due_referral_asks
 from review_service import send_due_review_followups, send_due_review_requests
 from sqlmodel import Session
+
+logger = logging.getLogger(__name__)
 
 
 def _record_heartbeat(ok: bool, error: str | None) -> None:
@@ -45,52 +47,57 @@ def _record_heartbeat(ok: bool, error: str | None) -> None:
             session.add(row)
             session.commit()
     except Exception as e:  # noqa: BLE001 — see docstring
-        print(f"[heartbeat] FAILED to record: {e}", file=sys.stderr)
+        logger.error("failed to record scheduler heartbeat", exc_info=e)
 
 
 def run():
     init_db()
     # First, and outside the session: a snapshot is only worth taking before
     # anything else in this tick can change data. Best-effort by design — a
-    # failed backup must never stop customers being served, but it is printed
+    # failed backup must never stop customers being served, but it is logged
     # loudly enough to notice, and the /health endpoint reports snapshot age.
     try:
         backup.run()
     except Exception as e:  # noqa: BLE001 — a backup must never break the tick
-        print(f"[backup] FAILED: {e}", file=sys.stderr)
+        logger.error("backup failed", exc_info=e)
 
     try:
         with Session(engine) as session:
             qualified = qualify_new_jobs(session)
-            print(f"Lead Qualifier: qualified {len(qualified)} job(s).")
+            logger.info("Lead Qualifier tick", extra={"qualified": len(qualified)})
             planned = recommend_dispatch(session)
-            print(f"Dispatcher: planned {len(planned)} job(s).")
+            logger.info("Dispatcher tick", extra={"planned": len(planned)})
             enrolled = enroll_completed_estimates(session)
-            print(f"Quote Chaser: enrolled {len(enrolled)} estimate(s).")
+            logger.info("Quote Chaser tick", extra={"enrolled": len(enrolled)})
             # Enrollment/qualification/dispatch never contact a customer directly,
             # so only the calls below — the ones that actually send a text — are
             # gated on send_hours_ok. A skipped send is picked up next tick.
             if send_hours_ok():
                 sent = tick(session)
-                print(f"Recovery tick: sent {len(sent)} message(s).")
+                logger.info("Recovery tick sent", extra={"sent": len(sent)})
                 referral_sent = send_due_referral_asks(session)
-                print(f"Referrals: sent {len(referral_sent)} message(s).")
+                logger.info("Referrals tick sent", extra={"sent": len(referral_sent)})
                 review_sent = send_due_review_requests(session)
-                print(f"Reviews: sent {len(review_sent)} message(s).")
+                logger.info("Reviews tick sent", extra={"sent": len(review_sent)})
                 review_followup_sent = send_due_review_followups(session)
-                print(f"Review follow-ups: sent {len(review_followup_sent)} message(s).")
+                logger.info(
+                    "Review follow-ups tick sent", extra={"sent": len(review_followup_sent)}
+                )
                 # Last on purpose: the membership offer is the latest touch in the
                 # post-completion sequence (day 7, after the review ask on day 1,
                 # the referral ask on day 4 and the review nudge around day 5 —
                 # see membership_engine.MEMBERSHIP_OFFER_DELAY_DAYS).
                 membership_sent = send_due_membership_offers(session)
-                print(f"Membership Agent: sent {len(membership_sent)} offer(s).")
+                logger.info("Membership Agent tick sent", extra={"sent": len(membership_sent)})
                 membership_followup_sent = send_due_membership_followups(session)
-                print(f"Membership follow-ups: sent {len(membership_followup_sent)} message(s).")
+                logger.info(
+                    "Membership follow-ups tick sent",
+                    extra={"sent": len(membership_followup_sent)},
+                )
             else:
-                print(
-                    "Outside send hours (9am-8pm local, every mainland US timezone) — "
-                    "skipping Recovery/Referral/Reviews/Membership sends this tick."
+                logger.info(
+                    "outside send hours (9am-8pm local, every mainland US timezone) — "
+                    "skipping Recovery/Referral/Reviews/Membership sends this tick"
                 )
     except Exception as e:
         # Recorded, then re-raised: scheduler.py's own try/except still logs

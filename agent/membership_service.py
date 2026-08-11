@@ -18,6 +18,7 @@ docstring documents. Registered in test_tick_deployment_gate.TICK_FUNCTIONS.
 Design doc: docs/superpowers/specs/2026-08-10-gen-2-workforce-design.md §4.1.
 """
 
+import logging
 from datetime import datetime, timedelta
 from typing import List, Optional
 
@@ -56,6 +57,7 @@ from trial_cap import can_respond, record_usage
 
 agent = AgentEngine()
 sms_channel = get_channel()
+logger = logging.getLogger(__name__)
 
 ROLE_KEY = "membership_agent"
 
@@ -212,7 +214,11 @@ def send_due_membership_offers(session: Session) -> List[MembershipOffer]:
         except Exception as e:
             # Release the claim so the next tick retries this job. A skipped
             # retry is recoverable; a double-text is not.
-            print(f"Membership Agent: failed to send offer for job {job.id}: {e}")
+            logger.error(
+                "Membership Agent failed to send offer",
+                exc_info=e,
+                extra={"business_id": job.business_id, "job_id": job.id},
+            )
             session.rollback()
             session.execute(sa_delete(MembershipOffer).where(MembershipOffer.id == offer.id))
             session.commit()
@@ -278,7 +284,11 @@ def send_due_membership_followups(session: Session) -> List[MembershipOffer]:
             )
             sent.append(offer)
         except Exception as e:
-            print(f"Membership Agent: failed to send follow-up for offer {offer.id}: {e}")
+            logger.error(
+                "Membership Agent failed to send follow-up",
+                exc_info=e,
+                extra={"business_id": offer.business_id, "offer_id": offer.id},
+            )
             session.rollback()
             session.execute(
                 sa_update(MembershipOffer)

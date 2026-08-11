@@ -6,13 +6,15 @@ is still a fully working Frontdesk, and voice can be finished later from the
 admin dashboard.
 """
 
-import sys
+import logging
 from datetime import datetime
 
 from db_models import Business
 from deployment import deploy_role
 from provisioning import buy_twilio_number, provision_voice
 from sqlmodel import Session
+
+logger = logging.getLogger(__name__)
 
 
 def activate_frontdesk(session: Session, client: Business) -> None:
@@ -38,9 +40,10 @@ def activate_frontdesk(session: Session, client: Business) -> None:
             # number, no funds, geo-permissions, etc.) — still go live SMS-less;
             # founder can provision a number later from /clients/{id}. Onboarding
             # must ALWAYS complete, never 500 on a provisioning failure.
-            print(
-                f"[activation] number provisioning failed for business {client.id}: {e}",
-                file=sys.stderr,
+            logger.warning(
+                "number provisioning failed",
+                exc_info=e,
+                extra={"business_id": client.id},
             )
 
     client.frontdesk_live = True
@@ -54,7 +57,8 @@ def activate_frontdesk(session: Session, client: Business) -> None:
     try:
         deploy_role(session, client.id, "frontdesk")
     except Exception as e:
-        print(
-            f"[activation] failed to create frontdesk employee for business {client.id}: {e}",
-            file=sys.stderr,
+        logger.error(
+            "failed to create frontdesk employee",
+            exc_info=e,
+            extra={"business_id": client.id},
         )

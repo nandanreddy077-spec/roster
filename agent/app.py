@@ -1,9 +1,9 @@
 import asyncio
 import base64
 import json
+import logging
 import os
 import secrets
-import sys
 from datetime import datetime
 from pathlib import Path
 
@@ -29,6 +29,7 @@ from logging_config import configure_logging
 # line is one JSON object" guarantee for exactly the lines someone greps for
 # first after a deploy.
 configure_logging()
+logger = logging.getLogger(__name__)
 
 from auth import ACCESS_LINK_MAX_AGE_SECONDS, make_access_token, resolve_session_secret
 from bookings import parse_money_cents
@@ -220,10 +221,10 @@ app.include_router(portal_router)
 init_db()
 
 for _missing in warn_missing_production_env(os.environ):
-    print(
-        f"[PRODUCTION WARNING] {_missing} is not set — see app.py:_PRODUCTION_CRITICAL_ENV "
-        "for what silently breaks without it.",
-        file=sys.stderr,
+    logger.error(
+        "production env var not set — see app.py:_PRODUCTION_CRITICAL_ENV for what "
+        "silently breaks without it",
+        extra={"missing_var": _missing},
     )
 
 
@@ -906,7 +907,11 @@ def complete_job(client_id: int, job_id: int, value: str = Form("")):
             try:
                 dispatch_job_completed(session, client, job)
             except Exception as e:
-                print(f"Runner: dispatch_job_completed failed for job {job_id}: {e}")
+                logger.error(
+                    "dispatch_job_completed failed",
+                    exc_info=e,
+                    extra={"business_id": client_id, "job_id": job_id},
+                )
             # After dispatch, not before: a deduped publish rolls the session
             # back, and the employees reacting to this completion matter more
             # than the record that it happened. Post-commit either way — the
@@ -923,9 +928,10 @@ def complete_job(client_id: int, job_id: int, value: str = Form("")):
                     ),
                 )
             except Exception as e:
-                print(
-                    f"[events] failed to publish job.completed for job {job_id}: {e}",
-                    file=sys.stderr,
+                logger.error(
+                    "failed to publish job.completed",
+                    exc_info=e,
+                    extra={"business_id": client_id, "job_id": job_id},
                 )
     return RedirectResponse(f"/clients/{client_id}", status_code=303)
 
@@ -1592,10 +1598,10 @@ def supervise_call_task(task: "asyncio.Task", call_id: str) -> None:
     def _done(t: "asyncio.Task") -> None:
         _active_call_tasks.discard(t)
         if t.cancelled():
-            print(f"[voice] call {call_id} task was cancelled", file=sys.stderr)
+            logger.warning("voice call task was cancelled", extra={"call_id": call_id})
             return
         exc = t.exception()
         if exc is not None:
-            print(f"[voice] call {call_id} task crashed: {exc!r}", file=sys.stderr)
+            logger.error("voice call task crashed", exc_info=exc, extra={"call_id": call_id})
 
     task.add_done_callback(_done)

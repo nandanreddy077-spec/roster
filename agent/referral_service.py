@@ -4,6 +4,7 @@ multi-touch sequence. Every job marked done becomes automatically eligible
 once the client has an incentive line set.
 """
 
+import logging
 from datetime import datetime, timedelta
 from typing import List, Optional
 
@@ -24,6 +25,7 @@ from trial_cap import can_respond, record_usage
 
 agent = AgentEngine()
 sms_channel = get_channel()
+logger = logging.getLogger(__name__)
 
 
 def send_due_referral_asks(session: Session) -> List[Job]:
@@ -70,7 +72,11 @@ def send_due_referral_asks(session: Session) -> List[Job]:
             session.commit()
             sent.append(job)
         except Exception as e:
-            print(f"Referrals: failed to send to job {job.id}: {e}")
+            logger.error(
+                "Referrals failed to send",
+                exc_info=e,
+                extra={"business_id": job.business_id, "job_id": job.id},
+            )
             session.rollback()
             continue
 

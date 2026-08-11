@@ -9,8 +9,8 @@ same thread MERGES new details into the existing job instead of inserting a
 second row; a different service, a completed job, or an old job books fresh.
 """
 
+import logging
 import re
-import sys
 from datetime import datetime, timedelta
 from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 from typing import Any, Dict, Optional, Tuple
@@ -19,6 +19,8 @@ from db_models import ORIGIN_ESCALATION, ORIGIN_INBOUND, Business, Job
 from eventbus import bus
 from events import JOB_BOOKED, DomainEvent
 from sqlmodel import Session, select
+
+logger = logging.getLogger(__name__)
 
 # A same-thread re-book of the same service within this window is treated as
 # the same job (details merged), not a new booking. Long enough to cover any
@@ -90,7 +92,11 @@ def _publish_job_booked(session: Session, job: Job, customer_id: Optional[int]) 
     except Exception as e:
         # Loud, like notifications.record_owner_notification: a booking that
         # never reached the event stream is invisible everywhere else.
-        print(f"[events] failed to publish job.booked for job {job.id}: {e}", file=sys.stderr)
+        logger.error(
+            "failed to publish job.booked",
+            exc_info=e,
+            extra={"business_id": job.business_id, "job_id": job.id},
+        )
 
 
 def book_job(

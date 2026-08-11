@@ -1,45 +1,47 @@
+import logging
+
 import channels
 
 
 def test_get_channel_returns_console_channel_and_warns_when_credentials_missing(
-    monkeypatch, capsys
+    monkeypatch, caplog
 ):
     monkeypatch.delenv("TWILIO_ACCOUNT_SID", raising=False)
     monkeypatch.delenv("TWILIO_AUTH_TOKEN", raising=False)
 
-    result = channels.get_channel()
+    with caplog.at_level(logging.WARNING, logger="channels"):
+        result = channels.get_channel()
 
     assert isinstance(result, channels.ConsoleChannel)
-    captured = capsys.readouterr()
-    assert "TWILIO_ACCOUNT_SID" in captured.err
-    assert "WARNING" in captured.err
+    assert any("TWILIO_ACCOUNT_SID" in r.message for r in caplog.records)
+    assert all(r.levelname == "WARNING" for r in caplog.records)
 
 
 def test_get_channel_returns_twilio_channel_without_warning_when_credentials_set(
-    monkeypatch, capsys
+    monkeypatch, caplog
 ):
     monkeypatch.setenv("TWILIO_ACCOUNT_SID", "AC_test")
     monkeypatch.setenv("TWILIO_AUTH_TOKEN", "token_test")
     monkeypatch.setenv("TWILIO_MESSAGING_SERVICE_SID", "MG_test")
 
-    result = channels.get_channel()
+    with caplog.at_level(logging.WARNING, logger="channels"):
+        result = channels.get_channel()
 
     assert isinstance(result, channels.TwilioChannel)
-    captured = capsys.readouterr()
-    assert "WARNING" not in captured.err
+    assert caplog.records == []
 
 
-def test_missing_messaging_service_warns_about_carrier_filtering(monkeypatch, capsys):
+def test_missing_messaging_service_warns_about_carrier_filtering(monkeypatch, caplog):
     """Unregistered A2P traffic still sends, so nothing else would ever
     surface that US carriers are quietly dropping it."""
     monkeypatch.setenv("TWILIO_ACCOUNT_SID", "AC_test")
     monkeypatch.setenv("TWILIO_AUTH_TOKEN", "token_test")
     monkeypatch.delenv("TWILIO_MESSAGING_SERVICE_SID", raising=False)
 
-    channels.get_channel()
+    with caplog.at_level(logging.WARNING, logger="channels"):
+        channels.get_channel()
 
-    captured = capsys.readouterr()
-    assert "10DLC" in captured.err
+    assert any("10DLC" in r.message for r in caplog.records)
 
 
 # ---- send_hours_ok ------------------------------------------------------------

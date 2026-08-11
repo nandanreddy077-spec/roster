@@ -8,11 +8,13 @@ Set TWILIO_ACCOUNT_SID + TWILIO_AUTH_TOKEN to send for real; otherwise messages
 print to the console so the flow is fully testable without an account.
 """
 
+import logging
 import os
 import re
-import sys
 from datetime import datetime, timezone
 from typing import Optional, Protocol
+
+logger = logging.getLogger(__name__)
 
 
 def send_hours_ok(now: Optional[datetime] = None) -> bool:
@@ -113,18 +115,16 @@ def get_channel() -> SMSChannel:
             # Not fatal — unregistered traffic still sends, it just gets
             # filtered by some US carriers, which looks exactly like "the
             # product doesn't work" from the owner's side.
-            print(
-                "[WARNING] TWILIO_MESSAGING_SERVICE_SID not set — SMS sends from a bare "
-                "long code with no A2P 10DLC campaign attached and may be filtered by "
-                "US carriers. See agent/README.md 'A2P 10DLC'.",
-                file=sys.stderr,
+            logger.warning(
+                "TWILIO_MESSAGING_SERVICE_SID not set — SMS sends from a bare long code "
+                "with no A2P 10DLC campaign attached and may be filtered by US carriers. "
+                "See agent/README.md 'A2P 10DLC'."
             )
         return TwilioChannel(sid, token, messaging_service_sid)
     # Deliberately loud, not a silent no-op: in production this means real
     # customer SMS never sends and nothing else would ever surface that.
-    print(
-        "[WARNING] TWILIO_ACCOUNT_SID/TWILIO_AUTH_TOKEN not set — outbound SMS "
-        "will only print to console, not actually send.",
-        file=sys.stderr,
+    logger.warning(
+        "TWILIO_ACCOUNT_SID/TWILIO_AUTH_TOKEN not set — outbound SMS will only "
+        "print to console, not actually send."
     )
     return ConsoleChannel()

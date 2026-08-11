@@ -5,6 +5,7 @@ enabling Frontdesk.
 """
 
 import json
+import logging
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
@@ -51,6 +52,7 @@ from trial_cap import can_respond, record_usage
 
 agent = AgentEngine()
 sms_channel = get_channel()
+logger = logging.getLogger(__name__)
 
 ACTIVE_STATUSES = ("pending", "awaiting_slot")
 
@@ -285,7 +287,11 @@ def tick(session: Session) -> List[RecoveryJob]:
             # Send failed: release the claim so the next tick can retry this
             # day. The claim window means a concurrent tick skipped it this
             # round — a skipped retry is recoverable, a double-text is not.
-            print(f"Recovery tick: failed to send to job {job.id}: {e}")
+            logger.error(
+                "Recovery tick failed to send",
+                exc_info=e,
+                extra={"business_id": job.business_id, "recovery_job_id": job.id},
+            )
             session.rollback()
             session.execute(
                 sa_update(RecoveryJob)
