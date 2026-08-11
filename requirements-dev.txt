@@ -1,0 +1,8 @@
+# Dev + CI tooling. Never installed in production — Railway builds from
+# agent/requirements.txt only.
+-r agent/requirements.txt
+
+ruff==0.16.2          # lint + format, one tool
+mypy==2.3.0           # type checking
+pip-audit==2.10.1     # known CVEs in dependencies
+pre-commit==4.6.2     # run the same gates before a commit, not after CI fails

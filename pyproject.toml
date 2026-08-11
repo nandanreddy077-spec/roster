@@ -1,0 +1,48 @@
+# Dev tooling only. Nothing here ships: Railway builds from agent/ with
+# agent/requirements.txt, so this file never reaches the running image.
+
+[tool.ruff]
+# The codebase was written to ~100 columns by hand. Ruff's default of 88 would
+# rewrite 1002 lines to no benefit; 100 touches 250. Match the convention that
+# is already there rather than imposing a new one.
+line-length = 100
+target-version = "py313"
+extend-exclude = [".venv", "basecheck", "strix_runs"]
+
+[tool.ruff.lint]
+# Deliberately small: pyflakes (real bugs), pycodestyle errors, import order.
+#
+# Not selected, and why — each of these fights a decision this codebase made
+# on purpose, and a linter that argues with the architecture gets switched off:
+#   UP   274 findings, all rewriting Optional[x]/List[x] annotations. Churn.
+#   DTZ  124 findings, all datetime.utcnow(). A real correctness question, but
+#        one that deserves its own milestone, not a mechanical sweep.
+#   BLE   29 findings. Every broad except here is a documented best-effort
+#        boundary — a failed owner alert must never break a customer's turn.
+select = ["E", "F", "I"]
+# The formatter owns line length. E501 then only ever fires on prose in
+# comments and docstrings, which the formatter cannot rewrap and which is not
+# worth mangling.
+ignore = ["E501"]
+
+[tool.ruff.lint.per-file-ignores]
+# app.py parses .env into os.environ before importing anything that reads env
+# vars at import time. The import order IS the fix, not the violation.
+"agent/app.py" = ["E402"]
+"agent/tests/test_voice_loop_integration.py" = ["E402"]
+
+[tool.mypy]
+python_version = "3.13"
+files = ["agent"]
+exclude = "(^|/)(\\.venv|basecheck|strix_runs)/"
+# Third-party packages here ship no stubs (twilio, anthropic, sqlmodel plugins).
+# Chasing those is not what this gate is for.
+ignore_missing_imports = true
+# Deliberately NOT strict. This is a largely unannotated codebase; strict mode
+# reports hundreds of errors on day one, and a gate that cannot go green gets
+# turned off within a week. These flags catch real defects — a wrong signature,
+# an impossible comparison, a stale ignore — without demanding an annotation
+# pass first. Tighten by adding one flag at a time, each with its own green CI.
+warn_unused_ignores = true
+warn_redundant_casts = true
+warn_unreachable = true
