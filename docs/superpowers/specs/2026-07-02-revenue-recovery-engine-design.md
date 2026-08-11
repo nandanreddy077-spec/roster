@@ -68,7 +68,7 @@ Each message:
 #### 3. Customer Replies
 
 **If positive signal** ("yes", "👍", "interested", "book me", etc.):
-- Recovery responds: "Great! When works best — Tuesday 2–4pm, Wednesday 10am–12pm, or Thursday 3–5pm?" 
+- Recovery responds: "Great! When works best — Tuesday 2–4pm, Wednesday 10am–12pm, or Thursday 3–5pm?"
 - Times pulled from owner's chosen calendar (Google, Jobber, Housecall Pro) or fallback to business hours
 - Up to 3 proposed slots across the next 5–7 business days
 

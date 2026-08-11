@@ -1,0 +1,33 @@
+# Catch locally what CI would catch in five minutes.
+#
+# Install once per clone:
+#   pre-commit install
+#
+# Deliberately the FAST gates only — lint, format, and the hygiene checks.
+# mypy and the test suite are not here: pytest takes ~40s, and a hook that
+# makes every commit wait is a hook people bypass with --no-verify. Those two
+# stay in CI, where waiting is free.
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.16.2
+    hooks:
+      - id: ruff-check
+        args: [--fix]
+      - id: ruff-format
+
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: trailing-whitespace
+        # Two trailing spaces are a hard line break in markdown, so stripping
+        # them silently changes how a document renders. This flag preserves
+        # them in .md and strips everywhere else.
+        args: [--markdown-linebreak-ext=md]
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-toml
+      - id: check-merge-conflict
+      # A private key or a 40MB file in git history cannot be un-shipped.
+      - id: detect-private-key
+      - id: check-added-large-files
+        args: [--maxkb=1024]
