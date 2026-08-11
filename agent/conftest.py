@@ -1,3 +1,5 @@
+import os
+
 import db_models  # noqa: F401  (registers tables with SQLModel.metadata)
 import pytest
 from sqlalchemy.pool import StaticPool
@@ -24,6 +26,26 @@ def _session_secret(monkeypatch):
 
 @pytest.fixture
 def test_engine():
+    """The database every test runs against.
+
+    Set ROSTER_TEST_DATABASE_URL to point the whole suite at a real Postgres
+    instead of in-memory SQLite. That is not decoration: production is moving to
+    Postgres, and a suite that only ever ran on SQLite cannot tell you the app
+    works there — SQLite does not enforce foreign keys by default, has no
+    sequences, and takes a different branch in locks.py. Running both is how the
+    migration was verified.
+
+    Schema is dropped and recreated per test so isolation matches the SQLite
+    behaviour (a fresh in-memory database each time) rather than leaking rows
+    between tests.
+    """
+    url = os.environ.get("ROSTER_TEST_DATABASE_URL")
+    if url:
+        eng = create_engine(url)
+        SQLModel.metadata.drop_all(eng)
+        SQLModel.metadata.create_all(eng)
+        return eng
+
     # StaticPool keeps a single shared connection across threads. Needed because
     # FastAPI's TestClient runs async routes in a worker thread, and plain
     # "sqlite://" in-memory DBs are otherwise per-connection (so the route's
