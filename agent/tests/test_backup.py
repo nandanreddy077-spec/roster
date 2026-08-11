@@ -159,3 +159,118 @@ def test_restore_drill_a_snapshot_survives_losing_the_original(tmp_path):
     conn = sqlite3.connect(restored)
     assert conn.execute("SELECT name FROM business").fetchone()[0] == "Kestrel Plumbing"
     conn.close()
+
+
+# ---- run() takes at most one snapshot per UTC calendar day -----------------
+# recovery_tick.run() calls backup.run() every scheduler tick, and production
+# ticks hourly (scheduler.DEFAULT_INTERVAL_SECONDS). Without this cap,
+# KEEP_SNAPSHOTS=30 meant thirty HOURS of retention, not the thirty days the
+# module promises -- found before it ever ran hourly against a real
+# deployment.
+
+
+def test_run_skips_a_second_snapshot_the_same_day(tmp_path, monkeypatch):
+    import backup as backup_module
+
+    monkeypatch.setattr(backup_module, "backup_dir", lambda: tmp_path / "backups")
+    _db(tmp_path / "roster.db")
+
+    class _FakeEngine:
+        dialect = type("D", (), {"name": "sqlite"})()
+
+    monkeypatch.setattr("db.DATA_DIR", tmp_path)
+    monkeypatch.setattr("db.engine", _FakeEngine())
+
+    morning = datetime(2026, 8, 11, 3, 0, 0)
+    noon = datetime(2026, 8, 11, 12, 0, 0)
+    first = backup_module.run(now=morning)
+    second = backup_module.run(now=noon)
+
+    assert first == second
+    assert len(existing_snapshots(tmp_path / "backups")) == 1
+
+
+def test_run_takes_a_new_snapshot_on_a_new_day(tmp_path, monkeypatch):
+    import backup as backup_module
+
+    monkeypatch.setattr(backup_module, "backup_dir", lambda: tmp_path / "backups")
+    _db(tmp_path / "roster.db")
+
+    class _FakeEngine:
+        dialect = type("D", (), {"name": "sqlite"})()
+
+    monkeypatch.setattr("db.DATA_DIR", tmp_path)
+    monkeypatch.setattr("db.engine", _FakeEngine())
+
+    day1 = datetime(2026, 8, 11, 3, 0, 0)
+    day2 = datetime(2026, 8, 12, 3, 0, 0)
+    first = backup_module.run(now=day1)
+    second = backup_module.run(now=day2)
+
+    assert first != second
+    assert len(existing_snapshots(tmp_path / "backups")) == 2
+
+
+# ---- status(), the /health signal -------------------------------------------
+
+
+def test_status_ok_for_a_fresh_snapshot(tmp_path, monkeypatch):
+    import backup as backup_module
+
+    monkeypatch.setattr(backup_module, "backup_dir", lambda: tmp_path / "backups")
+    source = _db(tmp_path / "roster.db")
+    now = datetime(2026, 8, 11, 12, 0, 0)
+    take_snapshot(source, tmp_path / "backups", now=now)
+
+    class _FakeEngine:
+        dialect = type("D", (), {"name": "sqlite"})()
+
+    monkeypatch.setattr("db.engine", _FakeEngine())
+
+    result = backup_module.status(now=now + timedelta(hours=1))
+    assert result["ok"] is True
+    assert result["age_seconds"] == 3600
+
+
+def test_status_flags_a_stale_snapshot(tmp_path, monkeypatch):
+    import backup as backup_module
+
+    monkeypatch.setattr(backup_module, "backup_dir", lambda: tmp_path / "backups")
+    source = _db(tmp_path / "roster.db")
+    now = datetime(2026, 8, 11, 12, 0, 0)
+    take_snapshot(source, tmp_path / "backups", now=now)
+
+    class _FakeEngine:
+        dialect = type("D", (), {"name": "sqlite"})()
+
+    monkeypatch.setattr("db.engine", _FakeEngine())
+
+    result = backup_module.status(now=now + timedelta(days=3))
+    assert result["ok"] is False
+
+
+def test_status_flags_no_snapshot_ever_taken(tmp_path, monkeypatch):
+    import backup as backup_module
+
+    monkeypatch.setattr(backup_module, "backup_dir", lambda: tmp_path / "backups")
+
+    class _FakeEngine:
+        dialect = type("D", (), {"name": "sqlite"})()
+
+    monkeypatch.setattr("db.engine", _FakeEngine())
+
+    result = backup_module.status()
+    assert result["ok"] is False
+    assert "no snapshot" in result["detail"]
+
+
+def test_status_is_ok_on_postgres_without_checking_the_filesystem(monkeypatch):
+    import backup as backup_module
+
+    class _FakeEngine:
+        dialect = type("D", (), {"name": "postgresql"})()
+
+    monkeypatch.setattr("db.engine", _FakeEngine())
+
+    result = backup_module.status()
+    assert result["ok"] is True

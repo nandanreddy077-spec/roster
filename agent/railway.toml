@@ -13,3 +13,10 @@ buildCommand = "pip install -r requirements.txt"
 startCommand = "uvicorn app:app --host 0.0.0.0 --port $PORT --workers 1 --proxy-headers --forwarded-allow-ips='*'"
 restartPolicyType = "ON_FAILURE"
 restartPolicyMaxRetries = 3
+# /health only fails (503) when the database itself is unreachable -- the one
+# condition where every route in this app is already broken and a restart is
+# the right response. A stale scheduler heartbeat or an old backup snapshot
+# stays a 200 with the detail in the body, since restarting the container
+# fixes neither and risks a restart loop over noise. See app.py's /health.
+healthcheckPath = "/health"
+healthcheckTimeout = 100

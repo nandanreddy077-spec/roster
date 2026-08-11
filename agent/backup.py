@@ -153,8 +153,39 @@ def prune(dest_dir: Path, keep: int = KEEP_SNAPSHOTS) -> List[Path]:
     return removed
 
 
+def backup_dir() -> Path:
+    """Where snapshots live. Shared by run() and /health so the two can never
+    disagree about which directory they mean."""
+    from db import DATA_DIR
+
+    return Path(os.environ.get("ROSTER_BACKUP_DIR") or (DATA_DIR / "backups"))
+
+
+def _snapshot_timestamp(path: Path) -> datetime:
+    """The moment a snapshot's own filename claims it was taken, e.g.
+    2026-08-11 06:04:20 from roster-20260811T060420Z.db — read from the name
+    rather than the file's mtime, so a copied or restored file still sorts
+    and groups correctly."""
+    stamp = path.stem[len(SNAPSHOT_PREFIX) :]
+    return datetime.strptime(stamp, "%Y%m%dT%H%M%SZ")
+
+
+def _snapshot_date(path: Path) -> str:
+    """The UTC calendar day a snapshot was taken, as YYYYMMDD — the grouping
+    key run() uses to allow at most one snapshot per day."""
+    return _snapshot_timestamp(path).strftime("%Y%m%d")
+
+
 def run(now: Optional[datetime] = None) -> Optional[Path]:
-    """Take today's snapshot. Called by the scheduler; safe to run by hand.
+    """Take today's snapshot — AT MOST ONE PER UTC CALENDAR DAY. Called by the
+    scheduler every tick; safe to run by hand.
+
+    recovery_tick.run() calls this every scheduler tick, and the in-process
+    scheduler ticks hourly (scheduler.DEFAULT_INTERVAL_SECONDS). Without the
+    same-day skip below, a snapshot was taken every hour while
+    KEEP_SNAPSHOTS=30 still meant "keep 30" — roughly thirty HOURS of
+    retention, not the thirty days this module's own docstring promises.
+    Found and fixed before this ever ran hourly against a real deployment.
 
     Returns None on a Postgres deployment rather than raising: after the
     migration this module's job moves to the platform's own managed backups,
@@ -167,7 +198,13 @@ def run(now: Optional[datetime] = None) -> Optional[Path]:
         return None
 
     source = DATA_DIR / "roster.db"
-    dest_dir = Path(os.environ.get("ROSTER_BACKUP_DIR") or (DATA_DIR / "backups"))
+    dest_dir = backup_dir()
+    today = (now or datetime.utcnow()).strftime("%Y%m%d")
+    existing = existing_snapshots(dest_dir)
+    if existing and _snapshot_date(existing[-1]) == today:
+        print(f"[backup] already have a snapshot for {today} — skipping ({existing[-1].name})")
+        return existing[-1]
+
     snapshot, counts = take_snapshot(source, dest_dir, now=now)
     removed = prune(dest_dir)
     total = sum(counts.values())
@@ -176,6 +213,34 @@ def run(now: Optional[datetime] = None) -> Optional[Path]:
         f"{len(existing_snapshots(dest_dir))} kept, {len(removed)} pruned"
     )
     return snapshot
+
+
+# Wider than the 24h a well-behaved deployment produces, tight enough to
+# actually mean something: two full missed days is a real signal, not noise
+# from one delayed tick.
+STALE_AFTER_SECONDS = 60 * 60 * 48
+
+
+def status(now: Optional[datetime] = None) -> Dict[str, object]:
+    """A dict for /health. Never raises — a health check must survive a
+    broken backups directory by reporting it, not by 500ing because of it."""
+    from db import engine
+
+    if engine.dialect.name != "sqlite":
+        return {"ok": True, "detail": "managed by platform (not sqlite)"}
+    try:
+        snapshots = existing_snapshots(backup_dir())
+        if not snapshots:
+            return {"ok": False, "detail": "no snapshot has ever been taken"}
+        latest = snapshots[-1]
+        age = ((now or datetime.utcnow()) - _snapshot_timestamp(latest)).total_seconds()
+        return {
+            "ok": age < STALE_AFTER_SECONDS,
+            "latest": latest.name,
+            "age_seconds": int(age),
+        }
+    except Exception as e:  # noqa: BLE001 — see docstring
+        return {"ok": False, "detail": f"{type(e).__name__}: {e}"}
 
 
 if __name__ == "__main__":

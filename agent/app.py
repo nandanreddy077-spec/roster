@@ -18,6 +18,7 @@ if _env_file.exists():
         _key, _, _value = _line.partition("=")
         os.environ.setdefault(_key.strip(), _value.strip())
 
+import backup
 import departments
 import metrics
 from auth import ACCESS_LINK_MAX_AGE_SECONDS, make_access_token, resolve_session_secret
@@ -45,6 +46,7 @@ from db_models import (
     RecoveryMessageLog,
     ReferralLead,
     ReviewReply,
+    SchedulerHeartbeat,
     WebhookDelivery,
 )
 from deployment import deploy_department, deploy_role
@@ -52,7 +54,7 @@ from eventbus import bus
 from events import JOB_COMPLETED, DomainEvent
 from expansion import mark_actioned, open_interests_for
 from fastapi import FastAPI, Form, HTTPException, Request
-from fastapi.responses import FileResponse, RedirectResponse, Response
+from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from locks import conversation_lock
@@ -299,6 +301,64 @@ def twiml_empty() -> Response:
     return Response(
         content='<?xml version="1.0" encoding="UTF-8"?><Response></Response>',
         media_type="application/xml",
+    )
+
+
+# Wider than one missed tick, tight enough to mean something: two full hours
+# of silence from an hourly scheduler (scheduler.DEFAULT_INTERVAL_SECONDS) is
+# a real problem, not jitter.
+_SCHEDULER_STALE_AFTER_SECONDS = 2 * 3600
+
+
+@app.get("/health")
+def health():
+    """Whether this process can actually do its job, for Railway's
+    healthcheckPath and for a human mid-incident. Did not exist before this —
+    an outage was previously discovered by a customer, not by the platform.
+
+    Three checks, two different consequences on purpose:
+
+    - database: the one hard failure. Unreachable means every webhook, every
+      dashboard load, every scheduler tick is already broken, so this alone
+      drops the HTTP status to 503 -- worth Railway restarting the container
+      over.
+    - scheduler / backups: soft signals, always 200. A stale heartbeat or an
+      old snapshot is worth a human's attention, but restarting the container
+      over it would not fix either one and risks a restart loop over noise.
+      Surfaced in the body so a human (or an external monitor reading the
+      JSON) can see it.
+    """
+    checks: dict = {}
+
+    try:
+        with Session(engine) as session:
+            session.exec(select(1)).first()
+        checks["database"] = {"ok": True}
+    except Exception as e:  # noqa: BLE001 — the exact failure belongs in the report, not a 500
+        checks["database"] = {"ok": False, "error": f"{type(e).__name__}: {e}"}
+
+    try:
+        with Session(engine) as session:
+            hb = session.get(SchedulerHeartbeat, 1)
+        if hb is None:
+            checks["scheduler"] = {"ok": False, "detail": "no tick has ever completed"}
+        else:
+            age = (datetime.utcnow() - hb.last_tick_at).total_seconds()
+            checks["scheduler"] = {
+                "ok": hb.ok and age < _SCHEDULER_STALE_AFTER_SECONDS,
+                "last_tick_at": hb.last_tick_at.isoformat(),
+                "age_seconds": int(age),
+                "last_tick_error": hb.error,
+            }
+    except Exception as e:  # noqa: BLE001 — same reasoning as the database check above
+        checks["scheduler"] = {"ok": False, "error": f"{type(e).__name__}: {e}"}
+
+    checks["backups"] = backup.status()
+
+    healthy = checks["database"]["ok"]
+    return JSONResponse(
+        {"status": "ok" if healthy else "down", "checks": checks},
+        status_code=200 if healthy else 503,
     )
 
 

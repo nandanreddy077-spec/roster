@@ -535,3 +535,18 @@ class Event(SQLModel, table=True):
     employee_id: Optional[int] = Field(default=None, foreign_key="employee.id")
     dedup_key: Optional[str] = Field(default=None, unique=True, index=True)
     occurred_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class SchedulerHeartbeat(SQLModel, table=True):
+    """One row, always id=1, overwritten every tick. Exists so /health can
+    answer "is the scheduler actually running" from data instead of a guess —
+    before this there was no record anywhere of whether recovery_tick.run()
+    had ever completed, only what it printed to stdout, which nobody was
+    watching. recovery_tick.py updates this in a finally block, so a tick
+    that raises still leaves a readable, honest record of its own failure
+    rather than silently going stale."""
+
+    id: Optional[int] = Field(default=1, primary_key=True)
+    last_tick_at: datetime = Field(default_factory=datetime.utcnow)
+    ok: bool = True
+    error: Optional[str] = None
