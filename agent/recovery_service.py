@@ -8,9 +8,6 @@ import json
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
-from sqlalchemy import update as sa_update
-from sqlmodel import Session, select
-
 from bookings import book_job
 from calendar_provider import get_calendar_provider
 from channels import STOP_KEYWORDS, get_channel
@@ -35,8 +32,6 @@ from notifications import (
     notify_owner_of_escalation,
     record_owner_notification,
 )
-from repositories import get_or_create_customer
-from runner import is_active
 from recovery_engine import (
     CONFIRM_SLOT_TOOL,
     ESCALATE_TOOL,
@@ -48,6 +43,10 @@ from recovery_engine import (
     clean_service_type,
     render_template,
 )
+from repositories import get_or_create_customer
+from runner import is_active
+from sqlalchemy import update as sa_update
+from sqlmodel import Session, select
 from trial_cap import can_respond, record_usage
 
 agent = AgentEngine()

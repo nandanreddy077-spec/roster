@@ -9,11 +9,9 @@ pitch twice, never text at 3am, never claim more than we did.
 import importlib
 from datetime import datetime, timedelta
 
-import pytest
-from sqlmodel import Session, select
-
 import membership_engine
 import membership_service
+import pytest
 from conftest import StubAgent
 from db_models import (
     Business,
@@ -31,6 +29,7 @@ from membership_service import (
     send_due_membership_followups,
     send_due_membership_offers,
 )
+from sqlmodel import select
 
 PLAN = "Comfort Club — $19/month, two tune-ups a year plus priority scheduling."
 

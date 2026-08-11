@@ -7,12 +7,9 @@ once the client has an incentive line set.
 from datetime import datetime, timedelta
 from typing import List, Optional
 
-from sqlmodel import Session, select
-
 from channels import get_channel
 from db_models import Business, Job, ReferralLead
 from engine import AgentEngine
-from runner import is_active
 from referral_engine import (
     RECORD_REFERRAL_TOOL,
     REFERRAL_DELAY_DAYS,
@@ -21,6 +18,8 @@ from referral_engine import (
     build_referral_reply_prompt,
     render_referral_template,
 )
+from runner import is_active
+from sqlmodel import Session, select
 from trial_cap import can_respond, record_usage
 
 agent = AgentEngine()

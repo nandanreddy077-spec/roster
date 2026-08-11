@@ -1,8 +1,7 @@
-from sqlmodel import Session, select
-
+import referral_service
 from conftest import StubAgent
 from db_models import Business, Job, ReferralLead
-import referral_service
+from sqlmodel import Session, select
 
 
 def test_referral_reply_skips_paid_call_but_logs_raw_when_capped(test_engine, monkeypatch):

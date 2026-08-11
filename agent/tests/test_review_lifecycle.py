@@ -20,10 +20,9 @@ import importlib
 from datetime import datetime, timedelta
 
 import pytest
-from sqlmodel import Session, select
-
 from db_models import Business, Job, ReviewReply
 from deployment import deploy_role
+from sqlmodel import Session
 
 CUSTOMER = "+15125550001"
 

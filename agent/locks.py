@@ -17,9 +17,8 @@ import hashlib
 import threading
 from contextlib import contextmanager
 
-from sqlalchemy import text
-
 import db
+from sqlalchemy import text
 
 _registry_lock = threading.Lock()
 _local_locks: dict = {}

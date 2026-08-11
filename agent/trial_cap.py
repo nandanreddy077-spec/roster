@@ -8,11 +8,10 @@ docs/superpowers/specs/2026-07-10-self-serve-signup-dashboard-design.md.
 
 import os
 
-from sqlalchemy import update as sa_update
-from sqlmodel import Session
-
 from channels import get_channel
 from db_models import BILLING_PAID, Business
+from sqlalchemy import update as sa_update
+from sqlmodel import Session
 
 # Flat per-turn estimate, not real per-token billing — matches the founder's
 # own ~$0.30-0.60-per-call all-in cost research (Twilio + orchestration +
@@ -94,8 +93,8 @@ def _notify_owner_cap_reached(session, client: Business) -> None:
     )
 
     message = (
-        f"Your Roster trial has hit its usage limit, so your AI employees have "
-        f"paused answering. Nothing is lost — get in touch and we'll switch you on."
+        "Your Roster trial has hit its usage limit, so your AI employees have "
+        "paused answering. Nothing is lost — get in touch and we'll switch you on."
     )
     delivered = False
     if client.escalation_phone:

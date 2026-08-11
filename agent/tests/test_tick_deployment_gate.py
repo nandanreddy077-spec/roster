@@ -18,14 +18,12 @@ has actually worked here.
 """
 
 import importlib
-
-import pytest
-from sqlmodel import Session, select
-
 from datetime import datetime, timedelta
 
+import pytest
 from db_models import Business, Employee, Job, JobQualification
 from deployment import deploy_role
+from sqlmodel import Session, select
 
 # Every function recovery_tick.run() drives, in its order — the ONE list, used
 # both to exercise the tick below and to check itself against the scheduler
@@ -75,7 +73,10 @@ def tick(monkeypatch):
         def send(self, from_number, to_number, body):
             sent.append({"to": to_number, "body": body})
 
-    import membership_service, recovery_service, referral_service, review_service
+    import membership_service
+    import recovery_service
+    import referral_service
+    import review_service
 
     for mod in (review_service, referral_service, recovery_service, membership_service):
         mod.sms_channel = Spy()

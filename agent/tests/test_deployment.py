@@ -4,10 +4,9 @@ two more marked a business deployed without creating one at all
 (activation.activate_frontdesk, app.deploy_employee) — audit F1."""
 
 import pytest
-from sqlmodel import select
-
 from db_models import Business, Employee
 from deployment import deploy_department, deploy_role
+from sqlmodel import select
 
 
 def _business(session, email):
@@ -132,7 +131,7 @@ def test_every_deployable_role_resolves_to_a_department(session):
     """I4. A deployed role whose key doesn't resolve would vanish from every
     department view — the exact failure Phase 1's alias exists to prevent,
     asserted here against what deployment can actually write."""
-    from departments import REGISTRY, deployable_employees_for, department_for_role
+    from departments import REGISTRY, department_for_role, deployable_employees_for
 
     for department in REGISTRY:
         for employee in deployable_employees_for(department.key):

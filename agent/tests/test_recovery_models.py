@@ -1,8 +1,7 @@
 import json
 
-from sqlmodel import Session
-
 from db_models import Business, Job, RecoveryCampaign, RecoveryJob, RecoveryMessageLog
+from sqlmodel import Session
 
 
 def make_client(session: Session) -> Business:

@@ -2,14 +2,13 @@
 is pending. A home-service owner fills the form, we store the lead and the
 founder follows up + hand-onboards. Replaces self-serve signup + phone CTAs."""
 
-from sqlmodel import Session, select
-from starlette.testclient import TestClient
-
 import app as app_module
 import db as db_module
 import portal as portal_module
 from conftest import DASH_AUTH
 from db_models import AccessRequest
+from sqlmodel import Session, select
+from starlette.testclient import TestClient
 
 
 def _client(test_engine, monkeypatch):

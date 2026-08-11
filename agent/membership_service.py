@@ -21,11 +21,6 @@ Design doc: docs/superpowers/specs/2026-08-10-gen-2-workforce-design.md §4.1.
 from datetime import datetime, timedelta
 from typing import List, Optional
 
-from sqlalchemy import delete as sa_delete
-from sqlalchemy import update as sa_update
-from sqlalchemy.exc import IntegrityError
-from sqlmodel import Session, select
-
 from channels import STOP_KEYWORDS, get_channel
 from db_models import Business, Customer, Job, JobQualification, MembershipOffer
 from engine import AgentEngine
@@ -53,6 +48,10 @@ from notifications import (
 )
 from repositories import get_or_create_customer
 from runner import is_active
+from sqlalchemy import delete as sa_delete
+from sqlalchemy import update as sa_update
+from sqlalchemy.exc import IntegrityError
+from sqlmodel import Session, select
 from trial_cap import can_respond, record_usage
 
 agent = AgentEngine()

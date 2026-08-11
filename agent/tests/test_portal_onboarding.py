@@ -11,14 +11,13 @@ would have sailed past every guard and triggered a real number purchase for a
 shop Roster had already set up by hand. That is the case the last test pins.
 """
 
-from fastapi.testclient import TestClient
-from sqlmodel import Session
-
 import app as app_module
 import db as db_module
 import portal as portal_module
 from conftest import login_as, provisioned_business
 from db_models import Business
+from fastapi.testclient import TestClient
+from sqlmodel import Session
 
 
 def _wire(monkeypatch, test_engine):

@@ -2,13 +2,12 @@
 a 404 in the customer's top bar, and the exact thing ARCHITECTURE.md invariant
 9 ("no dead controls") forbids. These tests keep it real."""
 
-from fastapi.testclient import TestClient
-from sqlmodel import Session, select
-
 import app as app_module
 import db as db_module
 import portal as portal_module
 from db_models import Business
+from fastapi.testclient import TestClient
+from sqlmodel import Session, select
 
 
 def _logged_in(monkeypatch, test_engine, **kwargs) -> TestClient:
@@ -23,8 +22,9 @@ def _logged_in(monkeypatch, test_engine, **kwargs) -> TestClient:
         business_id = business.id
 
     client = TestClient(app_module.app)
-    from auth import make_access_token
     import os
+
+    from auth import make_access_token
 
     client.get(f"/access/{make_access_token(business_id, os.environ)}")
     return client

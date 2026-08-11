@@ -5,14 +5,13 @@ rows, never from requested_roster or a hardcoded badge (the blueprint's
 state-derivation invariant). Numbers come from metrics.py, the same module the
 founder console uses."""
 
-from sqlmodel import Session, select
-from starlette.testclient import TestClient
-
 import app as app_module
 import portal
 from auth import hash_password
 from db_models import Business, Job
 from deployment import deploy_department, deploy_role
+from sqlmodel import Session
+from starlette.testclient import TestClient
 
 _EMAIL = iter(f"v2-{n}@test.io" for n in range(1000))
 
@@ -237,9 +236,8 @@ def test_an_inactive_department_educates_rather_than_just_reporting_absence(
     """Blueprint §7: every inactive card states the problem, the outcome, and
     why an owner eventually wants it — copy the Phase 1 registry already
     carries."""
-    from markupsafe import escape
-
     from departments import get_department
+    from markupsafe import escape
 
     body = _page(test_engine, monkeypatch, path=DEPARTMENTS)
     finance = get_department("finance")

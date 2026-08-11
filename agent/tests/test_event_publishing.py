@@ -4,15 +4,14 @@ event stream, and never at the expense of the booking that caused them.
 
 import json
 
-from fastapi.testclient import TestClient
-from sqlmodel import Session, select
-
 import app as app_module
 import bookings
 from bookings import book_job
 from conftest import DASH_AUTH
 from db_models import Business, Event, Job
 from events import JOB_BOOKED, JOB_COMPLETED
+from fastapi.testclient import TestClient
+from sqlmodel import Session, select
 
 
 def _make_business(test_engine) -> int:

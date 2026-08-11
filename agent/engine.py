@@ -3,7 +3,6 @@ from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 import anthropic
-
 from models import ClientConfig
 
 MODEL = "claude-sonnet-4-6"

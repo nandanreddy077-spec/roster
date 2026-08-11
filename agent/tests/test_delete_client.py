@@ -2,8 +2,6 @@
 after a debugging session left a dead-end test client (an xAI-registered
 number whose signing secret was unrecoverable) with no way to remove it."""
 
-from sqlmodel import Session, select
-
 import app as app_module
 from conftest import DASH_AUTH
 from db_models import (
@@ -20,6 +18,7 @@ from db_models import (
     RecoveryMessageLog,
     ReferralLead,
 )
+from sqlmodel import Session, select
 from starlette.testclient import TestClient
 
 

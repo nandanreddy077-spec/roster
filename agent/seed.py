@@ -7,10 +7,9 @@ produces. Safe to re-run: it replaces the prior demo of the same name.
 
 import json
 
-from sqlmodel import Session, delete, select
-
 from db import engine, init_db
 from db_models import Business, Job, Message
+from sqlmodel import Session, delete, select
 
 DEMO_NAME = "Lou's Heating & Cooling"
 THREAD = "dashboard"  # the dashboard chat view reads this thread

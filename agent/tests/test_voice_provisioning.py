@@ -12,12 +12,11 @@ failure. What they cannot prove is covered in test_voice_loop_integration.py
 (the call loop) and, finally, only by a real phone call.
 """
 
-import pytest
-from sqlmodel import Session
-
 import provisioning
+import pytest
 from db_models import Business
 from provisioning import ProvisioningError, provision_voice
+from sqlmodel import Session
 
 SECRET = "whsec_dGVzdHNlY3JldHRlc3RzZWNyZXR0ZXN0c2VjcmV0"
 

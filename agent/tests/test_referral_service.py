@@ -1,11 +1,10 @@
 import json
 from datetime import datetime, timedelta
 
-from sqlmodel import Session, select
-
-from db_models import Business, Employee, Job, ReferralLead
-from conftest import StubAgent
 import referral_service
+from conftest import StubAgent
+from db_models import Business, Employee, Job, ReferralLead
+from sqlmodel import Session, select
 
 
 def make_client(session: Session, referral_incentive=None) -> Business:

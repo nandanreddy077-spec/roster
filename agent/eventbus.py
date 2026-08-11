@@ -23,11 +23,10 @@ import json
 from collections import defaultdict
 from typing import Callable, Dict, List
 
-from sqlalchemy.exc import IntegrityError
-from sqlmodel import Session, select
-
 from db_models import Event
 from events import DomainEvent
+from sqlalchemy.exc import IntegrityError
+from sqlmodel import Session, select
 
 
 class EventBus:

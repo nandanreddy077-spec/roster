@@ -1,6 +1,6 @@
-from sqlmodel import Session, select
 from db import _backfill_customers
 from db_models import Business, Customer, Job
+from sqlmodel import Session, select
 
 
 def test_backfill_creates_and_links(test_engine):

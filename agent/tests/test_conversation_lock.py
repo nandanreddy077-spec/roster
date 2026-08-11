@@ -6,13 +6,12 @@ block each other."""
 import threading
 import time
 
-from sqlmodel import Session
-
 import app as app_module
 import db as db_module
 import portal as portal_module
 import service
 from db_models import Business
+from sqlmodel import Session
 
 
 def test_same_conversation_is_mutually_exclusive():

@@ -36,13 +36,11 @@ from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 import websockets
-from sqlmodel import Session, select
-
 from bookings import book_job, record_escalation
-from memory import build_customer_context
 from call_trace import CallTrace
 from db_models import Business, Job, Message
 from engine import LOG_JOB_TOOL, TRANSFER_CALL_TOOL, build_voice_system_prompt
+from memory import build_customer_context
 from notifications import (
     KIND_CALL_DROPPED,
     KIND_ESCALATION,
@@ -59,6 +57,7 @@ from notifications import (
     record_owner_notification,
 )
 from repositories import get_or_create_customer
+from sqlmodel import Session, select
 
 REALTIME_URL = "wss://api.x.ai/v1/realtime"
 VOICE_THREAD_PREFIX = "xai-voice:"

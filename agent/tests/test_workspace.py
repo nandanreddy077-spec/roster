@@ -3,8 +3,6 @@ renders (founder, 2026-07-29). It joins DepartmentStatus + EMPLOYEE_RECORDS +
 METRIC_RECORDS exactly once, so the template never has to; no route or
 template contains the join logic tested here."""
 
-from sqlmodel import Session
-
 from db_models import Business, Employee, Job
 from deployment import deploy_department, deploy_role
 from workspace import (

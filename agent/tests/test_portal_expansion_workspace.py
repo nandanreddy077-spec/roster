@@ -3,14 +3,13 @@ not a separate destination (founder, 2026-07-29). Renders one
 ExpansionWorkspace (workspace.py); the route never touches DepartmentInterest
 or deployment state beyond calling expansion.record_interest."""
 
-from sqlmodel import Session, select
-from starlette.testclient import TestClient
-
 import app as app_module
 import portal
 from auth import hash_password
 from db_models import Business, DepartmentInterest
 from deployment import deploy_department, deploy_role
+from sqlmodel import Session, select
+from starlette.testclient import TestClient
 
 _EMAIL = iter(f"xw-{n}@test.io" for n in range(1000))
 

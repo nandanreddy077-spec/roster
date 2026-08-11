@@ -1,5 +1,5 @@
-from sqlmodel import select
 from db_models import Business, Job
+from sqlmodel import select
 
 
 def test_business_persists(session):

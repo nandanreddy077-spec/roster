@@ -14,15 +14,13 @@ import asyncio
 import json
 from datetime import datetime
 
-import pytest
-from sqlmodel import Session, select
-
 import app as app_module
 import db as db_module
 import portal as portal_module
 import service
 from conftest import StubAgent
 from db_models import Business, Job, Message
+from sqlmodel import Session, select
 from starlette.testclient import TestClient
 
 
@@ -239,8 +237,9 @@ def test_book_job_different_service_creates_second_job(test_engine):
 
 
 def test_book_job_completed_job_does_not_absorb_new_booking(test_engine):
-    from bookings import book_job
     from datetime import datetime
+
+    from bookings import book_job
 
     b = _seed(test_engine)
     with Session(test_engine) as s:
@@ -468,11 +467,11 @@ def test_duplicate_xai_call_webhook_spawns_run_call_once(test_engine, monkeypatc
 
 
 def test_voice_log_job_recall_same_service_updates_single_job(test_engine, monkeypatch):
-    from xai_voice_adapter import run_call
-    from call_trace import CallTrace
-    from tests.test_voice_loop_integration import FakeWS, connector_for
-
     import xai_voice_adapter as adapter
+    from call_trace import CallTrace
+    from xai_voice_adapter import run_call
+
+    from tests.test_voice_loop_integration import FakeWS, connector_for
 
     monkeypatch.setattr(adapter, "notify_owner_of_booking", lambda *a, **k: True)
     b = _seed(test_engine, xai_phone_number="+15125550100")

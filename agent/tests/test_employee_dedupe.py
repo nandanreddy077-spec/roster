@@ -9,12 +9,11 @@ SELECT-then-INSERT with no constraint behind it, and FastAPI runs sync handlers
 in a threadpool even at --workers 1."""
 
 import pytest
+from db import _dedupe_employees, _migrate_add_indexes
+from db_models import Business, Employee
 from sqlalchemy import inspect, text
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, select
-
-from db import _dedupe_employees, _migrate_add_indexes
-from db_models import Business, Employee
 
 INDEX_NAME = "uq_employee_business_role"
 

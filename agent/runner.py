@@ -21,13 +21,11 @@ Design choices, honestly:
   one `RoleDefinition` here — no other change.
 """
 
-import json
 from dataclasses import dataclass
-from typing import Callable, List, Optional
-
-from sqlmodel import Session
+from typing import Callable, List
 
 from db_models import Business, Job
+from sqlmodel import Session
 
 Capability = Callable[[Session, Business, Job], None]
 
@@ -53,10 +51,9 @@ def is_active(session, business: Business, role_key: str) -> bool:
     Takes a session because deployment state is a row now, not a column. The
     only caller, dispatch_job_completed, already has one.
     """
-    from sqlmodel import select
-
     from db_models import Employee
     from departments import canonical_role_key
+    from sqlmodel import select
 
     wanted = canonical_role_key(role_key)
     for e in session.exec(select(Employee).where(Employee.business_id == business.id)).all():
@@ -85,10 +82,9 @@ def deployed_businesses(session: Session, role_key: str) -> List[Business]:
     two can never disagree about the same row (2026-07-30, Critical Finding
     #2: this is the shared resolver every tick-based employee goes through —
     none of them queries deployment state independently)."""
-    from sqlmodel import select
-
     from db_models import Employee
     from departments import canonical_role_key
+    from sqlmodel import select
 
     wanted = canonical_role_key(role_key)
     business_ids = {

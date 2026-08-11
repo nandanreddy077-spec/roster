@@ -5,14 +5,13 @@ hardcoded active for every business, and the other tiles derived 'active' from
 unrelated config fields (a review link being set, a campaign existing). The
 founder has never had a real deployment view — see audit B1."""
 
-from sqlalchemy import event
-from sqlmodel import Session, select
-from starlette.testclient import TestClient
-
 import app as app_module
 from conftest import DASH_AUTH
 from db_models import Business, Employee
 from deployment import deploy_department, deploy_role
+from sqlalchemy import event
+from sqlmodel import Session, select
+from starlette.testclient import TestClient
 
 
 def _business(session, name="Test Co"):

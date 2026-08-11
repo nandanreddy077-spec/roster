@@ -7,8 +7,6 @@ referral_service.py's own shape.
 from datetime import datetime, timedelta
 from typing import List, Optional
 
-from sqlmodel import Session, select
-
 from channels import get_channel
 from db_models import Business, Job, ReviewReply
 from engine import AgentEngine
@@ -19,7 +17,6 @@ from notifications import (
     notify_owner_of_escalation,
     record_owner_notification,
 )
-from runner import is_active
 from review_engine import (
     OUTCOME_REPLIES,
     RECORD_REVIEW_REPLY_TOOL,
@@ -31,6 +28,8 @@ from review_engine import (
     build_review_reply_prompt,
     render_review_template,
 )
+from runner import is_active
+from sqlmodel import Session, select
 from trial_cap import can_respond, record_usage
 
 agent = AgentEngine()

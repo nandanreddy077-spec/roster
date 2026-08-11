@@ -8,7 +8,6 @@ Anthropic calls happen inside the injected `tick` callable, not here.
 import asyncio
 
 import pytest
-
 from scheduler import run_scheduler
 
 

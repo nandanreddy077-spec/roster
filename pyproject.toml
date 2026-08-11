@@ -34,7 +34,13 @@ ignore = ["E501"]
 # app.py parses .env into os.environ before importing anything that reads env
 # vars at import time. The import order IS the fix, not the violation.
 "agent/app.py" = ["E402"]
-"agent/tests/test_voice_loop_integration.py" = ["E402"]
+# Tests, and only tests:
+#   E402 — several suites grew by appending a section, so imports sit next to
+#          the tests that use them. Not load-bearing like app.py's, just not
+#          worth 13 edits and the chance of breaking a passing suite.
+#   E731 — a lambda handler in a test is clearer than a def three lines above
+#          the assertion it exists for.
+"agent/tests/*" = ["E402", "E731"]
 
 [tool.mypy]
 python_version = "3.13"

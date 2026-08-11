@@ -14,11 +14,10 @@ database dependency, and its tests need no fixture. This one owns the writes.
 from datetime import datetime
 from typing import List, Optional
 
-from sqlalchemy.exc import IntegrityError
-from sqlmodel import select
-
 from db_models import DepartmentInterest
 from departments import get_department
+from sqlalchemy.exc import IntegrityError
+from sqlmodel import select
 
 
 def _open_interest(session, business_id: int, department_key: str) -> Optional[DepartmentInterest]:

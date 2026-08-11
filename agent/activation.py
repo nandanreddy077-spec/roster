@@ -9,11 +9,10 @@ admin dashboard.
 import sys
 from datetime import datetime
 
-from sqlmodel import Session
-
 from db_models import Business
 from deployment import deploy_role
 from provisioning import buy_twilio_number, provision_voice
+from sqlmodel import Session
 
 
 def activate_frontdesk(session: Session, client: Business) -> None:

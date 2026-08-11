@@ -6,14 +6,13 @@ attaches them so an inbound call routes to this business and verifies. This is
 what unblocks the first real voice call without Twilio.
 """
 
-from sqlmodel import Session
-
 import app as app_module
 import db as db_module
 import portal as portal_module
 import provisioning as provisioning_module
 from conftest import DASH_AUTH
 from db_models import Business
+from sqlmodel import Session
 from starlette.testclient import TestClient
 
 

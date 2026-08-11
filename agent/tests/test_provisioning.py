@@ -1,8 +1,7 @@
 from unittest.mock import MagicMock
 
-import pytest
-
 import provisioning
+import pytest
 from provisioning import (
     ProvisioningError,
     attach_number_to_xai_trunk,

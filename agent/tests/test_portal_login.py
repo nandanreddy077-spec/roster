@@ -1,8 +1,7 @@
-from fastapi.testclient import TestClient
-
 import app as app_module
 import db as db_module
 import portal as portal_module
+from fastapi.testclient import TestClient
 
 
 def test_login_form_renders():
@@ -45,11 +44,10 @@ def test_login_sends_a_founder_provisioned_shop_to_the_dashboard(monkeypatch, te
     frontdesk_live is False — but it HAS a deployed employee, and that is what
     decides. Before this, a hand-provisioned owner was bounced into a wizard
     for setup that was already finished."""
-    from sqlmodel import Session
-
+    from auth import hash_password
     from db_models import Business
     from deployment import deploy_role
-    from auth import hash_password
+    from sqlmodel import Session
 
     monkeypatch.setattr(app_module, "engine", test_engine)
     monkeypatch.setattr(db_module, "engine", test_engine)

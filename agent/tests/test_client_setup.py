@@ -4,14 +4,13 @@ one rule it exists to enforce: nothing is green unless a real column says so."""
 
 import base64
 
-from fastapi.testclient import TestClient
-from sqlmodel import Session, select
-
 import app as app_module
 import db as db_module
 import portal as portal_module
 from app import _setup_checklist
-from db_models import Business, Job
+from db_models import Business
+from fastapi.testclient import TestClient
+from sqlmodel import Session, select
 
 
 def _basic() -> dict:

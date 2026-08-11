@@ -1,8 +1,7 @@
-from sqlmodel import Session
-
+import recovery_service
 from conftest import StubAgent
 from db_models import Business, RecoveryJob
-import recovery_service
+from sqlmodel import Session
 
 
 def _capped_client(session):

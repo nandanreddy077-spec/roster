@@ -8,12 +8,11 @@ changes — exactly what this migration is undoing."""
 
 import re
 
-from sqlmodel import Session
-from starlette.testclient import TestClient
-
 import app as app_module
 import portal
 from db_models import Business
+from sqlmodel import Session
+from starlette.testclient import TestClient
 
 
 def _nav_html(body: str) -> str:

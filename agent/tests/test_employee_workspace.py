@@ -4,8 +4,6 @@ and metrics directly, so "is this employee actually working" is decided
 exactly once, by the department builder — the employee page can never
 disagree with the page it was reached from."""
 
-from sqlmodel import Session
-
 from db_models import Business, Job
 from deployment import deploy_department, deploy_role
 from workspace import EmployeeWorkspace, build_employee_workspace

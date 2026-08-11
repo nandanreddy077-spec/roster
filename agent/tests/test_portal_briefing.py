@@ -2,13 +2,12 @@
 (workspace.py). No template contains summarisation logic; the route never
 touches DepartmentInterest or metrics.py directly."""
 
-from sqlmodel import Session
-
 import app as app_module
 import portal
 from auth import hash_password
 from db_models import Business, Job, OwnerNotification
 from deployment import deploy_role
+from sqlmodel import Session
 
 _EMAIL = iter(f"bp-{n}@test.io" for n in range(1000))
 
@@ -97,9 +96,8 @@ def test_a_growth_nudge_links_into_expansion(test_engine, monkeypatch):
 def test_viewing_the_briefing_never_records_interest(test_engine, monkeypatch):
     """A growth nudge is a suggestion to read, not an action the page takes on
     the owner's behalf (Phase 3's guard, exercised through this route)."""
-    from sqlmodel import select
-
     from db_models import DepartmentInterest
+    from sqlmodel import select
 
     client, bid = _client_for(test_engine, monkeypatch)
 

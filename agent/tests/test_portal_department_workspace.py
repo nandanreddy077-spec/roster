@@ -3,14 +3,13 @@ DepartmentWorkspace object (workspace.py); these tests check what actually
 appears in the HTML, and that no route logic recomputes what the view model
 already assembled."""
 
-from sqlmodel import Session
-from starlette.testclient import TestClient
-
 import app as app_module
 import portal
 from auth import hash_password
 from db_models import Business, Job
 from deployment import deploy_department
+from sqlmodel import Session
+from starlette.testclient import TestClient
 
 _EMAIL = iter(f"dw-{n}@test.io" for n in range(1000))
 

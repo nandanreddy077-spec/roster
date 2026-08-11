@@ -1,12 +1,11 @@
-from fastapi.testclient import TestClient
-from sqlmodel import Session, select
-
 import app as app_module
 import db as db_module
 import google_auth
 import portal as portal_module
 from conftest import provisioned_business
 from db_models import Business
+from fastapi.testclient import TestClient
+from sqlmodel import Session, select
 
 
 class _FakeRequest:
@@ -154,7 +153,7 @@ def test_configured_callback_signs_in_a_known_owner(monkeypatch, test_engine):
     _wire(monkeypatch, test_engine)
     monkeypatch.setenv("GOOGLE_CLIENT_ID", "id")
     monkeypatch.setenv("GOOGLE_CLIENT_SECRET", "secret")
-    business_id = provisioned_business(test_engine, email="owner@example.com")
+    provisioned_business(test_engine, email="owner@example.com")
 
     class _FakeGoogle:
         async def authorize_access_token(self, request):

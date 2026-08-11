@@ -18,20 +18,19 @@ and nothing at all after they answer.
 import importlib
 from datetime import datetime, timedelta
 
-import pytest
-from fastapi.testclient import TestClient
-from sqlmodel import Session, select
-
 import app as app_module
 import db as db_module
 import membership_engine
 import membership_service
 import portal as portal_module
+import pytest
 import recovery_tick
 import service as service_module
 from conftest import StubAgent
 from db_models import Business, Customer, Job, JobQualification, MembershipOffer
 from deployment import deploy_role
+from fastapi.testclient import TestClient
+from sqlmodel import Session, select
 
 CUSTOMER = "+15125550001"
 BUSINESS_LINE = "+15125557777"

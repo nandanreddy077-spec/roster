@@ -14,10 +14,9 @@ undeployed business's jobs to forget to guard.
 
 from typing import List
 
-from sqlmodel import Session, select
-
 from db_models import Business, DispatchPlan, Job, JobQualification
 from dispatcher_engine import plan
+from sqlmodel import Session, select
 
 
 def recommend_dispatch_for_business(session: Session, business: Business) -> List[DispatchPlan]:

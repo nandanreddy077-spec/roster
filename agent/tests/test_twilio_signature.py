@@ -3,15 +3,14 @@ Twilio webhooks must carry a valid X-Twilio-Signature or be rejected — so a
 spoofed request can't drive the AI or trigger outbound SMS. In dev (no token)
 the endpoints stay open, since there's no real Twilio traffic to forge."""
 
-from sqlmodel import Session
-from starlette.testclient import TestClient
-from twilio.request_validator import RequestValidator
-
 import app as app_module
 import db as db_module
 import portal as portal_module
 import service
 from db_models import Business
+from sqlmodel import Session
+from starlette.testclient import TestClient
+from twilio.request_validator import RequestValidator
 
 TOKEN = "test-auth-token-abc123"
 BASE = "https://rosterhires.com"

@@ -1,6 +1,6 @@
-from sqlmodel import select
-from db_models import Business, Job, Customer
+from db_models import Business, Customer, Job
 from service import handle_customer_message
+from sqlmodel import select
 
 
 class _FakeAgent:

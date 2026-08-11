@@ -1,7 +1,6 @@
+import app as app_module
 from fastapi import Request
 from fastapi.testclient import TestClient
-
-import app as app_module
 
 
 def test_session_cookie_is_set_and_readable(monkeypatch):

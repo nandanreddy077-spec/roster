@@ -30,8 +30,6 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Callable, Optional
 
-from sqlmodel import func, select
-
 from db_models import (
     ORIGIN_ESCALATION,
     DispatchPlan,
@@ -50,6 +48,7 @@ from notifications import (
     KIND_ESCALATION,
     is_test_thread,
 )
+from sqlmodel import func, select
 
 # Voice conversations thread under this prefix (xai_voice_adapter.VOICE_THREAD_PREFIX).
 # Imported as a literal rather than from the adapter to keep this module free of

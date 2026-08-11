@@ -1,9 +1,8 @@
-from sqlmodel import select
-
 import lead_qualifier_service
 from db_models import Business, Customer, Job, JobQualification
 from deployment import deploy_role
 from lead_qualifier_rules import REASON_MEMBERSHIP_ELIGIBLE_NO_PLAN
+from sqlmodel import select
 
 
 def make_client(session, **overrides) -> Business:
@@ -140,7 +139,7 @@ def test_qualify_new_jobs_uses_customer_id_when_set(session):
     session.add(customer)
     session.commit()
     session.refresh(customer)
-    job = _job(session, client, customer_id=customer.id)
+    _job(session, client, customer_id=customer.id)
 
     qualified = lead_qualifier_service.qualify_new_jobs(session)
 
@@ -153,7 +152,7 @@ def test_qualify_new_jobs_falls_back_to_phone_lookup_without_customer_id(session
     customer = Customer(business_id=client.id, phone="+15551234567", plan_notes="Gold plan")
     session.add(customer)
     session.commit()
-    job = _job(session, client, callback_number="+15551234567", customer_phone="+15551234567")
+    _job(session, client, callback_number="+15551234567", customer_phone="+15551234567")
 
     qualified = lead_qualifier_service.qualify_new_jobs(session)
 

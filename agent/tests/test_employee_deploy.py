@@ -3,12 +3,11 @@ Admin is the only place an Employee gets deployed for a business)."""
 
 import json
 
-from fastapi.testclient import TestClient
-from sqlmodel import Session
-
 import app as app_module
 from conftest import DASH_AUTH
 from db_models import Business
+from fastapi.testclient import TestClient
+from sqlmodel import Session
 
 
 def make_client(test_engine) -> int:

@@ -1,9 +1,8 @@
 from datetime import datetime
 
-from sqlmodel import Session
-
 from activation import activate_frontdesk
 from db_models import Business
+from sqlmodel import Session
 
 
 def test_activate_frontdesk_marks_live_even_without_twilio_creds(test_engine, monkeypatch):

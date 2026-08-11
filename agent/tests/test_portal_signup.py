@@ -6,13 +6,12 @@ redundant: /signup led into a wizard whose final POST called
 activate_frontdesk() -> buy_twilio_number(), so any stranger could make Roster
 buy a phone number for a business ops had never heard of."""
 
-from fastapi.testclient import TestClient
-from sqlmodel import Session, select
-
 import app as app_module
 import db as db_module
 import portal as portal_module
 from db_models import Business
+from fastapi.testclient import TestClient
+from sqlmodel import Session, select
 
 
 def _wire(monkeypatch, test_engine):

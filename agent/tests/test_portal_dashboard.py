@@ -1,16 +1,14 @@
 import json
 from datetime import datetime, timedelta
 
-from fastapi.testclient import TestClient
-from sqlmodel import Session, select
-
 import app as app_module
 import db as db_module
 import portal as portal_module
 import service as service_module
-from conftest import StubAgent
-from conftest import login_as, provisioned_business
+from conftest import StubAgent, login_as, provisioned_business
 from db_models import Business, Job
+from fastapi.testclient import TestClient
+from sqlmodel import Session, select
 
 
 def _stub_reply(text: str):

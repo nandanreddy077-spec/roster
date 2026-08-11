@@ -12,14 +12,13 @@ second row; a different service, a completed job, or an old job books fresh.
 import re
 import sys
 from datetime import datetime, timedelta
-from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
+from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 from typing import Any, Dict, Optional, Tuple
-
-from sqlmodel import Session, select
 
 from db_models import ORIGIN_ESCALATION, ORIGIN_INBOUND, Business, Job
 from eventbus import bus
 from events import JOB_BOOKED, DomainEvent
+from sqlmodel import Session, select
 
 # A same-thread re-book of the same service within this window is treated as
 # the same job (details merged), not a new booking. Long enough to cover any

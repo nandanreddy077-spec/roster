@@ -1,8 +1,7 @@
 import pytest
-from sqlalchemy.exc import IntegrityError
-from sqlmodel import select
 from db_models import Business, Customer
 from repositories import get_or_create_customer
+from sqlalchemy.exc import IntegrityError
 
 
 def test_get_or_create_idempotent(session):

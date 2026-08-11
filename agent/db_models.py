@@ -2,10 +2,9 @@ import json
 from datetime import datetime
 from typing import List, Optional
 
+from models import ClientConfig
 from sqlalchemy import Index, UniqueConstraint, text
 from sqlmodel import Field, SQLModel
-
-from models import ClientConfig
 
 # What produced a Job row. The owner's dashboard can only claim revenue it can
 # attribute: "62 jobs booked" is a count, "$18,420 you would not have had"

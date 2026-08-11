@@ -18,28 +18,13 @@ if _env_file.exists():
         _key, _, _value = _line.partition("=")
         os.environ.setdefault(_key.strip(), _value.strip())
 
-from fastapi import FastAPI, Form, HTTPException, Request
-from fastapi.responses import FileResponse, RedirectResponse, Response
-from fastapi.staticfiles import StaticFiles
-from fastapi.templating import Jinja2Templates
-from sqlalchemy.exc import IntegrityError
-from sqlmodel import Session, delete, func, select
-from starlette.concurrency import run_in_threadpool
-from starlette.middleware.sessions import SessionMiddleware
-
+import departments
+import metrics
 from auth import ACCESS_LINK_MAX_AGE_SECONDS, make_access_token, resolve_session_secret
 from bookings import parse_money_cents
 from call_trace import CallTrace
 from channels import get_channel, normalize_phone
-import departments
 from db import DATA_DIR, engine, init_db
-from deployment import deploy_department, deploy_role
-from eventbus import bus
-from events import JOB_COMPLETED, DomainEvent
-from expansion import mark_actioned, open_interests_for
-import metrics
-from notifications import is_test_thread
-from locks import conversation_lock
 from db_models import (
     BILLING_PAID,
     BILLING_TRIAL,
@@ -58,6 +43,17 @@ from db_models import (
     ReferralLead,
     WebhookDelivery,
 )
+from deployment import deploy_department, deploy_role
+from eventbus import bus
+from events import JOB_COMPLETED, DomainEvent
+from expansion import mark_actioned, open_interests_for
+from fastapi import FastAPI, Form, HTTPException, Request
+from fastapi.responses import FileResponse, RedirectResponse, Response
+from fastapi.staticfiles import StaticFiles
+from fastapi.templating import Jinja2Templates
+from locks import conversation_lock
+from membership_service import find_active_membership_offer, handle_membership_reply
+from notifications import is_test_thread
 from portal import router as portal_router
 from provisioning import (
     ProvisioningError,
@@ -67,18 +63,24 @@ from provisioning import (
     verify_voice_wiring,
 )
 from recovery_engine import FACE_DISPLAY_NAMES
-from membership_service import find_active_membership_offer, handle_membership_reply
 from recovery_service import create_campaign, find_active_recovery_job, handle_recovery_reply
 from referral_service import find_active_referral_ask, handle_referral_reply
 from review_service import find_active_review_ask, handle_review_reply
 from runner import dispatch_job_completed
 from service import handle_customer_message
+from sqlalchemy.exc import IntegrityError
+from sqlmodel import Session, delete, func, select
+from starlette.concurrency import run_in_threadpool
+from starlette.middleware.sessions import SessionMiddleware
 from xai_voice_adapter import (
     parse_incoming_call_webhook as parse_xai_incoming_call,
+)
+from xai_voice_adapter import (
     run_call as run_xai_call,
+)
+from xai_voice_adapter import (
     verify_webhook_signature as verify_xai_signature,
 )
-
 
 # Credentials whose absence silently degrades a money path (no AI replies, no
 # SMS sends, no voice, data on ephemeral SQLite). SESSION_SECRET_KEY and

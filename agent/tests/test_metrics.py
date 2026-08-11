@@ -9,7 +9,7 @@ Facts only, keyed by a stable metric key — each surface supplies its own
 wording, the same rule DepartmentStatus follows."""
 
 import metrics
-from db_models import Business, Job, RecoveryCampaign, RecoveryJob, ReferralLead
+from db_models import Business, Job, RecoveryCampaign, RecoveryJob
 from metrics import JOBS_BOOKED, QUOTES_CHASED, QUOTES_RECOVERED, booked_jobs, department_outcomes
 
 
@@ -165,9 +165,7 @@ def test_every_metric_declares_what_records_it_drills_into(session):
     A metric cannot ship without declaring its records, which rules out
     derived scores by construction: a number that can't name the rows behind
     it can't be declared, so it can't ship."""
-    from departments import REGISTRY
-
-    from departments import deployable_employees_for
+    from departments import REGISTRY, deployable_employees_for
 
     b = _business(session, "m11@test.io")
     for department in REGISTRY:

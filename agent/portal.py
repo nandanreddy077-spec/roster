@@ -10,22 +10,19 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Optional
 
-from fastapi import APIRouter, Form, HTTPException, Request
-from fastapi.responses import RedirectResponse
-from fastapi.templating import Jinja2Templates
-from sqlmodel import Session, select
-
-from authlib.integrations.starlette_client import OAuthError
-
+import metrics
 from auth import read_access_token, verify_password
+from authlib.integrations.starlette_client import OAuthError
 from db import engine
 from db_models import Business, Employee, Job, Message
 from departments import department_status_for, get_department
-from expansion import record_interest
 from deployment import deploy_role
+from expansion import record_interest
+from fastapi import APIRouter, Form, HTTPException, Request
+from fastapi.responses import RedirectResponse
+from fastapi.templating import Jinja2Templates
 from google_auth import callback_url, get_oauth, google_enabled
 from locks import conversation_lock
-import metrics
 from notifications import is_test_thread, recent_notifications
 from roles import (
     ROSTER_DESCRIPTIONS,
@@ -35,6 +32,7 @@ from roles import (
     role_key_for,
 )
 from service import handle_customer_message
+from sqlmodel import Session, select
 
 BASE_DIR = Path(__file__).parent
 templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
@@ -92,6 +90,8 @@ templates.env.globals["nav_items"] = NAV_ITEMS
 # (portal.METRIC_LABELS, etc.) and templates.env.globals need no other change.
 from workspace import (  # noqa: E402
     ACTIVE_STATES as _ACTIVE_STATES,
+)
+from workspace import (  # noqa: E402
     CUSTOMER_STATE_LABELS,
     METRIC_LABELS,
     NOTIFICATION_KIND_LABELS,

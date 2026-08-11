@@ -8,11 +8,10 @@ to undo."""
 from datetime import datetime
 
 import pytest
-from sqlalchemy.exc import IntegrityError
-from sqlmodel import select
-
 from db_models import Business, DepartmentInterest
 from expansion import mark_actioned, open_interests_for, record_interest
+from sqlalchemy.exc import IntegrityError
+from sqlmodel import select
 
 
 def test_a_new_interest_starts_open(session):

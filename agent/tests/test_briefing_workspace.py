@@ -7,8 +7,6 @@ action taken on the owner's behalf."""
 
 from datetime import datetime
 
-from sqlmodel import Session
-
 from db_models import Business, Job, OwnerNotification
 from deployment import deploy_role
 from workspace import BriefingWorkspace, build_briefing_workspace

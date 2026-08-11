@@ -9,8 +9,6 @@ import json
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
-from sqlmodel import Session, select
-
 from bookings import book_job, record_escalation
 from db_models import ORIGIN_INBOUND, ORIGIN_MISSED_CALL, Business, Job, Message
 from engine import (
@@ -34,6 +32,7 @@ from notifications import (
     record_owner_notification,
 )
 from repositories import get_or_create_customer
+from sqlmodel import Session, select
 from trial_cap import can_respond, record_usage
 
 agent = AgentEngine()

@@ -1,7 +1,6 @@
-from sqlmodel import Session
-
 import trial_cap
 from db_models import BILLING_PAID, BILLING_TRIAL, Business
+from sqlmodel import Session
 from trial_cap import TRIAL_TURN_COST_CENTS, can_respond, record_usage
 
 
@@ -88,9 +87,9 @@ def test_record_usage_is_atomic_against_stale_reads(test_engine):
     """Two concurrent turns load the same Business, then both record usage.
     A read-modify-write implementation loses one increment; the atomic
     UPDATE must count both."""
-    from sqlmodel import Session
-    from db_models import Business
     import trial_cap
+    from db_models import Business
+    from sqlmodel import Session
 
     with Session(test_engine) as seed:
         b = Business(business_name="X", trial_spend_cents=0)
@@ -110,9 +109,9 @@ def test_record_usage_is_atomic_against_stale_reads(test_engine):
 
 
 def test_cap_alert_fires_exactly_once_even_with_stale_clients(test_engine, monkeypatch):
-    from sqlmodel import Session
-    from db_models import Business
     import trial_cap
+    from db_models import Business
+    from sqlmodel import Session
 
     monkeypatch.setenv("FOUNDER_ALERT_PHONE", "+15550009999")
     sent = []

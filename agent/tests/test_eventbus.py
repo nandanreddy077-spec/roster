@@ -1,7 +1,7 @@
-from sqlmodel import Session, select
 from db_models import Business, Event, Job
-from events import DomainEvent, MESSAGE_RECEIVED
 from eventbus import EventBus
+from events import MESSAGE_RECEIVED, DomainEvent
+from sqlmodel import Session, select
 
 
 def _make_business(test_engine):

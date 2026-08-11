@@ -5,7 +5,6 @@ they drift, employees silently disappear from every department view."""
 
 from departments import (
     REGISTRY,
-    Department,
     active_departments_for,
     department_for_role,
     hireable_departments,

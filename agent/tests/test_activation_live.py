@@ -1,9 +1,8 @@
-from fastapi.testclient import TestClient
-
 import app as app_module
 import db as db_module
 import portal as portal_module
 from conftest import login_as, provisioned_business
+from fastapi.testclient import TestClient
 
 
 def _live_client(client: TestClient, test_engine):

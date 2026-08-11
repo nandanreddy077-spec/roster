@@ -1,6 +1,6 @@
-from sqlmodel import Session
 from db_models import Business, Message
 from memory import BusinessMemory
+from sqlmodel import Session
 
 
 def test_recall_is_business_scoped(test_engine):

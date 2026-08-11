@@ -1,6 +1,6 @@
 from db_models import Business, Job
-from service import handle_customer_message
 from notifications import notify_owner_of_booking
+from service import handle_customer_message
 
 
 class SpyChannel:
@@ -108,8 +108,8 @@ class _FakeAgent:
 
 
 def test_handle_customer_message_texts_owner_on_booking(session, monkeypatch):
-    import service
     import notifications
+    import service
 
     monkeypatch.setattr(service, "agent", _FakeAgent())
     spy = SpyChannel()
@@ -136,8 +136,8 @@ def test_handle_customer_message_texts_owner_on_booking(session, monkeypatch):
 
 
 def test_dashboard_test_chat_does_not_text_owner(session, monkeypatch):
-    import service
     import notifications
+    import service
 
     monkeypatch.setattr(service, "agent", _FakeAgent())
     spy = SpyChannel()

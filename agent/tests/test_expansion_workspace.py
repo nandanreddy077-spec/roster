@@ -5,8 +5,6 @@ a fully-inactive one with nothing deployed at all). Both share one builder
 over the same department_status_for call DepartmentWorkspace already uses —
 two view models, one shared computation."""
 
-from sqlmodel import Session
-
 from db_models import Business
 from deployment import deploy_department, deploy_role
 from workspace import ExpansionWorkspace, build_expansion_workspace

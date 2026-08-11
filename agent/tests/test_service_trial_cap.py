@@ -1,8 +1,7 @@
-from sqlmodel import Session
-
+import service
 from conftest import StubAgent
 from db_models import Business
-import service
+from sqlmodel import Session
 
 
 def test_handle_customer_message_skips_agent_when_cap_exhausted(test_engine, monkeypatch):

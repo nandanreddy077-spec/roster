@@ -12,12 +12,11 @@ duplicate impossible even under a concurrent double-submit.
 
 from typing import List, Optional
 
-from sqlalchemy.exc import IntegrityError
-from sqlmodel import select
-
 from db_models import Employee
 from departments import canonical_role_key, deployable_employees_for, get_department
 from employees import REGISTRY as _EMPLOYEE_REGISTRY
+from sqlalchemy.exc import IntegrityError
+from sqlmodel import select
 
 _BY_KEY = {e.key: e for e in _EMPLOYEE_REGISTRY}
 

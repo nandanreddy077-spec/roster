@@ -150,7 +150,7 @@ def test_deployed_businesses_normalizes_legacy_role_key_spellings(session):
 
 def test_dispatch_tick_calls_capability_only_for_deployed_businesses(session):
     deployed = _business(session, "runner8a@test.io")
-    not_deployed = _business(session, "runner8b@test.io")
+    _business(session, "runner8b@test.io")
     deploy_role(session, deployed.id, "lead_qualifier")
     seen = []
 

@@ -14,10 +14,9 @@ business's jobs to forget to guard.
 
 from typing import List, Optional
 
-from sqlmodel import Session, select
-
 from db_models import ORIGIN_ESCALATION, Business, Customer, Job, JobQualification
 from lead_qualifier_engine import qualify
+from sqlmodel import Session, select
 
 
 def _find_customer(session: Session, job: Job) -> Optional[Customer]:

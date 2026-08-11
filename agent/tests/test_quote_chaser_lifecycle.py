@@ -17,15 +17,14 @@ the way the production scheduler does, rather than asserted once per call.
 import json
 from datetime import datetime, timedelta
 
+import notifications
 import pytest
-from sqlmodel import Session, select
-
+import recovery_service
 from conftest import StubAgent
 from db_models import Business, Job, OwnerNotification, RecoveryCampaign, RecoveryJob
 from deployment import deploy_role
-import notifications
-import recovery_service
 from recovery_engine import SEQUENCE_DAYS
+from sqlmodel import Session, select
 
 PHONE = "+15125556001"
 

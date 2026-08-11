@@ -3,13 +3,11 @@ recognized by name and recent jobs — scoped strictly to one business (tenant
 isolation is the security boundary)."""
 
 import asyncio
-import json
-
-from sqlmodel import Session
 
 import service
 from db_models import Business, Customer, Job
 from memory import build_customer_context
+from sqlmodel import Session
 
 
 def _seed(engine):
@@ -226,8 +224,9 @@ def test_an_old_job_does_not_trigger_callback_language(test_engine):
 
 
 def test_voice_call_injects_returning_customer_into_instructions(test_engine, monkeypatch):
-    from xai_voice_adapter import run_call
     from call_trace import CallTrace
+    from xai_voice_adapter import run_call
+
     from tests.test_voice_loop_integration import FakeWS, connector_for
 
     bid, _ = _seed(test_engine)

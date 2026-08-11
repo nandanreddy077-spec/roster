@@ -5,11 +5,10 @@ credentials, and the public surface must never *require* them."""
 
 import base64
 
-from fastapi.testclient import TestClient
-
 import app as app_module
 import db as db_module
 import portal as portal_module
+from fastapi.testclient import TestClient
 
 
 def _basic(password: str) -> dict:
@@ -164,9 +163,8 @@ def test_sms_webhook_is_public(monkeypatch, test_engine):
 def test_sms_webhook_stays_silent_once_trial_cap_exhausted(monkeypatch, test_engine):
     monkeypatch.setenv("ADMIN_PASSWORD", "hunter2")
     monkeypatch.setattr(app_module, "engine", test_engine)
-    from sqlmodel import Session
-
     from db_models import Business
+    from sqlmodel import Session
 
     with Session(test_engine) as session:
         session.add(

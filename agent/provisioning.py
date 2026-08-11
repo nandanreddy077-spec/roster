@@ -20,9 +20,8 @@ import sys
 from typing import Optional
 
 import httpx
-from twilio.rest import Client as TwilioRestClient
-
 from db_models import Business
+from twilio.rest import Client as TwilioRestClient
 
 XAI_TRUNK_FRIENDLY_NAME = "Roster - xAI Voice"
 DEFAULT_PUBLIC_BASE_URL = "https://rosterhires.com"

@@ -10,8 +10,6 @@ review_requested_at, source_job_id) or, for Membership, by a unique index that
 makes a duplicate claim impossible rather than merely unlikely.
 """
 
-from sqlmodel import Session
-
 from channels import send_hours_ok
 from db import engine, init_db
 from dispatcher_service import recommend_dispatch
@@ -23,6 +21,7 @@ from membership_service import (
 from recovery_service import enroll_completed_estimates, tick
 from referral_service import send_due_referral_asks
 from review_service import send_due_review_followups, send_due_review_requests
+from sqlmodel import Session
 
 
 def run():

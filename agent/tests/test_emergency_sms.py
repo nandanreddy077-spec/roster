@@ -11,14 +11,13 @@ plainly that it didn't.
 
 from datetime import datetime, timedelta
 
-from sqlmodel import Session, select
-
 import notifications
 import service
 from bookings import ESCALATION_SERVICE_TYPE, record_escalation
 from db_models import Business, Job, OwnerNotification
 from engine import LOG_JOB_TOOL, TRANSFER_CALL_TOOL, build_system_prompt
 from notifications import KIND_ESCALATION, SOURCE_ALERT_OWNER
+from sqlmodel import Session, select
 
 EMERGENCY_TEXT = "I smell gas near my furnace and my kids are home"
 

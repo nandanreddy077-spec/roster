@@ -1,8 +1,7 @@
+import db_models  # noqa: F401  (registers tables with SQLModel.metadata)
 import pytest
 from sqlalchemy.pool import StaticPool
 from sqlmodel import Session, SQLModel, create_engine
-
-import db_models  # noqa: F401  (registers tables with SQLModel.metadata)
 
 # The dashboard sits behind HTTP Basic auth (see app.py's dashboard_auth
 # middleware). Tests run against a fixed password so they don't depend on

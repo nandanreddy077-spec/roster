@@ -7,12 +7,11 @@ than once a day since review_requested_at gates re-sending.
 
 from datetime import datetime, timedelta
 
-from sqlmodel import Session, select
-
+import review_service
 from conftest import StubAgent
 from db_models import Business, Job, OwnerNotification, ReviewReply
 from deployment import deploy_role
-import review_service
+from sqlmodel import Session, select
 
 
 def make_client(session: Session, review_link=None, deployed=True) -> Business:

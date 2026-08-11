@@ -9,14 +9,13 @@ against forged and expired links.
 
 import os
 
-from fastapi.testclient import TestClient
-from sqlmodel import Session
-
 import app as app_module
 import db as db_module
 import portal as portal_module
 from auth import make_access_token, read_access_token
 from db_models import Business
+from fastapi.testclient import TestClient
+from sqlmodel import Session
 
 
 def _wire(monkeypatch, test_engine):

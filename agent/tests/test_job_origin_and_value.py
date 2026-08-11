@@ -10,8 +10,6 @@ Everything here was found by the 2026-08-10 end-to-end walkthrough.
 
 import json
 
-from sqlmodel import select
-
 from bookings import book_job, parse_money_cents, record_escalation
 from db_models import (
     ORIGIN_ESCALATION,
@@ -26,6 +24,7 @@ from memory import build_customer_context
 from metrics import booked_jobs, employee_outcomes
 from recovery_engine import clean_service_type
 from service import handle_customer_message
+from sqlmodel import select
 
 
 class _FakeAgent:
@@ -228,11 +227,10 @@ def test_the_chaser_does_not_say_estimate_twice():
 
 def _complete(test_engine, monkeypatch, value: str):
     """POST "Mark done" the way the console form does, return the saved Job."""
-    from sqlmodel import Session as _Session
-    from starlette.testclient import TestClient
-
     import app as app_module
     from conftest import DASH_AUTH
+    from sqlmodel import Session as _Session
+    from starlette.testclient import TestClient
 
     monkeypatch.setattr(app_module, "engine", test_engine)
     with _Session(test_engine) as s:

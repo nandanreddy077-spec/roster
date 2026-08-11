@@ -6,8 +6,6 @@ owner alert is visible at all."""
 
 import json
 
-from sqlmodel import Session, select
-
 from db_models import Business, OwnerNotification
 from notifications import (
     KIND_CALL_DROPPED,
@@ -21,6 +19,7 @@ from notifications import (
     recent_notifications,
     record_owner_notification,
 )
+from sqlmodel import Session, select
 
 
 def test_records_a_delivered_notification(session):

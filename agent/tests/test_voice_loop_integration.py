@@ -10,11 +10,8 @@ import asyncio
 import json
 from pathlib import Path
 
-import pytest
-from sqlmodel import Session, select
-
 from db_models import Business, Job
-
+from sqlmodel import Session, select
 
 # ---- Fakes for the xAI realtime WebSocket ----------------------------------
 
@@ -318,8 +315,8 @@ def test_a_per_call_trace_is_never_rotated_or_split(tmp_path):
 
 
 def test_run_call_persists_job_from_log_job_event(test_engine):
-    from xai_voice_adapter import run_call
     from call_trace import CallTrace
+    from xai_voice_adapter import run_call
 
     client = _seed_business(test_engine)
     ws = FakeWS([GREETING_DONE, LOG_JOB_EVENT])
@@ -347,8 +344,8 @@ def test_run_call_persists_preferred_window_from_log_job_event(test_engine):
     """Sprint 1 (conversation-quality audit): the tool schema's new field
     flows through the real dispatch path, not just the unit-level
     bookings.book_job call — end to end through _handle_function_call."""
-    from xai_voice_adapter import run_call
     from call_trace import CallTrace
+    from xai_voice_adapter import run_call
 
     client = _seed_business(test_engine)
     event_with_window = dict(
@@ -381,8 +378,8 @@ def test_run_call_persists_preferred_window_from_log_job_event(test_engine):
 
 
 def test_run_call_defaults_callback_number_to_caller(test_engine):
-    from xai_voice_adapter import run_call
     from call_trace import CallTrace
+    from xai_voice_adapter import run_call
 
     client = _seed_business(test_engine)
     ws = FakeWS([LOG_JOB_EVENT])  # no callback_number in args
@@ -404,8 +401,8 @@ def test_run_call_defaults_callback_number_to_caller(test_engine):
 
 
 def test_run_call_records_trace_stages(test_engine):
-    from xai_voice_adapter import run_call
     from call_trace import CallTrace
+    from xai_voice_adapter import run_call
 
     client = _seed_business(test_engine)
     trace = CallTrace("call_3")
@@ -437,8 +434,8 @@ def test_run_call_records_trace_stages(test_engine):
 
 
 def test_run_call_flags_unexpected_event_type_once(test_engine):
-    from xai_voice_adapter import run_call
     from call_trace import CallTrace
+    from xai_voice_adapter import run_call
 
     client = _seed_business(test_engine)
     trace = CallTrace("call_4")
@@ -512,9 +509,9 @@ def _transcription_delta(item_id: str, delta: str = "burst") -> dict:
 
 
 def test_a_single_caller_utterance_is_persisted_as_a_user_message(test_engine):
-    from xai_voice_adapter import run_call
     from call_trace import CallTrace
     from db_models import Message
+    from xai_voice_adapter import run_call
 
     client = _seed_business(test_engine)
     ws = FakeWS([_transcription_completed("item_1", "My AC stopped working")])
@@ -542,9 +539,9 @@ def test_a_multi_turn_conversation_preserves_order(test_engine):
     """User -> assistant -> user, in the order the events actually arrive —
     the same insertion-order-is-conversation-order rule the SMS path and the
     existing assistant-transcript branch already rely on."""
-    from xai_voice_adapter import run_call
     from call_trace import CallTrace
     from db_models import Message
+    from xai_voice_adapter import run_call
 
     client = _seed_business(test_engine)
     ws = FakeWS(
@@ -580,9 +577,9 @@ def test_a_duplicate_transcript_event_does_not_create_a_second_message(test_engi
     correction re-emitting the same completed event) must not double the
     caller's turn in history — exactly the guarantee service.py already gives
     a redelivered Twilio MessageSid."""
-    from xai_voice_adapter import run_call
     from call_trace import CallTrace
     from db_models import Message
+    from xai_voice_adapter import run_call
 
     client = _seed_business(test_engine)
     ws = FakeWS(
@@ -610,11 +607,10 @@ def test_a_duplicate_transcript_event_does_not_create_a_second_message(test_engi
 
 def test_transcript_followed_by_a_tool_call_persists_both(test_engine, monkeypatch):
     """The new capture must not interfere with the existing log_job path."""
-    from xai_voice_adapter import run_call
+    import xai_voice_adapter as adapter
     from call_trace import CallTrace
     from db_models import Message
-
-    import xai_voice_adapter as adapter
+    from xai_voice_adapter import run_call
 
     monkeypatch.setattr(adapter, "notify_owner_of_booking", lambda *a, **k: True)
     client = _seed_business(test_engine)
@@ -644,9 +640,9 @@ def test_transcript_followed_by_a_tool_call_persists_both(test_engine, monkeypat
 
 
 def test_transcript_followed_by_assistant_response_persists_both_in_order(test_engine):
-    from xai_voice_adapter import run_call
     from call_trace import CallTrace
     from db_models import Message
+    from xai_voice_adapter import run_call
 
     client = _seed_business(test_engine)
     ws = FakeWS(
@@ -675,9 +671,9 @@ def test_transcript_followed_by_assistant_response_persists_both_in_order(test_e
 
 
 def test_an_empty_transcript_is_not_persisted(test_engine):
-    from xai_voice_adapter import run_call
     from call_trace import CallTrace
     from db_models import Message
+    from xai_voice_adapter import run_call
 
     client = _seed_business(test_engine)
     ws = FakeWS([_transcription_completed("item_1", "")])
@@ -704,9 +700,9 @@ def test_a_malformed_transcript_event_is_ignored_without_crashing_the_call(test_
     live call the way an unhandled exception would (run_call's top-level
     handler would otherwise text the owner "call dropped" over a missing
     field, which would be a false alarm)."""
-    from xai_voice_adapter import run_call
     from call_trace import CallTrace
     from db_models import Message
+    from xai_voice_adapter import run_call
 
     client = _seed_business(test_engine)
     ws = FakeWS(
@@ -748,9 +744,9 @@ def test_a_delta_event_is_recognized_and_ignored_not_flagged_unexpected(test_eng
     """Partial transcript chunks are expected traffic, not a protocol
     surprise — they should not pollute the unexpected_event trace the way a
     genuinely unhandled event type does."""
-    from xai_voice_adapter import run_call
     from call_trace import CallTrace
     from db_models import Message
+    from xai_voice_adapter import run_call
 
     client = _seed_business(test_engine)
     trace = CallTrace("call_t8")
@@ -975,8 +971,8 @@ def test_call_trace_sanitizes_call_id_and_never_escapes_capture_dir(tmp_path):
 
 
 def test_log_job_creates_a_customer_and_links_the_job(test_engine):
-    from xai_voice_adapter import run_call
     from call_trace import CallTrace
+    from xai_voice_adapter import run_call
 
     client = _seed_business(test_engine)
     ws = FakeWS([LOG_JOB_EVENT])
@@ -1011,8 +1007,8 @@ def test_a_repeat_caller_across_two_separate_calls_reuses_the_same_customer(test
     """Two different call_ids (each its own thread) from the same real phone
     number must resolve to one Customer, not two — identity is the caller's
     phone number, never the per-call thread id."""
-    from xai_voice_adapter import run_call
     from call_trace import CallTrace
+    from xai_voice_adapter import run_call
 
     client = _seed_business(test_engine)
 
@@ -1058,9 +1054,9 @@ def test_a_caller_reuses_the_customer_record_their_sms_conversation_already_crea
     """Cross-channel identity: get_or_create_customer keys on (business_id,
     phone) alone, so a customer who has already texted this business and
     then calls must resolve to the SAME Customer row, not a second one."""
-    from xai_voice_adapter import run_call
     from call_trace import CallTrace
     from repositories import get_or_create_customer
+    from xai_voice_adapter import run_call
 
     client = _seed_business(test_engine)
     with Session(test_engine) as s:
@@ -1129,8 +1125,8 @@ ALERT_OWNER_EVENT = {
 
 
 def _run(client, ws, test_engine, call_id="call_esc", trace=None):
-    from xai_voice_adapter import run_call
     from call_trace import CallTrace
+    from xai_voice_adapter import run_call
 
     asyncio.run(
         run_call(
@@ -1332,9 +1328,9 @@ class ExplodingWS(FakeWS):
 
 
 def test_run_call_survives_ws_drop_and_alerts_owner(test_engine, monkeypatch):
-    from xai_voice_adapter import run_call
-    from call_trace import CallTrace
     import xai_voice_adapter as adapter
+    from call_trace import CallTrace
+    from xai_voice_adapter import run_call
 
     alerts = []
     monkeypatch.setattr(
@@ -1448,8 +1444,8 @@ TINY_TIMEOUT = 0.05
 
 def test_a_normal_call_under_the_limit_is_unaffected(test_engine):
     """The new wrapping must not change ordinary behavior at all."""
-    from xai_voice_adapter import run_call
     from call_trace import CallTrace
+    from xai_voice_adapter import run_call
 
     client = _seed_business(test_engine)
     trace = CallTrace("call_ok")
@@ -1473,9 +1469,9 @@ def test_a_normal_call_under_the_limit_is_unaffected(test_engine):
 
 
 def test_timeout_while_idle_is_recorded_and_ends_the_call(test_engine, monkeypatch):
-    from xai_voice_adapter import run_call
-    from call_trace import CallTrace
     import xai_voice_adapter as adapter
+    from call_trace import CallTrace
+    from xai_voice_adapter import run_call
 
     monkeypatch.setattr(adapter, "notify_owner_of_escalation", lambda *a, **k: True)
     client = _seed_business(test_engine)
@@ -1502,9 +1498,9 @@ def test_timeout_while_idle_is_recorded_and_ends_the_call(test_engine, monkeypat
 
 def test_timeout_during_conversation_ends_the_call_cleanly(test_engine, monkeypatch):
     """A call that had real back-and-forth, then goes silent past the limit."""
-    from xai_voice_adapter import run_call
-    from call_trace import CallTrace
     import xai_voice_adapter as adapter
+    from call_trace import CallTrace
+    from xai_voice_adapter import run_call
 
     monkeypatch.setattr(adapter, "notify_owner_of_escalation", lambda *a, **k: True)
     client = _seed_business(test_engine)
@@ -1533,11 +1529,9 @@ def test_timeout_after_a_booking_preserves_the_booked_job(test_engine, monkeypat
     """Partial work already committed before the timeout must survive it —
     book_job already commits synchronously as each event is processed, so
     this proves the timeout path doesn't touch or roll back that work."""
-    from xai_voice_adapter import run_call
-    from call_trace import CallTrace
-    from db_models import Message
-
     import xai_voice_adapter as adapter
+    from call_trace import CallTrace
+    from xai_voice_adapter import run_call
 
     monkeypatch.setattr(adapter, "notify_owner_of_booking", lambda *a, **k: True)
     monkeypatch.setattr(adapter, "notify_owner_of_escalation", lambda *a, **k: True)
@@ -1571,10 +1565,10 @@ def test_timeout_after_an_escalation_still_notifies_once_more_honestly(test_engi
     the timeout — a SEPARATE incident, not a re-alert of the same one — adds
     its own distinct, honest notification on top. Neither suppresses or
     duplicates the other."""
-    from xai_voice_adapter import run_call
+    import xai_voice_adapter as adapter
     from call_trace import CallTrace
     from db_models import OwnerNotification
-    import xai_voice_adapter as adapter
+    from xai_voice_adapter import run_call
 
     monkeypatch.setattr(adapter, "notify_owner_of_escalation", lambda *a, **k: True)
     client = _seed_business(test_engine)
@@ -1612,9 +1606,9 @@ def test_cleanup_always_happens_even_on_timeout(test_engine, monkeypatch, tmp_pa
     exits — proven here by asserting the capture file was actually closed
     (a second write after run_call returns must still succeed, which would
     fail if the handle were left in some broken half-open state)."""
-    from xai_voice_adapter import run_call
-    from call_trace import CallTrace
     import xai_voice_adapter as adapter
+    from call_trace import CallTrace
+    from xai_voice_adapter import run_call
 
     monkeypatch.setattr(adapter, "notify_owner_of_escalation", lambda *a, **k: True)
     client = _seed_business(test_engine)
@@ -1643,9 +1637,9 @@ def test_no_task_leaks_after_a_timeout(test_engine, monkeypatch):
     like a crashed or cleanly-completed one — proven through app.py's real
     supervise_call_task, not a re-implementation of it."""
     import app as app_module
-    from xai_voice_adapter import run_call
-    from call_trace import CallTrace
     import xai_voice_adapter as adapter
+    from call_trace import CallTrace
+    from xai_voice_adapter import run_call
 
     monkeypatch.setattr(adapter, "notify_owner_of_escalation", lambda *a, **k: True)
     client = _seed_business(test_engine)
@@ -1691,8 +1685,8 @@ def test_no_task_leaks_after_a_timeout(test_engine, monkeypatch):
 
 def test_a_booking_failure_is_recovered_not_fatal(test_engine, monkeypatch):
     import xai_voice_adapter as adapter
-    from xai_voice_adapter import run_call
     from call_trace import CallTrace
+    from xai_voice_adapter import run_call
 
     monkeypatch.setattr(
         adapter, "book_job", lambda *a, **k: (_ for _ in ()).throw(RuntimeError("db down"))
@@ -1732,8 +1726,8 @@ def test_a_notification_failure_does_not_fail_the_booking(test_engine, monkeypat
     notify_owner_of_booking already never raises (returns False), and that
     must keep reporting "logged" to the model, not "error"."""
     import xai_voice_adapter as adapter
-    from xai_voice_adapter import run_call
     from call_trace import CallTrace
+    from xai_voice_adapter import run_call
 
     monkeypatch.setattr(adapter, "notify_owner_of_booking", lambda *a, **k: False)
     client = _seed_business(test_engine)
@@ -1765,8 +1759,8 @@ def test_a_notification_failure_does_not_fail_the_booking(test_engine, monkeypat
 
 
 def test_malformed_tool_arguments_are_recovered_not_fatal(test_engine):
-    from xai_voice_adapter import run_call
     from call_trace import CallTrace
+    from xai_voice_adapter import run_call
 
     client = _seed_business(test_engine)
     trace = CallTrace("call_malformed")
@@ -1807,8 +1801,8 @@ def test_malformed_tool_arguments_are_recovered_not_fatal(test_engine):
 
 def test_an_unexpected_exception_during_escalation_is_recovered(test_engine, monkeypatch):
     import xai_voice_adapter as adapter
-    from xai_voice_adapter import run_call
     from call_trace import CallTrace
+    from xai_voice_adapter import run_call
 
     monkeypatch.setattr(
         adapter, "record_escalation", lambda *a, **k: (_ for _ in ()).throw(RuntimeError("boom"))
@@ -1849,8 +1843,8 @@ def test_a_failed_booking_can_be_retried_successfully(test_engine, monkeypatch):
     call is genuinely still alive and functional, not just not-crashed."""
     import xai_voice_adapter as adapter
     from bookings import book_job as real_book_job
-    from xai_voice_adapter import run_call
     from call_trace import CallTrace
+    from xai_voice_adapter import run_call
 
     calls = {"n": 0}
 
@@ -1911,8 +1905,8 @@ class SendFailingAfterHandshakeWS(FakeWS):
 
 def test_a_transport_send_failure_is_unrecoverable_and_ends_the_call(test_engine, monkeypatch):
     import xai_voice_adapter as adapter
-    from xai_voice_adapter import run_call
     from call_trace import CallTrace
+    from xai_voice_adapter import run_call
 
     monkeypatch.setattr(adapter, "notify_owner_of_escalation", lambda *a, **k: True)
     client = _seed_business(test_engine)
@@ -1980,8 +1974,8 @@ TINY_TOKEN_BUDGET = 100
 
 def test_a_normal_inexpensive_call_is_unaffected(test_engine):
     client = _seed_business(test_engine)
-    from xai_voice_adapter import run_call
     from call_trace import CallTrace
+    from xai_voice_adapter import run_call
 
     trace = CallTrace("call_cheap")
     ws = FakeWS([_response_done_with_usage(10, "hi"), LOG_JOB_EVENT])
@@ -2005,8 +1999,8 @@ def test_a_normal_inexpensive_call_is_unaffected(test_engine):
 
 def test_budget_exceeded_mid_conversation_ends_the_call(test_engine, monkeypatch):
     import xai_voice_adapter as adapter
-    from xai_voice_adapter import run_call
     from call_trace import CallTrace
+    from xai_voice_adapter import run_call
 
     monkeypatch.setattr(adapter, "notify_owner_of_escalation", lambda *a, **k: True)
     client = _seed_business(test_engine)
@@ -2040,8 +2034,8 @@ def test_budget_exceeded_mid_conversation_ends_the_call(test_engine, monkeypatch
 
 def test_booking_completed_before_budget_exceeded_is_preserved(test_engine, monkeypatch):
     import xai_voice_adapter as adapter
-    from xai_voice_adapter import run_call
     from call_trace import CallTrace
+    from xai_voice_adapter import run_call
 
     monkeypatch.setattr(adapter, "notify_owner_of_booking", lambda *a, **k: True)
     monkeypatch.setattr(adapter, "notify_owner_of_escalation", lambda *a, **k: True)
@@ -2080,9 +2074,9 @@ def test_escalation_completed_before_budget_exceeded_is_preserved(test_engine, m
     escalation's own page and the budget cutoff's own notification are two
     distinct incidents, neither suppresses nor duplicates the other."""
     import xai_voice_adapter as adapter
+    from call_trace import CallTrace
     from db_models import OwnerNotification
     from xai_voice_adapter import run_call
-    from call_trace import CallTrace
 
     monkeypatch.setattr(adapter, "notify_owner_of_escalation", lambda *a, **k: True)
     client = _seed_business(test_engine)
@@ -2120,8 +2114,8 @@ def test_escalation_completed_before_budget_exceeded_is_preserved(test_engine, m
 
 def test_cleanup_after_budget_termination(test_engine, monkeypatch, tmp_path):
     import xai_voice_adapter as adapter
-    from xai_voice_adapter import run_call
     from call_trace import CallTrace
+    from xai_voice_adapter import run_call
 
     monkeypatch.setattr(adapter, "notify_owner_of_escalation", lambda *a, **k: True)
     client = _seed_business(test_engine)
@@ -2149,8 +2143,8 @@ def test_budget_and_duration_caps_do_not_interfere(test_engine, monkeypatch):
     be affected by (or accidentally trip) the separate token-budget check —
     Priority 4's mechanism is untouched by this change."""
     import xai_voice_adapter as adapter
-    from xai_voice_adapter import run_call
     from call_trace import CallTrace
+    from xai_voice_adapter import run_call
 
     monkeypatch.setattr(adapter, "notify_owner_of_escalation", lambda *a, **k: True)
     client = _seed_business(test_engine)
@@ -2179,8 +2173,8 @@ def test_malformed_usage_information_is_treated_as_zero(test_engine):
     """A missing/malformed usage field must never crash the call — the
     budget cap exists to protect the call, not to become a new way to break
     it over a reporting hiccup."""
-    from xai_voice_adapter import run_call
     from call_trace import CallTrace
+    from xai_voice_adapter import run_call
 
     client = _seed_business(test_engine)
     trace = CallTrace("call_bad_usage")
@@ -2244,9 +2238,9 @@ TEST_CALLER_NUMBER = "+15125550001"  # a fixed, clearly-non-customer number
 def test_a_normal_production_call_is_unaffected(test_engine, monkeypatch):
     """The default (is_test_call omitted) must behave exactly as before —
     real thread prefix, real owner notification."""
-    from xai_voice_adapter import run_call
-    from call_trace import CallTrace
     import xai_voice_adapter as adapter
+    from call_trace import CallTrace
+    from xai_voice_adapter import run_call
 
     calls = []
     monkeypatch.setattr(adapter, "notify_owner_of_booking", lambda *a, **k: calls.append(1) or True)
@@ -2271,9 +2265,9 @@ def test_a_normal_production_call_is_unaffected(test_engine, monkeypatch):
 
 
 def test_test_mode_uses_the_distinct_thread_prefix(test_engine, monkeypatch):
-    from xai_voice_adapter import run_call
-    from call_trace import CallTrace
     import xai_voice_adapter as adapter
+    from call_trace import CallTrace
+    from xai_voice_adapter import run_call
 
     monkeypatch.setattr(adapter, "notify_owner_of_booking", lambda *a, **k: True)
     client = _seed_business(test_engine)
@@ -2297,9 +2291,9 @@ def test_test_mode_uses_the_distinct_thread_prefix(test_engine, monkeypatch):
 
 
 def test_test_mode_never_calls_notify_owner_of_booking(test_engine, monkeypatch):
-    from xai_voice_adapter import run_call
-    from call_trace import CallTrace
     import xai_voice_adapter as adapter
+    from call_trace import CallTrace
+    from xai_voice_adapter import run_call
 
     calls = []
     monkeypatch.setattr(adapter, "notify_owner_of_booking", lambda *a, **k: calls.append(1) or True)
@@ -2322,9 +2316,9 @@ def test_test_mode_never_calls_notify_owner_of_booking(test_engine, monkeypatch)
 
 
 def test_test_mode_never_calls_notify_owner_of_escalation(test_engine, monkeypatch):
-    from xai_voice_adapter import run_call
-    from call_trace import CallTrace
     import xai_voice_adapter as adapter
+    from call_trace import CallTrace
+    from xai_voice_adapter import run_call
 
     calls = []
     monkeypatch.setattr(
@@ -2354,10 +2348,10 @@ def test_test_mode_never_calls_notify_owner_of_escalation(test_engine, monkeypat
 def test_test_mode_leaves_no_owner_notification_row(test_engine, monkeypatch):
     """No customer-facing side effects: not even a durable notification-log
     row is created for test-mode activity."""
-    from xai_voice_adapter import run_call
-    from call_trace import CallTrace
     import xai_voice_adapter as adapter
+    from call_trace import CallTrace
     from db_models import OwnerNotification
+    from xai_voice_adapter import run_call
 
     monkeypatch.setattr(adapter, "notify_owner_of_booking", lambda *a, **k: True)
     client = _seed_business(test_engine)
@@ -2385,10 +2379,10 @@ def test_test_mode_leaves_no_owner_notification_row(test_engine, monkeypatch):
 def test_test_mode_bookings_are_excluded_from_customer_facing_metrics(test_engine, monkeypatch):
     """Isolation via the shared is_test_thread mechanism, not a special case
     invented for voice — metrics.py needed no changes at all."""
-    from xai_voice_adapter import run_call
-    from call_trace import CallTrace
-    import xai_voice_adapter as adapter
     import metrics
+    import xai_voice_adapter as adapter
+    from call_trace import CallTrace
+    from xai_voice_adapter import run_call
 
     monkeypatch.setattr(adapter, "notify_owner_of_booking", lambda *a, **k: True)
     client = _seed_business(test_engine)
@@ -2412,9 +2406,9 @@ def test_test_mode_bookings_are_excluded_from_customer_facing_metrics(test_engin
 
 def test_test_mode_still_generates_a_trace(test_engine, monkeypatch):
     """Traces are never suppressed — only who gets notified changes."""
-    from xai_voice_adapter import run_call
-    from call_trace import CallTrace
     import xai_voice_adapter as adapter
+    from call_trace import CallTrace
+    from xai_voice_adapter import run_call
 
     monkeypatch.setattr(adapter, "notify_owner_of_booking", lambda *a, **k: True)
     client = _seed_business(test_engine)
@@ -2446,9 +2440,9 @@ def test_test_mode_still_generates_a_trace(test_engine, monkeypatch):
 
 
 def test_test_mode_still_captures_transcripts(test_engine, monkeypatch):
-    from xai_voice_adapter import run_call
     from call_trace import CallTrace
     from db_models import Message
+    from xai_voice_adapter import run_call
 
     client = _seed_business(test_engine)
     ws = FakeWS([_transcription_completed("item_1", "testing the line"), GREETING_DONE])
@@ -2476,9 +2470,9 @@ def test_test_mode_still_captures_transcripts(test_engine, monkeypatch):
 def test_test_mode_actually_books_a_real_job_isolated_not_simulated(test_engine, monkeypatch):
     """The full pipeline is exercised, not mocked: book_job really runs and
     really persists a Job — it's isolated (test thread prefix), not faked."""
-    from xai_voice_adapter import run_call
-    from call_trace import CallTrace
     import xai_voice_adapter as adapter
+    from call_trace import CallTrace
+    from xai_voice_adapter import run_call
 
     monkeypatch.setattr(adapter, "notify_owner_of_booking", lambda *a, **k: True)
     client = _seed_business(test_engine)
@@ -2505,9 +2499,9 @@ def test_test_mode_actually_books_a_real_job_isolated_not_simulated(test_engine,
 def test_test_mode_timeout_does_not_notify_a_real_owner(test_engine, monkeypatch):
     """Timeout behaviour must be exercisable in test mode too, without
     paging anyone real when it fires."""
-    from xai_voice_adapter import run_call
-    from call_trace import CallTrace
     import xai_voice_adapter as adapter
+    from call_trace import CallTrace
+    from xai_voice_adapter import run_call
 
     calls = []
     monkeypatch.setattr(
@@ -2537,9 +2531,9 @@ def test_test_mode_timeout_does_not_notify_a_real_owner(test_engine, monkeypatch
 
 
 def test_test_mode_cleanup_still_happens(test_engine, monkeypatch, tmp_path):
-    from xai_voice_adapter import run_call
-    from call_trace import CallTrace
     import xai_voice_adapter as adapter
+    from call_trace import CallTrace
+    from xai_voice_adapter import run_call
 
     monkeypatch.setattr(adapter, "notify_owner_of_booking", lambda *a, **k: True)
     client = _seed_business(test_engine)
@@ -2652,8 +2646,8 @@ def _stages(trace):
 
 
 def test_a_caller_hanging_up_completes_the_call(test_engine):
-    from xai_voice_adapter import run_call
     from call_trace import CallTrace
+    from xai_voice_adapter import run_call
 
     client = _seed_business(test_engine)
     trace = CallTrace("hangup_1")
@@ -2701,8 +2695,8 @@ def test_a_caller_hanging_up_does_not_page_the_owner(test_engine, monkeypatch):
 
 def test_a_hangup_after_a_booking_keeps_the_job_and_stays_clean(test_engine, monkeypatch):
     import xai_voice_adapter
-    from xai_voice_adapter import run_call
     from call_trace import CallTrace
+    from xai_voice_adapter import run_call
 
     monkeypatch.setattr(xai_voice_adapter, "notify_owner_of_booking", lambda *a, **k: True)
     client = _seed_business(test_engine)
@@ -2729,8 +2723,8 @@ def test_a_real_drop_is_still_reported_as_a_failure(test_engine, monkeypatch):
     """The fix must not swallow genuine failures: a socket that dies WITHOUT a
     disconnect event is still a dropped call the owner needs to hear about."""
     import xai_voice_adapter
-    from xai_voice_adapter import run_call
     from call_trace import CallTrace
+    from xai_voice_adapter import run_call
 
     paged = []
     monkeypatch.setattr(
@@ -2762,8 +2756,8 @@ def test_time_to_first_audio_is_traced_separately_from_response_complete(test_en
     Reading it as time-to-first-audio turned a real 2.3s answer into an
     apparent 6.9s of dead air and sent a debugging session chasing a bug that
     did not exist. What the caller actually experiences now has its own stage."""
-    from xai_voice_adapter import run_call
     from call_trace import CallTrace
+    from xai_voice_adapter import run_call
 
     client = _seed_business(test_engine)
     trace = CallTrace("timing")
@@ -2783,8 +2777,8 @@ def test_time_to_first_audio_is_traced_separately_from_response_complete(test_en
 
 
 def test_streaming_audio_is_never_flagged_as_an_unexpected_event(test_engine):
-    from xai_voice_adapter import run_call
     from call_trace import CallTrace
+    from xai_voice_adapter import run_call
 
     client = _seed_business(test_engine)
     trace = CallTrace("audio_noise")
@@ -2843,7 +2837,7 @@ def test_the_session_tunes_turn_detection_for_a_phone_line(test_engine):
 def test_the_session_sends_trade_vocabulary_to_the_transcriber(test_engine):
     """Mishearing 'P-trap' as 'pea trap' is the loudest tell that a machine is
     on the line, and it makes the caller repeat themselves."""
-    from xai_voice_adapter import build_session_update, TRADE_KEYTERMS
+    from xai_voice_adapter import TRADE_KEYTERMS, build_session_update
 
     session = build_session_update(_seed_business(test_engine))["session"]
     keyterms = session["audio"]["input"]["transcription"]["keyterms"]
@@ -2858,6 +2852,7 @@ def test_the_session_sends_trade_vocabulary_to_the_transcriber(test_engine):
 def test_the_voice_is_configurable_without_a_deploy(test_engine, monkeypatch):
     """26 voices exist and picking one is a judgement made by ear, not in code."""
     import importlib
+
     import xai_voice_adapter
 
     monkeypatch.setenv("XAI_VOICE", "celeste")

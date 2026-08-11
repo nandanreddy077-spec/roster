@@ -1,4 +1,4 @@
-from events import DomainEvent, MESSAGE_RECEIVED, JOB_BOOKED
+from events import JOB_BOOKED, MESSAGE_RECEIVED, DomainEvent
 
 
 def test_domain_event_defaults():

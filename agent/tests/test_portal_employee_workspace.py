@@ -2,14 +2,13 @@
 Overview -> Department -> Employee -> Activity. Renders one EmployeeWorkspace
 (workspace.py); the route never touches EMPLOYEE_RECORDS or metrics.py."""
 
-from sqlmodel import Session
-from starlette.testclient import TestClient
-
 import app as app_module
 import portal
 from auth import hash_password
 from db_models import Business, Job
 from deployment import deploy_department
+from sqlmodel import Session
+from starlette.testclient import TestClient
 
 _EMAIL = iter(f"ew-{n}@test.io" for n in range(1000))
 

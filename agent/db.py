@@ -191,10 +191,9 @@ def _backfill_job_origin(engine=None):
     column exists to stop overstating. Matched on the service_type
     bookings.record_escalation writes, which is the only marker those rows
     ever had. Idempotent: re-running sets the same rows to the same value."""
-    from sqlmodel import Session, select
-
-    from db_models import ORIGIN_ESCALATION, ORIGIN_INBOUND, Job
     from bookings import ESCALATION_SERVICE_TYPE
+    from db_models import ORIGIN_ESCALATION, ORIGIN_INBOUND, Job
+    from sqlmodel import Session, select
 
     eng = engine if engine is not None else globals()["engine"]
     with Session(eng) as s:
@@ -215,8 +214,8 @@ def _backfill_customers(engine=None):
     """Backfill Customer records from existing Job and Message rows with
     customer_phone values, and link those rows to their customers by ID.
     Idempotent: skips rows that already have customer_id set."""
-    from sqlmodel import Session, select
     from db_models import Customer, Job, Message
+    from sqlmodel import Session, select
 
     eng = engine if engine is not None else globals()["engine"]
     with Session(eng) as s:
@@ -245,9 +244,10 @@ def _backfill_employees(engine=None):
     (e.g. rows from before roster_hire() started creating them directly) —
     not the primary path for a fresh hire, see portal.py's roster_hire()."""
     import json as _json
-    from sqlmodel import Session, select
+
     from db_models import Business, Employee
     from roles import role_key_for
+    from sqlmodel import Session, select
 
     eng = engine if engine is not None else globals()["engine"]
     with Session(eng) as s:
@@ -273,9 +273,8 @@ def _backfill_pipeline_stage(engine=None):
     """A business that was already running before pipeline_stage existed must
     not appear stuck at 'lead' in the founder's pipeline. Idempotent: only
     touches rows still sitting at the default."""
-    from sqlmodel import Session, select
-
     from db_models import Business
+    from sqlmodel import Session, select
 
     eng = engine if engine is not None else globals()["engine"]
     with Session(eng) as s:
@@ -302,9 +301,8 @@ def _dedupe_employees(engine=None) -> list:
     """
     import sys
 
-    from sqlmodel import Session, select
-
     from db_models import Employee
+    from sqlmodel import Session, select
 
     eng = engine if engine is not None else globals()["engine"]
     removed = []

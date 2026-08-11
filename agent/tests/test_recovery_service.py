@@ -1,8 +1,8 @@
 import json
 from datetime import datetime, timedelta
 
-from sqlmodel import Session, select
-
+import recovery_service
+from conftest import StubAgent
 from db_models import (
     Business,
     Job,
@@ -11,9 +11,8 @@ from db_models import (
     RecoveryJob,
     RecoveryMessageLog,
 )
-import recovery_service
-from conftest import StubAgent
 from deployment import deploy_role
+from sqlmodel import Session, select
 
 
 def make_client(session: Session) -> Business:
@@ -783,8 +782,8 @@ def test_enroll_completed_estimates_gives_each_job_its_own_campaign(session):
     above: two estimates completed at different times must never land in the
     same RecoveryCampaign."""
     client = make_client(session)
-    job1 = _completed_estimate_job(session, client, callback_number="+1")
-    job2 = _completed_estimate_job(session, client, callback_number="+2")
+    _completed_estimate_job(session, client, callback_number="+1")
+    _completed_estimate_job(session, client, callback_number="+2")
 
     enrolled = recovery_service.enroll_completed_estimates(session)
 

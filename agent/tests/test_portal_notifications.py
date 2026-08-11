@@ -2,12 +2,11 @@
 no new view model, since there's no synthesis to do over a list that's
 already exactly what the page shows."""
 
-from sqlmodel import Session
-
 import app as app_module
 import portal
 from auth import hash_password
 from db_models import Business, OwnerNotification
+from sqlmodel import Session
 
 _EMAIL = iter(f"np-{n}@test.io" for n in range(1000))
 

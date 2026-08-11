@@ -1,9 +1,10 @@
 import re
 from datetime import datetime, timedelta
 from typing import List, Optional
-from sqlmodel import Session, or_, select
+
 from db_models import ORIGIN_ESCALATION, Business, Customer, Job, Message
 from repositories import get_or_create_customer
+from sqlmodel import Session, or_, select
 
 _CONTROL_CHARS = re.compile(r"[\x00-\x1f\x7f]")
 
