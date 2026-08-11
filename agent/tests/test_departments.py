@@ -2,6 +2,7 @@
 (blueprint §1). These tests guard its own invariants and — critically — its
 join with the employee registry: the two are linked by a bare string, and if
 they drift, employees silently disappear from every department view."""
+
 from departments import (
     REGISTRY,
     Department,
@@ -12,8 +13,13 @@ from departments import (
 from employees import REGISTRY as EMPLOYEE_REGISTRY
 
 CANONICAL_ORDER = [
-    "customer_service", "sales", "operations",
-    "finance", "customer_success", "marketing", "leadership",
+    "customer_service",
+    "sales",
+    "operations",
+    "finance",
+    "customer_success",
+    "marketing",
+    "leadership",
 ]
 
 
@@ -124,28 +130,34 @@ class FakeEmployee:
 
 
 def test_active_departments_for_returns_the_departments_that_are_staffed():
-    staffed = active_departments_for([
-        FakeEmployee("frontdesk"),
-        FakeEmployee("quote_chaser"),
-    ])
+    staffed = active_departments_for(
+        [
+            FakeEmployee("frontdesk"),
+            FakeEmployee("quote_chaser"),
+        ]
+    )
     assert [d.key for d in staffed] == ["customer_service", "sales"]
 
 
 def test_active_departments_for_returns_display_order_not_input_order():
     """The dashboard renders these in a fixed, learnable order — it must not
     depend on the order rows came back from the database."""
-    staffed = active_departments_for([
-        FakeEmployee("quote_chaser"),   # sales
-        FakeEmployee("frontdesk"),      # customer_service
-    ])
+    staffed = active_departments_for(
+        [
+            FakeEmployee("quote_chaser"),  # sales
+            FakeEmployee("frontdesk"),  # customer_service
+        ]
+    )
     assert [d.key for d in staffed] == ["customer_service", "sales"]
 
 
 def test_active_departments_for_deduplicates_two_employees_in_one_department():
-    staffed = active_departments_for([
-        FakeEmployee("quote_chaser"),
-        FakeEmployee("lead_qualifier"),
-    ])
+    staffed = active_departments_for(
+        [
+            FakeEmployee("quote_chaser"),
+            FakeEmployee("lead_qualifier"),
+        ]
+    )
     assert [d.key for d in staffed] == ["sales"]
 
 
@@ -163,10 +175,12 @@ def test_a_paused_employee_keeps_its_department_staffed():
 def test_an_unknown_role_key_is_skipped_rather_than_crashing():
     """R2 again, at the aggregate level: a business carrying one unrecognized
     role_key must still render its other departments."""
-    staffed = active_departments_for([
-        FakeEmployee("mystery_role"),
-        FakeEmployee("frontdesk"),
-    ])
+    staffed = active_departments_for(
+        [
+            FakeEmployee("mystery_role"),
+            FakeEmployee("frontdesk"),
+        ]
+    )
     assert [d.key for d in staffed] == ["customer_service"]
 
 
@@ -202,9 +216,12 @@ def test_a_department_with_nothing_deployed_is_empty():
 
 
 def test_a_fully_deployed_department_is_staffed():
-    s = _status_by_key([
-        FakeEmployee("frontdesk"), FakeEmployee("reviews"),
-    ])["customer_service"]
+    s = _status_by_key(
+        [
+            FakeEmployee("frontdesk"),
+            FakeEmployee("reviews"),
+        ]
+    )["customer_service"]
     assert s.state == "staffed"
     assert s.deployed_count == 2
     assert s.deployable_count == 2
@@ -250,8 +267,12 @@ def test_department_status_carries_no_presentation_wording():
     wording field here would leak one audience's voice onto the other's screen
     the first time either changed."""
     assert set(DepartmentStatus.__dataclass_fields__) == {
-        "department", "deployable", "staffed",
-        "deployed_count", "deployable_count", "state",
+        "department",
+        "deployable",
+        "staffed",
+        "deployed_count",
+        "deployable_count",
+        "state",
     }
 
 

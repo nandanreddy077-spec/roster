@@ -11,6 +11,7 @@ These tests pin the ordering, the idempotent resume, and the visibility of the
 failure. What they cannot prove is covered in test_voice_loop_integration.py
 (the call loop) and, finally, only by a real phone call.
 """
+
 import pytest
 from sqlmodel import Session
 
@@ -23,8 +24,12 @@ SECRET = "whsec_dGVzdHNlY3JldHRlc3RzZWNyZXR0ZXN0c2VjcmV0"
 
 def _client(session, **overrides):
     fields = dict(
-        business_name="Ridgeline HVAC", trade="hvac", services_json="[]", hours="9-5",
-        inbound_number="+15125557777", twilio_number_sid="PN123",
+        business_name="Ridgeline HVAC",
+        trade="hvac",
+        services_json="[]",
+        hours="9-5",
+        inbound_number="+15125557777",
+        twilio_number_sid="PN123",
     )
     fields.update(overrides)
     c = Business(**fields)
@@ -61,10 +66,12 @@ def calls(monkeypatch):
         monkeypatch.setattr(provisioning, "register_number_with_xai", c.register)
         monkeypatch.setattr(provisioning, "attach_number_to_xai_trunk", c.attach)
         return c
+
     return _install
 
 
 # ---- the regression: a retryable failure must not destroy the secret -------
+
 
 def test_a_failed_trunk_attach_still_persists_the_once_only_signing_secret(test_engine, calls):
     """THE bug. Trunk attachment is retryable; the signing secret is not. If a
@@ -120,6 +127,7 @@ def test_a_retry_after_a_failed_attach_does_not_re_register(test_engine, calls):
 
 # ---- failure is recorded, not silent --------------------------------------
 
+
 def test_a_failure_is_recorded_on_the_business_row(test_engine, calls):
     calls(attach=ProvisioningError("trunk attach failed"))
     with Session(test_engine) as session:
@@ -171,11 +179,13 @@ def test_an_unexpected_exception_is_still_recorded_not_raised(test_engine, calls
 
 # ---- guards ----------------------------------------------------------------
 
+
 def test_no_twilio_number_yet_is_reported_not_attempted(test_engine, calls):
     c = calls()
     with Session(test_engine) as session:
-        client = _client(session, email="nonum@test.io",
-                         inbound_number=None, twilio_number_sid=None)
+        client = _client(
+            session, email="nonum@test.io", inbound_number=None, twilio_number_sid=None
+        )
         error = provision_voice(session, client)
         assert "No purchased Twilio number" in error
         assert c.order == []
@@ -195,23 +205,27 @@ def test_success_returns_none_and_wires_both_fields(test_engine, calls):
 
 # ---- activation degrades to SMS-only, never crashes ------------------------
 
+
 def test_activation_completes_sms_only_when_voice_provisioning_fails(test_engine, monkeypatch):
     import activation
 
-    monkeypatch.setattr(activation, "buy_twilio_number",
-                        lambda *a, **k: {"phone_number": "+15125550000", "sid": "PN999"})
-    monkeypatch.setattr(activation, "provision_voice",
-                        lambda session, client: "xAI is down")
+    monkeypatch.setattr(
+        activation,
+        "buy_twilio_number",
+        lambda *a, **k: {"phone_number": "+15125550000", "sid": "PN999"},
+    )
+    monkeypatch.setattr(activation, "provision_voice", lambda session, client: "xAI is down")
 
     with Session(test_engine) as session:
-        client = _client(session, email="degrade@test.io",
-                         inbound_number=None, twilio_number_sid=None)
+        client = _client(
+            session, email="degrade@test.io", inbound_number=None, twilio_number_sid=None
+        )
         activation.activate_frontdesk(session, client)
         session.refresh(client)
 
-        assert client.frontdesk_live is True       # SMS Frontdesk is fully working
+        assert client.frontdesk_live is True  # SMS Frontdesk is fully working
         assert client.inbound_number == "+15125550000"
-        assert client.xai_signing_secret is None   # voice simply isn't wired yet
+        assert client.xai_signing_secret is None  # voice simply isn't wired yet
 
 
 def test_the_purchased_number_is_saved_even_if_everything_after_it_fails(test_engine, monkeypatch):
@@ -219,8 +233,11 @@ def test_the_purchased_number_is_saved_even_if_everything_after_it_fails(test_en
     means paying for a number nothing knows about."""
     import activation
 
-    monkeypatch.setattr(activation, "buy_twilio_number",
-                        lambda *a, **k: {"phone_number": "+15125550001", "sid": "PN1000"})
+    monkeypatch.setattr(
+        activation,
+        "buy_twilio_number",
+        lambda *a, **k: {"phone_number": "+15125550001", "sid": "PN1000"},
+    )
 
     def explode(session, client):
         raise RuntimeError("catastrophic")
@@ -228,8 +245,9 @@ def test_the_purchased_number_is_saved_even_if_everything_after_it_fails(test_en
     monkeypatch.setattr(activation, "provision_voice", explode)
 
     with Session(test_engine) as session:
-        client = _client(session, email="billable@test.io",
-                         inbound_number=None, twilio_number_sid=None)
+        client = _client(
+            session, email="billable@test.io", inbound_number=None, twilio_number_sid=None
+        )
         activation.activate_frontdesk(session, client)
 
         with Session(test_engine) as fresh:
@@ -239,6 +257,7 @@ def test_the_purchased_number_is_saved_even_if_everything_after_it_fails(test_en
 
 
 # ---- xAI's real response shape, confirmed against a live registration ------
+
 
 def test_the_real_xai_response_shape_yields_the_secret():
     """The exact payload xAI returned on 2026-08-04. `dispatchSigningSecret`

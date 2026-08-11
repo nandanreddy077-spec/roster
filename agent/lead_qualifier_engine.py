@@ -8,6 +8,7 @@ else captures (2026-07-30 design review).
 Keyword tables and reason codes live in lead_qualifier_rules.py — this
 module contains only the classification functions.
 """
+
 import re
 from typing import Optional, Tuple
 
@@ -76,8 +77,9 @@ def classify_financing_candidate(job: Job, job_type: str) -> Tuple[bool, str]:
     return False, REASON_FINANCING_NO_SIGNAL
 
 
-def classify_membership_candidate(job: Job, job_type: str,
-                                  customer: Optional[Customer]) -> Tuple[bool, str]:
+def classify_membership_candidate(
+    job: Job, job_type: str, customer: Optional[Customer]
+) -> Tuple[bool, str]:
     if customer and customer.plan_notes:
         return False, REASON_MEMBERSHIP_HAS_PLAN
     if job_type not in MEMBERSHIP_ELIGIBLE_JOB_TYPES:
@@ -128,7 +130,13 @@ def qualify(job: Job, customer: Optional[Customer]) -> dict:
         "membership_candidate": membership_candidate,
         "priority": priority,
         "possible_spam": possible_spam,
-        "reasoning": ",".join([
-            job_type_reason, financing_reason, membership_reason, priority_reason, spam_reason,
-        ]),
+        "reasoning": ",".join(
+            [
+                job_type_reason,
+                financing_reason,
+                membership_reason,
+                priority_reason,
+                spam_reason,
+            ]
+        ),
     }

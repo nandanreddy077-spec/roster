@@ -10,9 +10,14 @@ import referral_service
 
 def make_client(session: Session, referral_incentive=None) -> Business:
     client = Business(
-        business_name="Test Co", trade="HVAC", services_json=json.dumps(["AC repair"]),
-        hours="9-5", pricing_faq="n/a", escalation_phone="+15550000000",
-        inbound_number="+15559990000", referral_incentive=referral_incentive,
+        business_name="Test Co",
+        trade="HVAC",
+        services_json=json.dumps(["AC repair"]),
+        hours="9-5",
+        pricing_faq="n/a",
+        escalation_phone="+15550000000",
+        inbound_number="+15559990000",
+        referral_incentive=referral_incentive,
     )
     session.add(client)
     session.commit()
@@ -24,8 +29,7 @@ def make_client(session: Session, referral_incentive=None) -> Business:
         # deploy_role deliberately refuses Referral while its registry status
         # is `planned` — this exercises the send path that graduating the
         # registry entry would enable, without pretending it's deployable today.
-        session.add(Employee(business_id=client.id, role_key="referral",
-                             display_name="Referral"))
+        session.add(Employee(business_id=client.id, role_key="referral", display_name="Referral"))
         session.commit()
     return client
 
@@ -44,8 +48,11 @@ def test_send_due_referral_asks_sends_to_eligible_job(session, monkeypatch):
 
     client = make_client(session, referral_incentive="$25 off your next service")
     job = Job(
-        business_id=client.id, service_type="AC repair", urgency="routine",
-        customer_name="Mike", callback_number="+15551234567",
+        business_id=client.id,
+        service_type="AC repair",
+        urgency="routine",
+        customer_name="Mike",
+        callback_number="+15551234567",
         completed_at=datetime.utcnow() - timedelta(days=5),
     )
     session.add(job)
@@ -67,8 +74,11 @@ def test_send_due_referral_asks_skips_job_completed_too_recently(session, monkey
 
     client = make_client(session, referral_incentive="$25 off")
     job = Job(
-        business_id=client.id, service_type="AC repair", urgency="routine",
-        callback_number="+1", completed_at=datetime.utcnow() - timedelta(days=1),
+        business_id=client.id,
+        service_type="AC repair",
+        urgency="routine",
+        callback_number="+1",
+        completed_at=datetime.utcnow() - timedelta(days=1),
     )
     session.add(job)
     session.commit()
@@ -85,8 +95,11 @@ def test_send_due_referral_asks_skips_client_without_incentive(session, monkeypa
 
     client = make_client(session, referral_incentive=None)
     job = Job(
-        business_id=client.id, service_type="AC repair", urgency="routine",
-        callback_number="+1", completed_at=datetime.utcnow() - timedelta(days=5),
+        business_id=client.id,
+        service_type="AC repair",
+        urgency="routine",
+        callback_number="+1",
+        completed_at=datetime.utcnow() - timedelta(days=5),
     )
     session.add(job)
     session.commit()
@@ -102,8 +115,11 @@ def test_send_due_referral_asks_does_not_resend(session, monkeypatch):
 
     client = make_client(session, referral_incentive="$25 off")
     job = Job(
-        business_id=client.id, service_type="AC repair", urgency="routine",
-        callback_number="+1", completed_at=datetime.utcnow() - timedelta(days=5),
+        business_id=client.id,
+        service_type="AC repair",
+        urgency="routine",
+        callback_number="+1",
+        completed_at=datetime.utcnow() - timedelta(days=5),
     )
     session.add(job)
     session.commit()
@@ -135,12 +151,18 @@ def test_send_due_referral_asks_isolates_per_job_failure(session, monkeypatch):
 
     client = make_client(session, referral_incentive="$25 off")
     bad_job = Job(
-        business_id=client.id, service_type="AC repair", urgency="routine",
-        callback_number="+1", completed_at=datetime.utcnow() - timedelta(days=5),
+        business_id=client.id,
+        service_type="AC repair",
+        urgency="routine",
+        callback_number="+1",
+        completed_at=datetime.utcnow() - timedelta(days=5),
     )
     good_job = Job(
-        business_id=client.id, service_type="Furnace repair", urgency="routine",
-        callback_number="+2", completed_at=datetime.utcnow() - timedelta(days=5),
+        business_id=client.id,
+        service_type="Furnace repair",
+        urgency="routine",
+        callback_number="+2",
+        completed_at=datetime.utcnow() - timedelta(days=5),
     )
     session.add(bad_job)
     session.add(good_job)
@@ -159,8 +181,11 @@ def test_send_due_referral_asks_isolates_per_job_failure(session, monkeypatch):
 def test_find_active_referral_ask_matches_within_window(session):
     client = make_client(session, referral_incentive="$25 off")
     job = Job(
-        business_id=client.id, service_type="AC repair", urgency="routine",
-        callback_number="+1", completed_at=datetime.utcnow() - timedelta(days=5),
+        business_id=client.id,
+        service_type="AC repair",
+        urgency="routine",
+        callback_number="+1",
+        completed_at=datetime.utcnow() - timedelta(days=5),
         referral_sent_at=datetime.utcnow() - timedelta(days=1),
     )
     session.add(job)
@@ -175,8 +200,11 @@ def test_find_active_referral_ask_matches_within_window(session):
 def test_find_active_referral_ask_ignores_expired_window(session):
     client = make_client(session, referral_incentive="$25 off")
     job = Job(
-        business_id=client.id, service_type="AC repair", urgency="routine",
-        callback_number="+1", completed_at=datetime.utcnow() - timedelta(days=10),
+        business_id=client.id,
+        service_type="AC repair",
+        urgency="routine",
+        callback_number="+1",
+        completed_at=datetime.utcnow() - timedelta(days=10),
         referral_sent_at=datetime.utcnow() - timedelta(days=5),  # outside the 3-day window
     )
     session.add(job)
@@ -188,16 +216,24 @@ def test_find_active_referral_ask_ignores_expired_window(session):
 def test_find_active_referral_ask_ignores_already_captured(session):
     client = make_client(session, referral_incentive="$25 off")
     job = Job(
-        business_id=client.id, service_type="AC repair", urgency="routine",
-        callback_number="+1", completed_at=datetime.utcnow() - timedelta(days=5),
+        business_id=client.id,
+        service_type="AC repair",
+        urgency="routine",
+        callback_number="+1",
+        completed_at=datetime.utcnow() - timedelta(days=5),
         referral_sent_at=datetime.utcnow(),
     )
     session.add(job)
     session.commit()
     session.refresh(job)
-    session.add(ReferralLead(
-        business_id=client.id, source_job_id=job.id, asker_phone="+1", raw_reply_text="already replied",
-    ))
+    session.add(
+        ReferralLead(
+            business_id=client.id,
+            source_job_id=job.id,
+            asker_phone="+1",
+            raw_reply_text="already replied",
+        )
+    )
     session.commit()
 
     assert referral_service.find_active_referral_ask(session, client.id, "+1") is None
@@ -206,8 +242,11 @@ def test_find_active_referral_ask_ignores_already_captured(session):
 def test_handle_referral_reply_extracts_structured_info(session, monkeypatch):
     client = make_client(session, referral_incentive="$25 off")
     job = Job(
-        business_id=client.id, service_type="AC repair", urgency="routine",
-        customer_name="Mike", callback_number="+1",
+        business_id=client.id,
+        service_type="AC repair",
+        urgency="routine",
+        customer_name="Mike",
+        callback_number="+1",
         completed_at=datetime.utcnow() - timedelta(days=5),
         referral_sent_at=datetime.utcnow(),
     )
@@ -218,15 +257,17 @@ def test_handle_referral_reply_extracts_structured_info(session, monkeypatch):
     monkeypatch.setattr(
         referral_service,
         "agent",
-        StubAgent({
-            "reply": "",
-            "jobs": [],
-            "new_messages": [],
-            "pending_tool_call": {
-                "name": "record_referral",
-                "input": {"referred_name": "Sarah", "referred_phone": "+15559998888"},
-            },
-        }),
+        StubAgent(
+            {
+                "reply": "",
+                "jobs": [],
+                "new_messages": [],
+                "pending_tool_call": {
+                    "name": "record_referral",
+                    "input": {"referred_name": "Sarah", "referred_phone": "+15559998888"},
+                },
+            }
+        ),
     )
 
     reply = referral_service.handle_referral_reply(
@@ -244,8 +285,11 @@ def test_handle_referral_reply_extracts_structured_info(session, monkeypatch):
 def test_handle_referral_reply_falls_back_to_raw_text_when_extraction_fails(session, monkeypatch):
     client = make_client(session, referral_incentive="$25 off")
     job = Job(
-        business_id=client.id, service_type="AC repair", urgency="routine",
-        customer_name="Mike", callback_number="+1",
+        business_id=client.id,
+        service_type="AC repair",
+        urgency="routine",
+        customer_name="Mike",
+        callback_number="+1",
         completed_at=datetime.utcnow() - timedelta(days=5),
         referral_sent_at=datetime.utcnow(),
     )
@@ -256,7 +300,9 @@ def test_handle_referral_reply_falls_back_to_raw_text_when_extraction_fails(sess
     monkeypatch.setattr(
         referral_service,
         "agent",
-        StubAgent({"reply": "No worries!", "jobs": [], "new_messages": [], "pending_tool_call": None}),
+        StubAgent(
+            {"reply": "No worries!", "jobs": [], "new_messages": [], "pending_tool_call": None}
+        ),
     )
 
     reply = referral_service.handle_referral_reply(session, client, job, "no thanks")

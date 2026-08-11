@@ -5,6 +5,7 @@ Organised by the guarantee under test rather than by function, because the
 guarantees are what a reviewer needs to check: never pitch a member, never
 pitch twice, never text at 3am, never claim more than we did.
 """
+
 import importlib
 from datetime import datetime, timedelta
 
@@ -15,7 +16,12 @@ import membership_engine
 import membership_service
 from conftest import StubAgent
 from db_models import (
-    Business, Customer, Employee, Job, JobQualification, MembershipOffer,
+    Business,
+    Customer,
+    Employee,
+    Job,
+    JobQualification,
+    MembershipOffer,
     OwnerNotification,
 )
 from deployment import deploy_role
@@ -66,9 +72,14 @@ def spy():
 
 def _business(session, **overrides):
     fields = dict(
-        business_name="Ridgeline HVAC", trade="hvac", services_json="[]", hours="9-5",
-        escalation_phone="+15125550149", inbound_number="+15125557777",
-        membership_plan=PLAN, trial_cap_cents=100000,
+        business_name="Ridgeline HVAC",
+        trade="hvac",
+        services_json="[]",
+        hours="9-5",
+        escalation_phone="+15125550149",
+        inbound_number="+15125557777",
+        membership_plan=PLAN,
+        trial_cap_cents=100000,
     )
     fields.update(overrides)
     b = Business(**fields)
@@ -79,29 +90,49 @@ def _business(session, **overrides):
     return b
 
 
-def _candidate_job(session, business, phone="+15125550001", *, candidate=True,
-                   completed_days_ago=1, name="Dana Cruz", customer_id=None):
+def _candidate_job(
+    session,
+    business,
+    phone="+15125550001",
+    *,
+    candidate=True,
+    completed_days_ago=1,
+    name="Dana Cruz",
+    customer_id=None,
+):
     """A completed job with a Lead Qualifier verdict attached — the exact
     shape Membership Agent triggers on."""
     job = Job(
-        business_id=business.id, customer_phone=phone, customer_name=name,
-        service_type="AC repair", urgency="routine", callback_number=phone,
+        business_id=business.id,
+        customer_phone=phone,
+        customer_name=name,
+        service_type="AC repair",
+        urgency="routine",
+        callback_number=phone,
         customer_id=customer_id,
         completed_at=datetime.utcnow() - timedelta(days=completed_days_ago),
     )
     session.add(job)
     session.commit()
     session.refresh(job)
-    session.add(JobQualification(
-        business_id=business.id, source_job_id=job.id, job_type="repair",
-        financing_candidate=False, membership_candidate=candidate,
-        priority="normal", possible_spam=False, reasoning="test",
-    ))
+    session.add(
+        JobQualification(
+            business_id=business.id,
+            source_job_id=job.id,
+            job_type="repair",
+            financing_candidate=False,
+            membership_candidate=candidate,
+            priority="normal",
+            possible_spam=False,
+            reasoning="test",
+        )
+    )
     session.commit()
     return job
 
 
 # ---- it offers, and it offers the owner's own words -------------------------
+
 
 def test_offers_the_plan_on_a_completed_membership_candidate_job(session, spy):
     b = _business(session)
@@ -132,6 +163,7 @@ def test_the_offer_records_a_row_that_marks_it_sent(session, spy):
 
 # ---- the four reasons it stays silent --------------------------------------
 
+
 def test_no_offer_when_lead_qualifier_said_not_a_candidate(session, spy):
     b = _business(session)
     _candidate_job(session, b, candidate=False)
@@ -155,8 +187,9 @@ def test_no_offer_when_the_business_never_hired_the_employee(session, spy):
     record (ARCHITECTURE.md invariant 8)."""
     b = _business(session)
     employee = session.exec(
-        select(Employee).where(Employee.business_id == b.id,
-                               Employee.role_key == "membership_agent")
+        select(Employee).where(
+            Employee.business_id == b.id, Employee.role_key == "membership_agent"
+        )
     ).one()
     session.delete(employee)
     session.commit()
@@ -169,8 +202,9 @@ def test_no_offer_when_the_business_never_hired_the_employee(session, spy):
 def test_firing_the_employee_stops_the_offers(session, spy):
     b = _business(session)
     employee = session.exec(
-        select(Employee).where(Employee.business_id == b.id,
-                               Employee.role_key == "membership_agent")
+        select(Employee).where(
+            Employee.business_id == b.id, Employee.role_key == "membership_agent"
+        )
     ).one()
     employee.status = "fired"
     session.add(employee)
@@ -198,12 +232,14 @@ def test_no_offer_before_the_delay_has_elapsed(session, spy, monkeypatch):
 
 # ---- never pitch someone who already has a plan ----------------------------
 
+
 def test_never_offers_to_a_customer_who_already_has_a_plan(session, spy):
     """The re-check at SEND time, not just at qualification time. Lead
     Qualifier decided a week ago; the customer may have signed up since."""
     b = _business(session)
-    customer = Customer(business_id=b.id, phone="+15125550001",
-                        plan_notes="Comfort Club member, renews in Sept.")
+    customer = Customer(
+        business_id=b.id, phone="+15125550001", plan_notes="Comfort Club member, renews in Sept."
+    )
     session.add(customer)
     session.commit()
     session.refresh(customer)
@@ -228,6 +264,7 @@ def test_one_offer_per_customer_even_across_several_jobs(session, spy):
 
 
 # ---- idempotency and the no-duplicate-text guarantee -----------------------
+
 
 def test_running_the_tick_repeatedly_sends_exactly_one_offer(session, spy):
     b = _business(session)
@@ -266,8 +303,9 @@ def test_a_second_claim_on_the_same_job_is_impossible(session, spy):
     job = _candidate_job(session, b)
     send_due_membership_offers(session)
 
-    session.add(MembershipOffer(business_id=b.id, source_job_id=job.id,
-                                customer_phone="+15125550001"))
+    session.add(
+        MembershipOffer(business_id=b.id, source_job_id=job.id, customer_phone="+15125550001")
+    )
     with pytest.raises(IntegrityError):
         session.commit()
     session.rollback()
@@ -287,8 +325,9 @@ def test_a_second_claim_on_the_same_customer_is_impossible(session, spy):
 
     # Exactly what a concurrent tick would attempt: a fresh claim for the same
     # person on a different job, bypassing the in-process read check.
-    session.add(MembershipOffer(business_id=b.id, source_job_id=other_job.id,
-                                customer_phone="+15125550001"))
+    session.add(
+        MembershipOffer(business_id=b.id, source_job_id=other_job.id, customer_phone="+15125550001")
+    )
     with pytest.raises(IntegrityError):
         session.commit()
     session.rollback()
@@ -300,8 +339,9 @@ def test_the_same_customer_number_at_two_businesses_is_not_blocked(session, spy)
     a customer of two different shops on the platform, and each is entitled to
     make its own offer — tenancy is the boundary everywhere in Roster."""
     b1 = _business(session)
-    b2 = _business(session, email="second@test.io", business_name="Other Co",
-                   inbound_number="+15125558888")
+    b2 = _business(
+        session, email="second@test.io", business_name="Other Co", inbound_number="+15125558888"
+    )
     _candidate_job(session, b1, phone="+15125550001")
     _candidate_job(session, b2, phone="+15125550001")
 
@@ -312,6 +352,7 @@ def test_the_same_customer_number_at_two_businesses_is_not_blocked(session, spy)
 
 
 # ---- the follow-up: exactly one, and only while unanswered -----------------
+
 
 def test_sends_one_follow_up_and_never_a_second(session, spy):
     b = _business(session)
@@ -380,8 +421,11 @@ def test_no_follow_up_for_a_claim_that_never_actually_sent(session):
     the customer never received would be incoherent."""
     b = _business(session)
     job = _candidate_job(session, b)
-    session.add(MembershipOffer(business_id=b.id, source_job_id=job.id,
-                                customer_phone="+15125550001", sent_at=None))
+    session.add(
+        MembershipOffer(
+            business_id=b.id, source_job_id=job.id, customer_phone="+15125550001", sent_at=None
+        )
+    )
     session.commit()
     spy = Spy()
     membership_service.sms_channel = spy
@@ -392,6 +436,7 @@ def test_no_follow_up_for_a_claim_that_never_actually_sent(session):
 
 # ---- replies ---------------------------------------------------------------
 
+
 def _offer_sent(session, spy):
     b = _business(session)
     _candidate_job(session, b)
@@ -400,11 +445,12 @@ def _offer_sent(session, spy):
 
 
 def _stub(intent):
-    return StubAgent({
-        "reply": None,
-        "pending_tool_call": {"name": "record_membership_reply",
-                              "input": {"intent": intent}},
-    })
+    return StubAgent(
+        {
+            "reply": None,
+            "pending_tool_call": {"name": "record_membership_reply", "input": {"intent": intent}},
+        }
+    )
 
 
 def test_an_accepted_offer_records_the_plan_and_tells_the_owner(session, spy):
@@ -412,6 +458,7 @@ def test_an_accepted_offer_records_the_plan_and_tells_the_owner(session, spy):
     membership_service.agent = _stub("accepted")
     owner_texts = Spy()
     import notifications
+
     notifications._owner_channel = owner_texts
 
     reply = handle_membership_reply(session, b, offer, "yes please, sign me up")
@@ -421,12 +468,11 @@ def test_an_accepted_offer_records_the_plan_and_tells_the_owner(session, spy):
     assert offer.raw_reply_text == "yes please, sign me up"
     # THE HANDOFF: plan_notes is what passes this customer to Retention
     # Manager and stops Lead Qualifier flagging them again.
-    customer = session.exec(
-        select(Customer).where(Customer.phone == "+15125550001")).one()
+    customer = session.exec(select(Customer).where(Customer.phone == "+15125550001")).one()
     assert customer.plan_notes and "maintenance plan" in customer.plan_notes
     note = session.exec(
-        select(OwnerNotification).where(
-            OwnerNotification.kind == "membership_accepted")).one()
+        select(OwnerNotification).where(OwnerNotification.kind == "membership_accepted")
+    ).one()
     assert "+15125550001" in note.message
     # Honest wording: we recorded a yes, we did not take payment.
     assert "wants to sign up" in note.message
@@ -451,6 +497,7 @@ def test_a_question_goes_to_a_human_and_the_agent_answers_nothing(session, spy):
     b, offer = _offer_sent(session, spy)
     membership_service.agent = _stub("question")
     import notifications
+
     notifications._owner_channel = Spy()
 
     reply = handle_membership_reply(session, b, offer, "does that cover the water heater too?")
@@ -458,8 +505,8 @@ def test_a_question_goes_to_a_human_and_the_agent_answers_nothing(session, spy):
     session.refresh(offer)
     assert offer.outcome == "question"
     note = session.exec(
-        select(OwnerNotification).where(
-            OwnerNotification.kind == "escalation")).one()
+        select(OwnerNotification).where(OwnerNotification.kind == "escalation")
+    ).one()
     assert "maintenance plan" in note.message
     assert "$19" not in reply and "Comfort Club" not in reply
 
@@ -515,6 +562,7 @@ def test_past_the_trial_cap_the_reply_is_kept_but_not_classified(session, spy):
 
 # ---- routing ---------------------------------------------------------------
 
+
 def test_a_reply_routes_to_the_offer_only_while_it_is_unanswered(session, spy):
     b, offer = _offer_sent(session, spy)
     assert find_active_membership_offer(session, b.id, "+15125550001") is not None
@@ -546,6 +594,7 @@ def test_offers_never_leak_across_businesses(session, spy):
 
 # ---- metrics ---------------------------------------------------------------
 
+
 def test_metrics_count_sent_offers_and_acceptances_separately(session, spy):
     import metrics
 
@@ -571,8 +620,11 @@ def test_an_unsent_claim_is_never_reported_as_activity(session):
 
     b = _business(session)
     job = _candidate_job(session, b)
-    session.add(MembershipOffer(business_id=b.id, source_job_id=job.id,
-                                customer_phone="+15125550001", sent_at=None))
+    session.add(
+        MembershipOffer(
+            business_id=b.id, source_job_id=job.id, customer_phone="+15125550001", sent_at=None
+        )
+    )
     session.commit()
 
     outcomes = metrics.employee_outcomes(session, b.id, "membership_agent")
@@ -581,6 +633,7 @@ def test_an_unsent_claim_is_never_reported_as_activity(session):
 
 
 # ---- the handoff to the rest of the workforce ------------------------------
+
 
 def test_accepting_stops_lead_qualifier_flagging_the_customer_again(session, spy):
     """The loop closes: the same plan_notes write that hands the customer to
@@ -591,12 +644,13 @@ def test_accepting_stops_lead_qualifier_flagging_the_customer_again(session, spy
     b, offer = _offer_sent(session, spy)
     membership_service.agent = _stub("accepted")
     import notifications
+
     notifications._owner_channel = Spy()
     handle_membership_reply(session, b, offer, "yes")
 
-    customer = session.exec(
-        select(Customer).where(Customer.phone == "+15125550001")).one()
+    customer = session.exec(select(Customer).where(Customer.phone == "+15125550001")).one()
     candidate, reason = classify_membership_candidate(
-        Job(business_id=1, service_type="drain clear", urgency="routine"), "repair", customer)
+        Job(business_id=1, service_type="drain clear", urgency="routine"), "repair", customer
+    )
     assert candidate is False
     assert reason == REASON_MEMBERSHIP_HAS_PLAN

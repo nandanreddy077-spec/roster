@@ -2,6 +2,7 @@
 customer must run one-at-a-time (interleaved turns corrupt history and break
 Anthropic's strict user/assistant alternation); different customers must not
 block each other."""
+
 import threading
 import time
 
@@ -50,7 +51,10 @@ def test_different_conversations_do_not_block_each_other():
 
     t1 = threading.Thread(target=worker, args=("+15550001111",))
     t2 = threading.Thread(target=worker, args=("+15550002222",))
-    t1.start(); t2.start(); t1.join(); t2.join()
+    t1.start()
+    t2.start()
+    t1.join()
+    t2.join()
     assert max_active[0] == 2
 
 
@@ -61,7 +65,8 @@ def test_inbound_sms_turns_for_same_customer_are_serialized(test_engine, monkeyp
 
     with Session(test_engine) as s:
         b = Business(business_name="X", inbound_number="+15125550100", frontdesk_live=True)
-        s.add(b); s.commit()
+        s.add(b)
+        s.commit()
 
     active, max_active, lk = [0], [0], threading.Lock()
 
@@ -82,6 +87,9 @@ def test_inbound_sms_turns_for_same_customer_are_serialized(test_engine, monkeyp
 
     t1 = threading.Thread(target=turn, args=("SMa",))
     t2 = threading.Thread(target=turn, args=("SMb",))
-    t1.start(); t2.start(); t1.join(); t2.join()
+    t1.start()
+    t2.start()
+    t1.join()
+    t2.join()
 
     assert max_active[0] == 1, "same-customer turns must never run concurrently"

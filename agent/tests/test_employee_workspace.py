@@ -3,6 +3,7 @@ from DepartmentWorkspace rather than composing itself from EMPLOYEE_RECORDS
 and metrics directly, so "is this employee actually working" is decided
 exactly once, by the department builder — the employee page can never
 disagree with the page it was reached from."""
+
 from sqlmodel import Session
 
 from db_models import Business, Job
@@ -23,7 +24,11 @@ def test_the_view_model_has_exactly_its_five_fields():
     have: this page stays mission/status/outcomes/activity, not a growing
     analytics surface."""
     assert set(EmployeeWorkspace.__dataclass_fields__) == {
-        "employee", "mission", "status", "outcomes", "activity",
+        "employee",
+        "mission",
+        "status",
+        "outcomes",
+        "activity",
     }
 
 
@@ -58,8 +63,14 @@ def test_a_role_from_a_different_department_returns_none(session):
 def test_a_deployed_employee_assembles_the_full_workspace(session):
     b = _business(session, "ew5@test.io")
     deploy_department(session, b.id, "customer_service")
-    session.add(Job(business_id=b.id, customer_phone="+15125550100",
-                    service_type="AC repair", urgency="routine"))
+    session.add(
+        Job(
+            business_id=b.id,
+            customer_phone="+15125550100",
+            service_type="AC repair",
+            urgency="routine",
+        )
+    )
     session.commit()
 
     ws = build_employee_workspace(session, b.id, "customer_service", "frontdesk")
@@ -77,8 +88,14 @@ def test_activity_is_not_capped_to_the_department_pages_preview_size(session):
     b = _business(session, "ew6@test.io")
     deploy_department(session, b.id, "customer_service")
     for i in range(8):
-        session.add(Job(business_id=b.id, customer_phone=f"+1512555{i:04d}",
-                        service_type=f"job {i}", urgency="routine"))
+        session.add(
+            Job(
+                business_id=b.id,
+                customer_phone=f"+1512555{i:04d}",
+                service_type=f"job {i}",
+                urgency="routine",
+            )
+        )
     session.commit()
 
     ws = build_employee_workspace(session, b.id, "customer_service", "frontdesk")

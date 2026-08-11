@@ -10,6 +10,7 @@ What it still cannot prove — because it carries no inbound caller audio — is
 the CALLER transcript event shape (see USER_TRANSCRIPT_COMPLETED). That
 remains unconfirmed until a real phone call is captured.
 """
+
 from xai_voice_adapter import _extract_response_tokens, _extract_transcript
 
 # Verbatim response.done from a live xAI realtime session, 2026-08-04.
@@ -19,20 +20,24 @@ LIVE_RESPONSE_DONE = {
     "response": {
         "id": "c05db86f-9cb2-404d-99ed-1888c7f017ea",
         "object": "realtime.response",
-        "output": [{
-            "id": "9e271007-a1f2-453b-a677-658e80bc1665",
-            "object": "realtime.item",
-            "type": "message",
-            "status": "completed",
-            "role": "assistant",
-            "content": [{
-                "type": "audio",
-                "transcript": "Hello, how may I assist you today? I'm here to help with any inquiries or requests.",
-            }],
-        }],
+        "output": [
+            {
+                "id": "9e271007-a1f2-453b-a677-658e80bc1665",
+                "object": "realtime.item",
+                "type": "message",
+                "status": "completed",
+                "role": "assistant",
+                "content": [
+                    {
+                        "type": "audio",
+                        "transcript": "Hello, how may I assist you today? I'm here to help with any inquiries or requests.",
+                    }
+                ],
+            }
+        ],
         "status": "completed",
         "status_details": "unimplemented",
-        "usage": {},          # <- empty; the real numbers are top-level
+        "usage": {},  # <- empty; the real numbers are top-level
     },
     "response_id": "c05db86f-9cb2-404d-99ed-1888c7f017ea",
     "usage": {

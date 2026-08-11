@@ -2,6 +2,7 @@
 Every case is a plain input/output table: no StubAgent, nothing to
 monkeypatch, since there is no AgentEngine dependency at all.
 """
+
 from db_models import Customer, Job
 from lead_qualifier_engine import (
     classify_financing_candidate,
@@ -36,14 +37,19 @@ from lead_qualifier_rules import (
 
 def _job(**overrides) -> Job:
     defaults = dict(
-        business_id=1, service_type="AC not cooling", urgency="routine",
-        callback_number="+15551234567", is_estimate=False, notes=None,
+        business_id=1,
+        service_type="AC not cooling",
+        urgency="routine",
+        callback_number="+15551234567",
+        is_estimate=False,
+        notes=None,
     )
     defaults.update(overrides)
     return Job(**defaults)
 
 
 # ---- job_type -----------------------------------------------------------
+
 
 def test_job_type_estimate_without_replacement_language_is_estimate():
     job = _job(is_estimate=True, service_type="how much for a price check")
@@ -82,6 +88,7 @@ def test_job_type_not_estimate_with_maintenance_language_is_maintenance():
 
 # ---- financing_candidate --------------------------------------------------
 
+
 def test_financing_candidate_true_for_replacement_job_type():
     job = _job(service_type="AC")
     candidate, reason = classify_financing_candidate(job, "replacement")
@@ -104,6 +111,7 @@ def test_financing_candidate_false_without_signal():
 
 
 # ---- membership_candidate --------------------------------------------------
+
 
 def test_membership_candidate_true_when_no_plan_and_repair():
     candidate, reason = classify_membership_candidate(_job(), "repair", None)
@@ -137,6 +145,7 @@ def test_membership_candidate_false_for_replacement_job_type():
 
 
 # ---- priority ---------------------------------------------------------------
+
 
 def test_priority_high_for_emergency_urgency():
     job = _job(urgency="emergency")
@@ -175,6 +184,7 @@ def test_priority_normal_with_no_signal():
 
 # ---- possible_spam ------------------------------------------------------
 
+
 def test_possible_spam_true_for_missing_callback_number():
     job = _job(callback_number=None)
     spam, reason = classify_possible_spam(job)
@@ -212,9 +222,9 @@ def test_possible_spam_false_for_a_clean_job():
 
 # ---- qualify (the orchestrator) --------------------------------------------
 
+
 def test_qualify_combines_every_axis_and_joins_reasoning():
-    job = _job(is_estimate=True, service_type="want to replace the whole unit",
-               urgency="routine")
+    job = _job(is_estimate=True, service_type="want to replace the whole unit", urgency="routine")
     result = qualify(job, None)
 
     assert result["job_type"] == "replacement"
@@ -246,7 +256,8 @@ def test_no_membership_pitch_off_the_back_of_an_emergency():
     had flooded the day before. Found in the 2026-08-10 end-to-end run."""
     candidate, reason = classify_membership_candidate(
         _job(service_type="water heater burst, flooding garage", urgency="emergency"),
-        "repair", None,
+        "repair",
+        None,
     )
     assert candidate is False
     assert reason == REASON_MEMBERSHIP_EMERGENCY_EXCLUDED
@@ -256,6 +267,8 @@ def test_a_same_day_job_is_still_worth_a_membership_offer():
     """Only a genuine emergency is excluded — narrowing this to every urgent
     job would quietly delete most of Membership Agent's pipeline."""
     candidate, _ = classify_membership_candidate(
-        _job(urgency="same_day"), "repair", None,
+        _job(urgency="same_day"),
+        "repair",
+        None,
     )
     assert candidate is True

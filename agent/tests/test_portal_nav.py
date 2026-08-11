@@ -5,6 +5,7 @@ concepts, never implementation structure. The nav names things an owner
 already thinks about; it never names Roster's internals. A nav built from
 implementation structure has to be renamed every time the implementation
 changes — exactly what this migration is undoing."""
+
 import re
 
 from sqlmodel import Session
@@ -23,7 +24,11 @@ def _nav_html(body: str) -> str:
 
 def test_the_five_nav_items_are_the_blueprint_five_in_order():
     assert [item["key"] for item in portal.NAV_ITEMS] == [
-        "overview", "departments", "briefing", "notifications", "settings",
+        "overview",
+        "departments",
+        "briefing",
+        "notifications",
+        "settings",
     ]
 
 
@@ -110,6 +115,7 @@ def _render_dashboard(test_engine, monkeypatch, email, **kw):
     with Session(test_engine) as s:
         biz = s.get(Business, bid)
         from auth import hash_password
+
         biz.password_hash = hash_password("pw12345")
         s.add(biz)
         s.commit()

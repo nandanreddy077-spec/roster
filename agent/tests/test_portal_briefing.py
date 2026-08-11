@@ -1,6 +1,7 @@
 """The Briefing route and template — renders a single BriefingWorkspace
 (workspace.py). No template contains summarisation logic; the route never
 touches DepartmentInterest or metrics.py directly."""
+
 from sqlmodel import Session
 
 import app as app_module
@@ -19,8 +20,12 @@ def _client_for(test_engine, monkeypatch):
     monkeypatch.setattr(portal, "engine", test_engine)
     email = next(_EMAIL)
     with Session(test_engine) as s:
-        b = Business(business_name="Ridgeline Plumbing", trade="Plumbing",
-                     email=email, password_hash=hash_password("pw12345"))
+        b = Business(
+            business_name="Ridgeline Plumbing",
+            trade="Plumbing",
+            email=email,
+            password_hash=hash_password("pw12345"),
+        )
         s.add(b)
         s.commit()
         s.refresh(b)
@@ -65,8 +70,14 @@ def test_an_active_department_links_into_its_workspace(test_engine, monkeypatch)
     client, bid = _client_for(test_engine, monkeypatch)
     with Session(test_engine) as s:
         deploy_role(s, bid, "frontdesk")
-        s.add(Job(business_id=bid, customer_phone="+15125550001",
-                   service_type="Drain cleaning", urgency="routine"))
+        s.add(
+            Job(
+                business_id=bid,
+                customer_phone="+15125550001",
+                service_type="Drain cleaning",
+                urgency="routine",
+            )
+        )
         s.commit()
 
     body = client.get("/v2/dashboard/briefing").text
@@ -101,8 +112,14 @@ def test_viewing_the_briefing_never_records_interest(test_engine, monkeypatch):
 def test_recent_notifications_appear(test_engine, monkeypatch):
     client, bid = _client_for(test_engine, monkeypatch)
     with Session(test_engine) as s:
-        s.add(OwnerNotification(business_id=bid, kind="job_booked", source="sms_booking",
-                                 message="Frontdesk just booked a job"))
+        s.add(
+            OwnerNotification(
+                business_id=bid,
+                kind="job_booked",
+                source="sms_booking",
+                message="Frontdesk just booked a job",
+            )
+        )
         s.commit()
 
     body = client.get("/v2/dashboard/briefing").text

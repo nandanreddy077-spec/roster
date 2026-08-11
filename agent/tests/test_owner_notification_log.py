@@ -3,6 +3,7 @@ fire-and-forget SMS: it vanishes into a text thread, and a failed send is
 swallowed silently (notifications.py's bare `except`). These rows are what
 the Notifications page reads (blueprint §4), and the first place a failed
 owner alert is visible at all."""
+
 import json
 
 from sqlmodel import Session, select
@@ -24,8 +25,12 @@ from notifications import (
 
 def test_records_a_delivered_notification(session):
     row = record_owner_notification(
-        session, business_id=1, kind=KIND_JOB_BOOKED, source=SOURCE_SMS_BOOKING,
-        message="Frontdesk just booked a job", delivered=True,
+        session,
+        business_id=1,
+        kind=KIND_JOB_BOOKED,
+        source=SOURCE_SMS_BOOKING,
+        message="Frontdesk just booked a job",
+        delivered=True,
     )
     assert row.id is not None
     stored = session.exec(select(OwnerNotification)).all()
@@ -42,8 +47,12 @@ def test_records_an_undelivered_notification(session):
     still gets a row — marked undelivered. The dashboard is then the only
     place that alert exists, which is the entire point of the log."""
     record_owner_notification(
-        session, business_id=1, kind=KIND_ESCALATION, source=SOURCE_ALERT_OWNER,
-        message="URGENT — caller needs you", delivered=False,
+        session,
+        business_id=1,
+        kind=KIND_ESCALATION,
+        source=SOURCE_ALERT_OWNER,
+        message="URGENT — caller needs you",
+        delivered=False,
     )
     stored = session.exec(select(OwnerNotification)).all()
     assert stored[0].delivered is False
@@ -53,8 +62,12 @@ def test_a_new_notification_starts_unread(session):
     """read_at has no producer until the Notifications page ships (Phase 5).
     It defaults to None so that page has a real unread signal to read."""
     row = record_owner_notification(
-        session, business_id=1, kind=KIND_JOB_BOOKED, source=SOURCE_SMS_BOOKING,
-        message="m", delivered=True,
+        session,
+        business_id=1,
+        kind=KIND_JOB_BOOKED,
+        source=SOURCE_SMS_BOOKING,
+        message="m",
+        delivered=True,
     )
     assert row.read_at is None
 
@@ -63,6 +76,7 @@ def test_a_failed_write_returns_none_and_never_raises():
     """The log is strictly less important than the booking that just
     committed. A broken session must not propagate an exception into the
     alert path — the caller has already done the work that matters."""
+
     class BrokenSession:
         def add(self, _row):
             raise RuntimeError("database is gone")
@@ -70,10 +84,17 @@ def test_a_failed_write_returns_none_and_never_raises():
         def rollback(self):
             raise RuntimeError("rollback also fails")
 
-    assert record_owner_notification(
-        BrokenSession(), business_id=1, kind=KIND_JOB_BOOKED,
-        source=SOURCE_SMS_BOOKING, message="m", delivered=True,
-    ) is None
+    assert (
+        record_owner_notification(
+            BrokenSession(),
+            business_id=1,
+            kind=KIND_JOB_BOOKED,
+            source=SOURCE_SMS_BOOKING,
+            message="m",
+            delivered=True,
+        )
+        is None
+    )
 
 
 def test_the_four_sources_are_distinct(session):
@@ -81,8 +102,10 @@ def test_the_four_sources_are_distinct(session):
     voice booking — both KIND_JOB_BOOKED — can be told apart without
     string-matching the message body."""
     sources = {
-        SOURCE_SMS_BOOKING, SOURCE_VOICE_BOOKING,
-        SOURCE_ALERT_OWNER, SOURCE_CALL_DROPPED,
+        SOURCE_SMS_BOOKING,
+        SOURCE_VOICE_BOOKING,
+        SOURCE_ALERT_OWNER,
+        SOURCE_CALL_DROPPED,
     }
     assert len(sources) == 4
     assert KIND_CALL_DROPPED == SOURCE_CALL_DROPPED  # same string, different axes
@@ -117,17 +140,29 @@ class _BookingAgent:
     def respond(self, client_config, history, tools=None, system_prompt=None, max_iters=None):
         return {
             "reply": "You're booked!",
-            "jobs": [{"id": "t1", "input": {
-                "service_type": "AC Repair", "urgency": "same_day", "customer_name": "Sarah",
-            }}],
-            "new_messages": [], "pending_tool_call": None,
+            "jobs": [
+                {
+                    "id": "t1",
+                    "input": {
+                        "service_type": "AC Repair",
+                        "urgency": "same_day",
+                        "customer_name": "Sarah",
+                    },
+                }
+            ],
+            "new_messages": [],
+            "pending_tool_call": None,
         }
 
 
 def _live_business(session, email):
     biz = Business(
-        business_name="B", trade="hvac", email=email, frontdesk_live=True,
-        trial_cap_cents=10000, escalation_phone="+15550001111",
+        business_name="B",
+        trade="hvac",
+        email=email,
+        frontdesk_live=True,
+        trial_cap_cents=10000,
+        escalation_phone="+15550001111",
         inbound_number="+15550002222",
     )
     session.add(biz)
@@ -139,6 +174,7 @@ def _live_business(session, email):
 def test_sms_booking_records_a_delivered_notification(session, monkeypatch):
     import notifications
     import service
+
     monkeypatch.setattr(service, "agent", _BookingAgent())
     monkeypatch.setattr(notifications, "_owner_channel", _SpyChannel())
     biz = _live_business(session, "log1@test.io")
@@ -160,13 +196,19 @@ def test_voice_booking_records_a_notification_with_the_voice_source(session, mon
     import asyncio
 
     import xai_voice_adapter as adapter
+
     monkeypatch.setattr(adapter, "notify_owner_of_booking", lambda *a, **k: True)
     biz = _live_business(session, "log-voice@test.io")
 
-    asyncio.run(adapter._persist_job(
-        session, biz, "xai-voice:c9", "+15125559999",
-        {"service_type": "Burst pipe", "urgency": "emergency"},
-    ))
+    asyncio.run(
+        adapter._persist_job(
+            session,
+            biz,
+            "xai-voice:c9",
+            "+15125559999",
+            {"service_type": "Burst pipe", "urgency": "emergency"},
+        )
+    )
 
     rows = session.exec(select(OwnerNotification)).all()
     assert len(rows) == 1
@@ -180,6 +222,7 @@ def test_a_failed_owner_sms_still_records_an_undelivered_notification(session, m
     still find out this job was booked."""
     import notifications
     import service
+
     monkeypatch.setattr(service, "agent", _BookingAgent())
     monkeypatch.setattr(notifications, "_owner_channel", _BoomChannel())
     biz = _live_business(session, "log2@test.io")
@@ -196,6 +239,7 @@ def test_dashboard_test_bookings_are_not_logged(session, monkeypatch):
     fill their notifications feed with activity that never happened."""
     import notifications
     import service
+
     monkeypatch.setattr(service, "agent", _BookingAgent())
     monkeypatch.setattr(notifications, "_owner_channel", _SpyChannel())
     biz = _live_business(session, "log3@test.io")
@@ -210,6 +254,7 @@ def test_a_repeat_turn_on_the_same_job_does_not_log_twice(session, monkeypatch):
     a detail-merge re-runs the turn but must not produce a second row."""
     import notifications
     import service
+
     monkeypatch.setattr(service, "agent", _BookingAgent())
     monkeypatch.setattr(notifications, "_owner_channel", _SpyChannel())
     biz = _live_business(session, "log4@test.io")
@@ -228,6 +273,7 @@ def test_build_escalation_message_is_shared_by_the_sms_and_the_log(session):
     owner's dashboard would show something subtly different from the text
     they actually received."""
     import notifications
+
     biz = _live_business(session, "esc0@test.io")
     spy = _SpyChannel()
 
@@ -247,16 +293,24 @@ def test_a_failed_log_write_cannot_change_what_the_caller_is_told(session, monke
     notification-log failure could flip that bool, the AI would tell someone
     with a gas leak that the owner wasn't reached when in fact they were."""
     import notifications
+
     biz = _live_business(session, "esc1@test.io")
     monkeypatch.setattr(
-        notifications, "record_owner_notification",
+        notifications,
+        "record_owner_notification",
         lambda *a, **k: (_ for _ in ()).throw(RuntimeError("log is down")),
     )
 
     # The send itself succeeds; only the log is broken.
-    assert notifications.notify_owner_of_escalation(
-        biz, "+15125559999", "gas smell", channel=_SpyChannel(),
-    ) is True
+    assert (
+        notifications.notify_owner_of_escalation(
+            biz,
+            "+15125559999",
+            "gas smell",
+            channel=_SpyChannel(),
+        )
+        is True
+    )
 
 
 def test_escalation_tool_records_a_notification(session, monkeypatch):
@@ -275,12 +329,21 @@ def test_escalation_tool_records_a_notification(session, monkeypatch):
         async def send(self, payload):
             self.sent.append(payload)
 
-    asyncio.run(adapter._handle_function_call(
-        _WS(), session, biz, "xai-voice:c1", "+15125559999",
-        {"name": TRANSFER_CALL_TOOL["name"], "call_id": "fc1",
-         "arguments": json.dumps({"reason": "gas smell"})},
-        adapter.CallTrace("c1"),
-    ))
+    asyncio.run(
+        adapter._handle_function_call(
+            _WS(),
+            session,
+            biz,
+            "xai-voice:c1",
+            "+15125559999",
+            {
+                "name": TRANSFER_CALL_TOOL["name"],
+                "call_id": "fc1",
+                "arguments": json.dumps({"reason": "gas smell"}),
+            },
+            adapter.CallTrace("c1"),
+        )
+    )
 
     rows = session.exec(
         select(OwnerNotification).where(OwnerNotification.kind == KIND_ESCALATION)
@@ -308,10 +371,15 @@ def test_a_dropped_call_records_a_notification(session, monkeypatch):
     monkeypatch.setattr(adapter, "_run_call_session", _explode)
     bind = session.get_bind()
 
-    asyncio.run(adapter.run_call(
-        "c2", biz, "+15125559999", lambda: Session(bind),
-        trace=adapter.CallTrace("c2"),
-    ))
+    asyncio.run(
+        adapter.run_call(
+            "c2",
+            biz,
+            "+15125559999",
+            lambda: Session(bind),
+            trace=adapter.CallTrace("c2"),
+        )
+    )
 
     rows = session.exec(
         select(OwnerNotification).where(OwnerNotification.kind == KIND_CALL_DROPPED)
@@ -325,7 +393,12 @@ def test_a_dropped_call_records_a_notification(session, monkeypatch):
 
 def _record(session, business_id, message):
     return record_owner_notification(
-        session, business_id, KIND_JOB_BOOKED, SOURCE_SMS_BOOKING, message, True,
+        session,
+        business_id,
+        KIND_JOB_BOOKED,
+        SOURCE_SMS_BOOKING,
+        message,
+        True,
     )
 
 

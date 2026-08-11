@@ -18,6 +18,7 @@ holding an ORM object it intends to hand back must refresh it after publishing,
 or its fields raise DetachedInstanceError once the session closes. See
 bookings.book_job for the worked example.
 """
+
 import json
 from collections import defaultdict
 from typing import Callable, Dict, List
@@ -41,15 +42,21 @@ class EventBus:
         dispatching nothing — when an event with this dedup_key is already
         recorded, whether found by the pre-check or by losing the insert race to
         a concurrent worker. The session is left usable either way."""
-        if event.dedup_key and session.exec(
-            select(Event).where(Event.dedup_key == event.dedup_key)
-        ).first():
+        if (
+            event.dedup_key
+            and session.exec(select(Event).where(Event.dedup_key == event.dedup_key)).first()
+        ):
             return False
-        session.add(Event(
-            business_id=event.business_id, type=event.type,
-            payload_json=json.dumps(event.payload), customer_id=event.customer_id,
-            employee_id=event.employee_id, dedup_key=event.dedup_key,
-        ))
+        session.add(
+            Event(
+                business_id=event.business_id,
+                type=event.type,
+                payload_json=json.dumps(event.payload),
+                customer_id=event.customer_id,
+                employee_id=event.employee_id,
+                dedup_key=event.dedup_key,
+            )
+        )
         try:
             session.commit()
         except IntegrityError:

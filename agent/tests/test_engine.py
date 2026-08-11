@@ -1,4 +1,10 @@
-from engine import LOG_JOB_TOOL, TRANSFER_CALL_TOOL, AgentEngine, build_system_prompt, build_voice_system_prompt
+from engine import (
+    LOG_JOB_TOOL,
+    TRANSFER_CALL_TOOL,
+    AgentEngine,
+    build_system_prompt,
+    build_voice_system_prompt,
+)
 from models import ClientConfig
 
 
@@ -55,10 +61,17 @@ class FakeAnthropicClient:
 
 def test_respond_returns_pending_tool_call_for_transfer():
     responses = [
-        FakeResponse([
-            FakeBlock("text", text="Let me get someone on the line for you."),
-            FakeBlock("tool_use", name="transfer_call", input={"destination": "+15550000000"}, id="tu_1"),
-        ]),
+        FakeResponse(
+            [
+                FakeBlock("text", text="Let me get someone on the line for you."),
+                FakeBlock(
+                    "tool_use",
+                    name="transfer_call",
+                    input={"destination": "+15550000000"},
+                    id="tu_1",
+                ),
+            ]
+        ),
     ]
     agent = AgentEngine(client=FakeAnthropicClient(responses))
 
@@ -68,27 +81,32 @@ def test_respond_returns_pending_tool_call_for_transfer():
         tools=[LOG_JOB_TOOL, TRANSFER_CALL_TOOL],
     )
 
-    assert result["pending_tool_call"] == {"name": "transfer_call", "input": {"destination": "+15550000000"}}
+    assert result["pending_tool_call"] == {
+        "name": "transfer_call",
+        "input": {"destination": "+15550000000"},
+    }
     assert result["reply"] == "Let me get someone on the line for you."
 
 
 def test_respond_captures_log_job_from_same_turn_as_transfer():
     responses = [
-        FakeResponse([
-            FakeBlock("text", text="I'm getting someone right now."),
-            FakeBlock(
-                "tool_use",
-                name="log_job",
-                input={"service_type": "gas leak", "urgency": "emergency"},
-                id="tu_1",
-            ),
-            FakeBlock(
-                "tool_use",
-                name="transfer_call",
-                input={"destination": "+15550000000"},
-                id="tu_2",
-            ),
-        ]),
+        FakeResponse(
+            [
+                FakeBlock("text", text="I'm getting someone right now."),
+                FakeBlock(
+                    "tool_use",
+                    name="log_job",
+                    input={"service_type": "gas leak", "urgency": "emergency"},
+                    id="tu_1",
+                ),
+                FakeBlock(
+                    "tool_use",
+                    name="transfer_call",
+                    input={"destination": "+15550000000"},
+                    id="tu_2",
+                ),
+            ]
+        ),
     ]
     agent = AgentEngine(client=FakeAnthropicClient(responses))
 
@@ -110,12 +128,18 @@ def test_every_tool_use_written_to_history_gets_a_tool_result():
     that, which 400'd every later message on the thread — a dead conversation
     at the worst possible moment."""
     responses = [
-        FakeResponse([
-            FakeBlock("text", text="I'm alerting the owner now."),
-            FakeBlock("tool_use", name="log_job",
-                      input={"service_type": "gas leak", "urgency": "emergency"}, id="tu_1"),
-            FakeBlock("tool_use", name="alert_owner", input={"reason": "gas leak"}, id="tu_2"),
-        ]),
+        FakeResponse(
+            [
+                FakeBlock("text", text="I'm alerting the owner now."),
+                FakeBlock(
+                    "tool_use",
+                    name="log_job",
+                    input={"service_type": "gas leak", "urgency": "emergency"},
+                    id="tu_1",
+                ),
+                FakeBlock("tool_use", name="alert_owner", input={"reason": "gas leak"}, id="tu_2"),
+            ]
+        ),
     ]
     agent = AgentEngine(client=FakeAnthropicClient(responses))
 
@@ -143,12 +167,21 @@ def test_every_tool_use_written_to_history_gets_a_tool_result():
 
 def test_respond_log_job_still_resolved_internally():
     responses = [
-        FakeResponse([
-            FakeBlock("tool_use", name="log_job", input={"service_type": "AC repair", "urgency": "routine"}, id="tu_1"),
-        ]),
-        FakeResponse([
-            FakeBlock("text", text="Got it, someone will reach out."),
-        ]),
+        FakeResponse(
+            [
+                FakeBlock(
+                    "tool_use",
+                    name="log_job",
+                    input={"service_type": "AC repair", "urgency": "routine"},
+                    id="tu_1",
+                ),
+            ]
+        ),
+        FakeResponse(
+            [
+                FakeBlock("text", text="Got it, someone will reach out."),
+            ]
+        ),
     ]
     agent = AgentEngine(client=FakeAnthropicClient(responses))
 
@@ -164,9 +197,16 @@ def test_respond_log_job_still_resolved_internally():
 
 def test_respond_respects_max_iters_override():
     responses = [
-        FakeResponse([
-            FakeBlock("tool_use", name="log_job", input={"service_type": "AC repair", "urgency": "routine"}, id="tu_1"),
-        ]),
+        FakeResponse(
+            [
+                FakeBlock(
+                    "tool_use",
+                    name="log_job",
+                    input={"service_type": "AC repair", "urgency": "routine"},
+                    id="tu_1",
+                ),
+            ]
+        ),
     ]
     agent = AgentEngine(client=FakeAnthropicClient(responses))
 
@@ -289,7 +329,7 @@ def test_an_unrecognized_trade_still_gets_a_safe_default_note():
     outside the 10 supported ones — same DEFAULT-fallback discipline as
     roles.py's DEFAULT_RECEPTIONIST_NAME."""
     prompt = build_system_prompt(make_client_config(trade="Fencing"), now=FIXED_NOW)
-    assert "log_job" in prompt   # built fine, no crash
+    assert "log_job" in prompt  # built fine, no crash
     # And it must not accidentally pick up another trade's specific guidance.
     assert "thermostat" not in prompt.lower()
 
@@ -352,6 +392,7 @@ def test_both_prompts_instruct_flagging_estimate_calls_as_is_estimate():
 # (docs/superpowers/specs/2026-07-29-frontdesk-conversation-quality-audit.md,
 # items 5 and 13)
 
+
 def test_sms_prompt_mentions_service_area_when_set():
     config = make_client_config(service_area="within 20 miles of Austin, TX")
     prompt = build_system_prompt(config, now=FIXED_NOW)
@@ -395,9 +436,14 @@ def test_both_prompts_distinguish_repair_replacement_and_estimate_calls():
 # items 8, 12, 14, 16 + a conversation-flow cleanup pass)
 
 OBJECTION_FRAGMENTS = [
-    "too expensive", "quoted less", "think about it", "shopping around",
+    "too expensive",
+    "quoted less",
+    "think about it",
+    "shopping around",
     "acknowledg",  # matches "acknowledge"/"acknowledged"
-    "value", "discount", "owner callback",
+    "value",
+    "discount",
+    "owner callback",
 ]
 
 
@@ -416,7 +462,13 @@ def test_both_prompts_never_invent_a_discount():
         assert "never" in prompt and "discount" in prompt
 
 
-PRICING_GUIDANCE_FRAGMENTS = ["diagnostic", "repair pricing", "estimate", "replacement pricing", "honestly"]
+PRICING_GUIDANCE_FRAGMENTS = [
+    "diagnostic",
+    "repair pricing",
+    "estimate",
+    "replacement pricing",
+    "honestly",
+]
 
 
 def test_both_prompts_distinguish_fee_types_and_are_honest_about_unknown_pricing():
@@ -446,6 +498,7 @@ def test_both_prompts_recognize_multi_problem_calls():
 
 # ---- Regression: every Sprint 1/2 fixture must still hold after the
 # conversation-flow cleanup pass --------------------------------------------
+
 
 def test_regression_date_time_trade_triage_and_preferred_window_still_present():
     prompt = build_system_prompt(make_client_config(trade="Electrical"), now=FIXED_NOW)
@@ -501,10 +554,17 @@ def test_regression_service_area_and_estimate_language_still_present():
 
 # ---- sounding like a person on the phone ----------------------------------
 
+
 def _voice(**overrides):
-    fields = dict(client_id="1", business_name="Ridgeline Plumbing", trade="plumbing",
-                  services=["drain cleaning"], hours="9-5", pricing_faq="",
-                  escalation_phone="+15125550149")
+    fields = dict(
+        client_id="1",
+        business_name="Ridgeline Plumbing",
+        trade="plumbing",
+        services=["drain cleaning"],
+        hours="9-5",
+        pricing_faq="",
+        escalation_phone="+15125550149",
+    )
     fields.update(overrides)
     return build_voice_system_prompt(ClientConfig(**fields))
 
@@ -512,8 +572,12 @@ def _voice(**overrides):
 def test_the_voice_prompt_bans_the_call_center_tells():
     """What gives an AI away on the phone is phrasing, not the voice."""
     prompt = _voice().lower()
-    for tell in ["i'd be happy to assist", "anything else i can help",
-                 "thank you for your patience", "absolutely"]:
+    for tell in [
+        "i'd be happy to assist",
+        "anything else i can help",
+        "thank you for your patience",
+        "absolutely",
+    ]:
         assert tell in prompt, f"the prompt no longer names {tell!r} as a phrase to avoid"
     assert "contractions" in prompt
     assert "one thought per turn" in prompt

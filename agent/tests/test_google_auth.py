@@ -24,6 +24,7 @@ def _wire(monkeypatch, test_engine):
 
 # ---- google_enabled ---------------------------------------------------------
 
+
 def test_google_disabled_when_env_unset(monkeypatch):
     monkeypatch.delenv("GOOGLE_CLIENT_ID", raising=False)
     monkeypatch.delenv("GOOGLE_CLIENT_SECRET", raising=False)
@@ -39,6 +40,7 @@ def test_google_enabled_needs_both_vars(monkeypatch):
 
 
 # ---- login-only helper (creation removed 2026-08-06) ------------------------
+
 
 def test_an_unknown_email_creates_nothing(monkeypatch, test_engine):
     """Google used to create a Business on first sight, which made it the
@@ -92,12 +94,15 @@ def test_google_matches_an_existing_password_account_by_email(monkeypatch, test_
     request = _FakeRequest()
     with Session(test_engine) as session:
         portal_module._login_by_email(request, session, "both@example.com")
-        count = len(session.exec(select(Business).where(Business.email == "both@example.com")).all())
+        count = len(
+            session.exec(select(Business).where(Business.email == "both@example.com")).all()
+        )
     assert count == 1
     assert request.session["client_id"] == business_id
 
 
 # ---- unconfigured routes degrade gracefully ---------------------------------
+
 
 def test_google_login_route_redirects_when_unconfigured(monkeypatch, test_engine):
     _wire(monkeypatch, test_engine)
@@ -121,6 +126,7 @@ def test_google_callback_route_redirects_when_unconfigured(monkeypatch, test_eng
 
 # ---- button visibility follows configuration --------------------------------
 
+
 def test_button_hidden_when_unconfigured(monkeypatch, test_engine):
     _wire(monkeypatch, test_engine)
     monkeypatch.delenv("GOOGLE_CLIENT_ID", raising=False)
@@ -139,6 +145,7 @@ def test_button_shown_when_configured(monkeypatch, test_engine):
 
 # ---- the callback route itself, not just its helper --------------------------
 
+
 def test_configured_callback_signs_in_a_known_owner(monkeypatch, test_engine):
     """Drives the real route. The helper tests above all call _login_by_email
     directly, so when it was renamed the callback kept calling the old name and
@@ -153,7 +160,9 @@ def test_configured_callback_signs_in_a_known_owner(monkeypatch, test_engine):
         async def authorize_access_token(self, request):
             return {"userinfo": {"email": "owner@example.com", "email_verified": True}}
 
-    monkeypatch.setattr(portal_module, "get_oauth", lambda: type("_O", (), {"google": _FakeGoogle()})())
+    monkeypatch.setattr(
+        portal_module, "get_oauth", lambda: type("_O", (), {"google": _FakeGoogle()})()
+    )
 
     client = TestClient(app_module.app)
     response = client.get("/auth/google/callback", follow_redirects=False)
@@ -171,7 +180,9 @@ def test_configured_callback_turns_away_an_unknown_email(monkeypatch, test_engin
         async def authorize_access_token(self, request):
             return {"userinfo": {"email": "stranger@example.com", "email_verified": True}}
 
-    monkeypatch.setattr(portal_module, "get_oauth", lambda: type("_O", (), {"google": _FakeGoogle()})())
+    monkeypatch.setattr(
+        portal_module, "get_oauth", lambda: type("_O", (), {"google": _FakeGoogle()})()
+    )
 
     client = TestClient(app_module.app)
     response = client.get("/auth/google/callback", follow_redirects=False)

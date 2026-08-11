@@ -7,8 +7,12 @@ from db_models import Business, Job, RecoveryCampaign, RecoveryJob, RecoveryMess
 
 def make_client(session: Session) -> Business:
     client = Business(
-        business_name="Test Co", trade="HVAC", services_json=json.dumps(["AC repair"]),
-        hours="9-5", pricing_faq="n/a", escalation_phone="+15550000000",
+        business_name="Test Co",
+        trade="HVAC",
+        services_json=json.dumps(["AC repair"]),
+        hours="9-5",
+        pricing_faq="n/a",
+        escalation_phone="+15550000000",
     )
     session.add(client)
     session.commit()
@@ -19,7 +23,9 @@ def make_client(session: Session) -> Business:
 def test_recovery_campaign_customer_list_roundtrips(session):
     client = make_client(session)
     campaign = RecoveryCampaign(
-        business_id=client.id, face="quote", name="June quotes",
+        business_id=client.id,
+        face="quote",
+        name="June quotes",
         customer_list_json=json.dumps([{"phone": "+15551112222", "service_type": "AC install"}]),
     )
     session.add(campaign)
@@ -33,14 +39,19 @@ def test_recovery_campaign_customer_list_roundtrips(session):
 def test_recovery_job_defaults_to_pending_status(session):
     client = make_client(session)
     campaign = RecoveryCampaign(
-        business_id=client.id, face="reactivation", name="Dormant list", customer_list_json="[]",
+        business_id=client.id,
+        face="reactivation",
+        name="Dormant list",
+        customer_list_json="[]",
     )
     session.add(campaign)
     session.commit()
     session.refresh(campaign)
 
     job = RecoveryJob(
-        campaign_id=campaign.id, business_id=client.id, customer_phone="+15551112222",
+        campaign_id=campaign.id,
+        business_id=client.id,
+        customer_phone="+15551112222",
         service_type="Tune-up",
     )
     session.add(job)
@@ -53,11 +64,15 @@ def test_recovery_job_defaults_to_pending_status(session):
 
 def test_recovery_message_log_links_to_job(session):
     client = make_client(session)
-    campaign = RecoveryCampaign(business_id=client.id, face="quote", name="X", customer_list_json="[]")
+    campaign = RecoveryCampaign(
+        business_id=client.id, face="quote", name="X", customer_list_json="[]"
+    )
     session.add(campaign)
     session.commit()
     session.refresh(campaign)
-    job = RecoveryJob(campaign_id=campaign.id, business_id=client.id, customer_phone="+1", service_type="AC")
+    job = RecoveryJob(
+        campaign_id=campaign.id, business_id=client.id, customer_phone="+1", service_type="AC"
+    )
     session.add(job)
     session.commit()
     session.refresh(job)
@@ -74,14 +89,20 @@ def test_recovery_message_log_links_to_job(session):
 def test_recovery_job_anchor_date_defaults_to_none_and_roundtrips(session):
     client = make_client(session)
     campaign = RecoveryCampaign(
-        business_id=client.id, face="quote", name="June quotes", customer_list_json="[]",
+        business_id=client.id,
+        face="quote",
+        name="June quotes",
+        customer_list_json="[]",
     )
     session.add(campaign)
     session.commit()
     session.refresh(campaign)
 
     unanchored = RecoveryJob(
-        campaign_id=campaign.id, business_id=client.id, customer_phone="+1", service_type="AC repair",
+        campaign_id=campaign.id,
+        business_id=client.id,
+        customer_phone="+1",
+        service_type="AC repair",
     )
     session.add(unanchored)
     session.commit()
@@ -89,8 +110,11 @@ def test_recovery_job_anchor_date_defaults_to_none_and_roundtrips(session):
     assert unanchored.anchor_date is None
 
     anchored = RecoveryJob(
-        campaign_id=campaign.id, business_id=client.id, customer_phone="+2",
-        service_type="AC tune-up", anchor_date="2026-07-15",
+        campaign_id=campaign.id,
+        business_id=client.id,
+        customer_phone="+2",
+        service_type="AC tune-up",
+        anchor_date="2026-07-15",
     )
     session.add(anchored)
     session.commit()
@@ -143,14 +167,19 @@ def test_client_referral_incentive_defaults_to_none(session):
 
 def test_referral_lead_roundtrips(session):
     client = make_client(session)
-    job = Job(business_id=client.id, service_type="AC repair", urgency="routine", callback_number="+1")
+    job = Job(
+        business_id=client.id, service_type="AC repair", urgency="routine", callback_number="+1"
+    )
     session.add(job)
     session.commit()
     session.refresh(job)
 
     lead = ReferralLead(
-        business_id=client.id, source_job_id=job.id, asker_phone="+1",
-        referred_name="Sarah", referred_phone="+15559998888",
+        business_id=client.id,
+        source_job_id=job.id,
+        asker_phone="+1",
+        referred_name="Sarah",
+        referred_phone="+15559998888",
         raw_reply_text="my friend Sarah, 555-998-8888",
     )
     session.add(lead)
@@ -164,12 +193,16 @@ def test_referral_lead_roundtrips(session):
 
 def test_referral_lead_allows_null_referred_fields(session):
     client = make_client(session)
-    job = Job(business_id=client.id, service_type="AC repair", urgency="routine", callback_number="+1")
+    job = Job(
+        business_id=client.id, service_type="AC repair", urgency="routine", callback_number="+1"
+    )
     session.add(job)
     session.commit()
     session.refresh(job)
 
-    lead = ReferralLead(business_id=client.id, source_job_id=job.id, asker_phone="+1", raw_reply_text="no thanks")
+    lead = ReferralLead(
+        business_id=client.id, source_job_id=job.id, asker_phone="+1", raw_reply_text="no thanks"
+    )
     session.add(lead)
     session.commit()
     session.refresh(lead)

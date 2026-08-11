@@ -11,6 +11,7 @@ itself — it's only ever called with a Business the dispatcher has already
 confirmed has dispatcher deployed. There is no reachable path to an
 undeployed business's jobs to forget to guard.
 """
+
 from typing import List
 
 from sqlmodel import Session, select

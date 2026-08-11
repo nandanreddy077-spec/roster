@@ -75,7 +75,10 @@ def test_verify_webhook_signature_accepts_whsec_prefixed_secret():
     body = b'{"call_id": "abc"}'
     signature = _sign("msg_1", "1730000000", body, raw_secret)
 
-    assert verify_webhook_signature("msg_1", "1730000000", body, signature, f"whsec_{raw_secret}") is True
+    assert (
+        verify_webhook_signature("msg_1", "1730000000", body, signature, f"whsec_{raw_secret}")
+        is True
+    )
 
 
 def test_verify_webhook_signature_rejects_wrong_signature():

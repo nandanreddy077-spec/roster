@@ -16,6 +16,7 @@ page; `problem`/`outcome`/`why_adopt` are rendered on an INACTIVE
 department's card, which the blueprint (§7) requires to educate rather than
 just report absence. Voice follows DESIGN.md: warm, blunt, plain, no jargon.
 """
+
 from dataclasses import dataclass
 from typing import List
 
@@ -26,13 +27,13 @@ from employees import REGISTRY as _EMPLOYEE_REGISTRY
 class Department:
     key: str
     display_name: str
-    mission: str      # one line, heads the department page
-    question: str     # the ONE thing this department answers, so each workspace
-                      # opens differently instead of being the same card with
-                      # different numbers in it
-    problem: str      # inactive card: what's broken today
-    outcome: str      # inactive card: what changes when it's staffed
-    why_adopt: str    # inactive card: why an owner eventually wants it
+    mission: str  # one line, heads the department page
+    question: str  # the ONE thing this department answers, so each workspace
+    # opens differently instead of being the same card with
+    # different numbers in it
+    problem: str  # inactive card: what's broken today
+    outcome: str  # inactive card: what changes when it's staffed
+    why_adopt: str  # inactive card: why an owner eventually wants it
     hireable: bool = True
 
 
@@ -140,8 +141,8 @@ REGISTRY: List[Department] = [
         outcome="The phone rings more without spending on ads to make it ring.",
         why_adopt=(
             "Usually once Customer Success is already rebooking old customers "
-            "and the natural next question is \"how do I get new ones the same "
-            "way.\""
+            'and the natural next question is "how do I get new ones the same '
+            'way."'
         ),
     ),
     Department(
@@ -154,8 +155,7 @@ REGISTRY: List[Department] = [
             "too late to do anything about it."
         ),
         outcome=(
-            "One place that tells you what happened across the whole operation "
-            "and what it means."
+            "One place that tells you what happened across the whole operation and what it means."
         ),
         why_adopt=(
             "Included with every workforce from the first department onward — it "
@@ -210,12 +210,13 @@ class DepartmentStatus:
     requested_roster, a tested_at timestamp, or a hardcoded template badge
     (the blueprint's permanent state-derivation invariant).
     """
+
     department: Department
-    deployable: List          # EmployeeDefinition — can be provisioned today
-    staffed: List             # EmployeeDefinition — actually deployed
+    deployable: List  # EmployeeDefinition — can be provisioned today
+    staffed: List  # EmployeeDefinition — actually deployed
     deployed_count: int
     deployable_count: int
-    state: str                # staffed | partial | empty | unavailable
+    state: str  # staffed | partial | empty | unavailable
 
 
 def department_status_for(employees) -> List[DepartmentStatus]:
@@ -224,10 +225,7 @@ def department_status_for(employees) -> List[DepartmentStatus]:
     Takes any iterable of objects with .role_key and .status — duck-typed, so
     this module still never imports db_models.
     """
-    deployed = {
-        canonical_role_key(e.role_key)
-        for e in employees if e.status != "fired"
-    }
+    deployed = {canonical_role_key(e.role_key) for e in employees if e.status != "fired"}
     statuses = []
     for department in REGISTRY:
         deployable = deployable_employees_for(department.key)
@@ -240,14 +238,16 @@ def department_status_for(employees) -> List[DepartmentStatus]:
             state = "partial"
         else:
             state = "empty"
-        statuses.append(DepartmentStatus(
-            department=department,
-            deployable=deployable,
-            staffed=staffed,
-            deployed_count=len(staffed),
-            deployable_count=len(deployable),
-            state=state,
-        ))
+        statuses.append(
+            DepartmentStatus(
+                department=department,
+                deployable=deployable,
+                staffed=staffed,
+                deployed_count=len(staffed),
+                deployable_count=len(deployable),
+                state=state,
+            )
+        )
     return statuses
 
 
@@ -266,7 +266,8 @@ def deployable_employees_for(department_key: str) -> List:
     engine, and deploying one would make active_departments_for() report the
     department as staffed while it cannot do any work (audit F4)."""
     return [
-        e for e in _EMPLOYEE_REGISTRY
+        e
+        for e in _EMPLOYEE_REGISTRY
         if e.department == department_key and e.status in ("live", "internal")
     ]
 

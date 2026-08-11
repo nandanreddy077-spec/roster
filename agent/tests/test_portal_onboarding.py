@@ -10,6 +10,7 @@ FOUNDER-provisioned business, so a legitimate logged-in owner typing the URL
 would have sailed past every guard and triggered a real number purchase for a
 shop Roster had already set up by hand. That is the case the last test pins.
 """
+
 from fastapi.testclient import TestClient
 from sqlmodel import Session
 
@@ -44,10 +45,16 @@ def test_the_wizard_writes_nothing(monkeypatch, test_engine):
     client = TestClient(app_module.app)
     login_as(client, business_id)
 
-    client.post("/onboarding/business", data={
-        "business_name": "Overwritten", "trade": "Nope", "services": "x",
-        "hours": "x", "pricing_faq": "x",
-    })
+    client.post(
+        "/onboarding/business",
+        data={
+            "business_name": "Overwritten",
+            "trade": "Nope",
+            "services": "x",
+            "hours": "x",
+            "pricing_faq": "x",
+        },
+    )
     with Session(test_engine) as session:
         assert session.get(Business, business_id).business_name == "Ridgeline Plumbing"
 

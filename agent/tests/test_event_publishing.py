@@ -1,6 +1,7 @@
 """PR 2 of IMPLEMENTATION-PLAN-001 — job.booked / job.completed reach the
 event stream, and never at the expense of the booking that caused them.
 """
+
 import json
 
 from fastapi.testclient import TestClient
@@ -17,9 +18,14 @@ from events import JOB_BOOKED, JOB_COMPLETED
 def _make_business(test_engine) -> int:
     with Session(test_engine) as s:
         b = Business(
-            business_name="Test Co", trade="hvac", services_json=json.dumps(["AC repair"]),
-            hours="9-5", pricing_faq="n/a", escalation_phone="+15550000000",
-            inbound_number="+15559990000", email="events@test.io",
+            business_name="Test Co",
+            trade="hvac",
+            services_json=json.dumps(["AC repair"]),
+            hours="9-5",
+            pricing_faq="n/a",
+            escalation_phone="+15550000000",
+            inbound_number="+15559990000",
+            email="events@test.io",
         )
         s.add(b)
         s.commit()
@@ -36,7 +42,10 @@ def test_new_booking_publishes_one_job_booked(test_engine):
     with Session(test_engine) as s:
         business = s.get(Business, bid)
         job, created = book_job(
-            s, business, "+15551112222", "+15551112222",
+            s,
+            business,
+            "+15551112222",
+            "+15551112222",
             {"service_type": "AC repair", "urgency": "same_day"},
             customer_id=None,
         )
@@ -59,7 +68,10 @@ def test_event_carries_customer_id_when_known(test_engine):
     with Session(test_engine) as s:
         business = s.get(Business, bid)
         book_job(
-            s, business, "+15551112222", "+15551112222",
+            s,
+            business,
+            "+15551112222",
+            "+15551112222",
             {"service_type": "AC repair", "urgency": "routine"},
             customer_id=4242,
         )
@@ -74,11 +86,17 @@ def test_merge_rebook_publishes_nothing(test_engine):
     with Session(test_engine) as s:
         business = s.get(Business, bid)
         first, created_first = book_job(
-            s, business, "+15551112222", "+15551112222",
+            s,
+            business,
+            "+15551112222",
+            "+15551112222",
             {"service_type": "AC repair", "urgency": "routine"},
         )
         second, created_second = book_job(
-            s, business, "+15551112222", "+15551112222",
+            s,
+            business,
+            "+15551112222",
+            "+15551112222",
             {"service_type": "AC repair", "urgency": "emergency", "address": "12 Elm St"},
         )
 
@@ -91,10 +109,20 @@ def test_a_different_service_is_a_second_booking_and_a_second_event(test_engine)
     bid = _make_business(test_engine)
     with Session(test_engine) as s:
         business = s.get(Business, bid)
-        book_job(s, business, "+15551112222", "+15551112222",
-                 {"service_type": "AC repair", "urgency": "routine"})
-        book_job(s, business, "+15551112222", "+15551112222",
-                 {"service_type": "Furnace install", "urgency": "routine"})
+        book_job(
+            s,
+            business,
+            "+15551112222",
+            "+15551112222",
+            {"service_type": "AC repair", "urgency": "routine"},
+        )
+        book_job(
+            s,
+            business,
+            "+15551112222",
+            "+15551112222",
+            {"service_type": "Furnace install", "urgency": "routine"},
+        )
         assert len(_events(s, JOB_BOOKED)) == 2
 
 
@@ -114,7 +142,10 @@ def test_publish_failure_never_loses_the_booking(monkeypatch, test_engine):
     with Session(test_engine) as s:
         business = s.get(Business, bid)
         job, created = book_job(
-            s, business, "+15551112222", "+15551112222",
+            s,
+            business,
+            "+15551112222",
+            "+15551112222",
             {"service_type": "AC repair", "urgency": "emergency"},
         )
         assert created is True
@@ -139,9 +170,16 @@ def test_returned_job_is_still_readable_after_the_session_closes(test_engine):
     bid = _make_business(test_engine)
     with Session(test_engine) as s:
         job, _ = book_job(
-            s, s.get(Business, bid), "+15551112222", "+15551112222",
-            {"service_type": "burst pipe", "urgency": "emergency",
-             "preferred_window": "Thursday afternoon", "is_estimate": True},
+            s,
+            s.get(Business, bid),
+            "+15551112222",
+            "+15551112222",
+            {
+                "service_type": "burst pipe",
+                "urgency": "emergency",
+                "preferred_window": "Thursday afternoon",
+                "is_estimate": True,
+            },
         )
 
     assert job.service_type == "burst pipe"
@@ -154,16 +192,22 @@ def test_marking_done_publishes_one_job_completed(monkeypatch, test_engine):
     monkeypatch.setattr(app_module, "engine", test_engine)
     bid = _make_business(test_engine)
     with Session(test_engine) as s:
-        job = Job(business_id=bid, service_type="AC repair", urgency="routine",
-                  callback_number="+15551234567")
+        job = Job(
+            business_id=bid,
+            service_type="AC repair",
+            urgency="routine",
+            callback_number="+15551234567",
+        )
         s.add(job)
         s.commit()
         s.refresh(job)
         job_id = job.id
 
     client = TestClient(app_module.app, headers=DASH_AUTH)
-    assert client.post(f"/clients/{bid}/jobs/{job_id}/complete",
-                       follow_redirects=False).status_code == 303
+    assert (
+        client.post(f"/clients/{bid}/jobs/{job_id}/complete", follow_redirects=False).status_code
+        == 303
+    )
 
     with Session(test_engine) as s:
         rows = _events(s, JOB_COMPLETED)

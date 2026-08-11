@@ -24,6 +24,7 @@ didn't spell this out. Confirm against a real webhook delivery before relying
 on this in production. The number-registration call that hands you this
 secret is implemented in provisioning.py's `register_number_with_xai`.
 """
+
 import asyncio
 import base64
 import hashlib
@@ -88,12 +89,39 @@ TURN_DETECTION = {
 # and trade-general — this is the shared list every business gets, not a
 # per-customer glossary (xAI caps it at 100 terms).
 TRADE_KEYTERMS = [
-    "HVAC", "AC unit", "condenser", "compressor", "evaporator coil", "furnace",
-    "heat pump", "thermostat", "ductwork", "refrigerant", "freon", "air handler",
-    "P-trap", "water heater", "tankless", "sump pump", "garbage disposal",
-    "shutoff valve", "main line", "sewer line", "septic", "drain snake",
-    "flapper valve", "pressure regulator", "backflow", "breaker", "panel",
-    "GFCI", "outlet", "estimate", "quote", "diagnostic fee", "service call",
+    "HVAC",
+    "AC unit",
+    "condenser",
+    "compressor",
+    "evaporator coil",
+    "furnace",
+    "heat pump",
+    "thermostat",
+    "ductwork",
+    "refrigerant",
+    "freon",
+    "air handler",
+    "P-trap",
+    "water heater",
+    "tankless",
+    "sump pump",
+    "garbage disposal",
+    "shutoff valve",
+    "main line",
+    "sewer line",
+    "septic",
+    "drain snake",
+    "flapper valve",
+    "pressure regulator",
+    "backflow",
+    "breaker",
+    "panel",
+    "GFCI",
+    "outlet",
+    "estimate",
+    "quote",
+    "diagnostic fee",
+    "service call",
 ]
 
 # Hard safety cap on one call's total duration (connect through close) — a
@@ -154,13 +182,17 @@ def verify_webhook_signature(
     space-separated `v1,<sig>` values in the signature header."""
     if not webhook_id or not webhook_timestamp or not signature_header:
         return False
-    secret = signing_secret[len("whsec_"):] if signing_secret.startswith("whsec_") else signing_secret
+    secret = (
+        signing_secret[len("whsec_") :] if signing_secret.startswith("whsec_") else signing_secret
+    )
     try:
         secret_bytes = base64.b64decode(secret, validate=True)
     except (ValueError, TypeError):
         return False
     signed_content = f"{webhook_id}.{webhook_timestamp}.".encode() + raw_body
-    expected = base64.b64encode(hmac.new(secret_bytes, signed_content, hashlib.sha256).digest()).decode()
+    expected = base64.b64encode(
+        hmac.new(secret_bytes, signed_content, hashlib.sha256).digest()
+    ).decode()
 
     for candidate in signature_header.split():
         _, _, sig = candidate.partition(",")
@@ -215,7 +247,9 @@ def _thread_id(call_id: str, is_test_call: bool = False) -> str:
     return f"{prefix}{call_id}"
 
 
-async def _persist_job(session: Session, client: Business, thread: str, caller_number: str, args: Dict[str, Any]) -> Job:
+async def _persist_job(
+    session: Session, client: Business, thread: str, caller_number: str, args: Dict[str, Any]
+) -> Job:
     # Customer identity, same guarantee the SMS path already gives every
     # booking (service.py) — keyed on the caller's real phone number, never
     # `thread` (xai-voice:{call_id} is unique per call, not per customer), so
@@ -241,8 +275,12 @@ async def _persist_job(session: Session, client: Business, thread: str, caller_n
         # scope: a Session is not thread-safe and must never cross the
         # to_thread boundary the blocking SMS send goes through.
         record_owner_notification(
-            session, client.id, KIND_JOB_BOOKED, SOURCE_VOICE_BOOKING,
-            build_owner_message(job, "Frontdesk"), delivered,
+            session,
+            client.id,
+            KIND_JOB_BOOKED,
+            SOURCE_VOICE_BOOKING,
+            build_owner_message(job, "Frontdesk"),
+            delivered,
         )
     return job
 
@@ -265,20 +303,29 @@ GENERIC_TOOL_ERROR = {
 
 
 async def _send_tool_result(ws, call_id: str, result: Dict[str, Any]) -> None:
-    await ws.send(json.dumps({
-        "type": "conversation.item.create",
-        "item": {
-            "type": "function_call_output",
-            "call_id": call_id,
-            "output": json.dumps(result),
-        },
-    }))
+    await ws.send(
+        json.dumps(
+            {
+                "type": "conversation.item.create",
+                "item": {
+                    "type": "function_call_output",
+                    "call_id": call_id,
+                    "output": json.dumps(result),
+                },
+            }
+        )
+    )
     await ws.send(json.dumps({"type": "response.create"}))
 
 
 async def _handle_function_call(
-    ws, session: Session, client: Business, thread: str, caller_number: str,
-    event: Dict[str, Any], trace: CallTrace,
+    ws,
+    session: Session,
+    client: Business,
+    thread: str,
+    caller_number: str,
+    event: Dict[str, Any],
+    trace: CallTrace,
 ) -> None:
     name = event["name"]
     call_id = event["call_id"]
@@ -290,10 +337,14 @@ async def _handle_function_call(
         # distinctly from an execution failure below, so the two read apart
         # in the capture (a bad payload vs. our own code breaking).
         trace.stage("tool_call_failed", tool=name, reason="malformed_arguments", error=repr(e))
-        await _send_tool_result(ws, call_id, {
-            "status": "error",
-            "detail": "Could not read that. Could you say it again?",
-        })
+        await _send_tool_result(
+            ws,
+            call_id,
+            {
+                "status": "error",
+                "detail": "Could not read that. Could you say it again?",
+            },
+        )
         return
 
     trace.stage("tool_invoked", tool=name)
@@ -329,7 +380,8 @@ async def _handle_function_call(
             # carries no name.
             customer = get_or_create_customer(session, client.id, caller_number)
             job, should_notify = record_escalation(
-                session, client, thread, caller_number, reason, customer_id=customer.id)
+                session, client, thread, caller_number, reason, customer_id=customer.id
+            )
             trace.stage("job_persisted", job_id=job.id, escalation=True)
             if is_test_thread(thread):
                 # Test mode: exercise the full escalation path (Job
@@ -339,14 +391,20 @@ async def _handle_function_call(
                 trace.stage("owner_notification_skipped", job_id=job.id, reason="test_mode")
                 status = "owner_alerted"
             elif should_notify:
-                alerted = await asyncio.to_thread(notify_owner_of_escalation, client, caller_number, reason)
+                alerted = await asyncio.to_thread(
+                    notify_owner_of_escalation, client, caller_number, reason
+                )
                 trace.stage("owner_alerted" if alerted else "owner_alert_failed")
                 # Strictly after `alerted` is decided: this must never
                 # influence what the model — and therefore the caller — is
                 # told.
                 record_owner_notification(
-                    session, client.id, KIND_ESCALATION, SOURCE_ALERT_OWNER,
-                    build_escalation_message(client, caller_number, reason), alerted,
+                    session,
+                    client.id,
+                    KIND_ESCALATION,
+                    SOURCE_ALERT_OWNER,
+                    build_escalation_message(client, caller_number, reason),
+                    alerted,
                 )
                 if alerted:
                     job.owner_alerted_at = datetime.utcnow()
@@ -417,7 +475,8 @@ def _extract_response_tokens(response_done_event: Dict[str, Any]) -> int:
         if isinstance(total, int) and not isinstance(total, bool) and total >= 0:
             return total
         parts = [
-            v for v in (usage.get("input_tokens"), usage.get("output_tokens"))
+            v
+            for v in (usage.get("input_tokens"), usage.get("output_tokens"))
             if isinstance(v, int) and not isinstance(v, bool) and v >= 0
         ]
         if parts:
@@ -459,8 +518,9 @@ PARTICIPANT_DISCONNECTED = "participant.disconnected"
 ASSISTANT_AUDIO_DELTA = "response.output_audio.delta"
 
 
-def _persist_user_transcript(session: Session, business_id: int, thread: str,
-                             event: Dict[str, Any]) -> None:
+def _persist_user_transcript(
+    session: Session, business_id: int, thread: str, event: Dict[str, Any]
+) -> None:
     """Persist the caller's transcribed utterance as a user-role Message.
 
     Dedup reuses Message.external_id exactly as service.py's SMS path already
@@ -481,13 +541,15 @@ def _persist_user_transcript(session: Session, business_id: int, thread: str,
     ).first()
     if already_stored is not None:
         return
-    session.add(Message(
-        business_id=business_id,
-        customer_phone=thread,
-        role="user",
-        content_json=json.dumps([{"type": "text", "text": transcript}]),
-        external_id=item_id,
-    ))
+    session.add(
+        Message(
+            business_id=business_id,
+            customer_phone=thread,
+            role="user",
+            content_json=json.dumps([{"type": "text", "text": transcript}]),
+            external_id=item_id,
+        )
+    )
     session.commit()
 
 
@@ -499,11 +561,17 @@ def _default_connect(call_id: str):
     return websockets.connect(url, additional_headers={"Authorization": f"Bearer {api_key}"})
 
 
-async def run_call(call_id: str, client: Business, caller_number: str, session_factory,
-                   connect=None, trace: Optional[CallTrace] = None,
-                   max_duration_seconds: Optional[float] = None,
-                   max_call_tokens: Optional[int] = None,
-                   is_test_call: bool = False) -> None:
+async def run_call(
+    call_id: str,
+    client: Business,
+    caller_number: str,
+    session_factory,
+    connect=None,
+    trace: Optional[CallTrace] = None,
+    max_duration_seconds: Optional[float] = None,
+    max_call_tokens: Optional[int] = None,
+    is_test_call: bool = False,
+) -> None:
     """Owns one live call end-to-end. Runs as a background task kicked off by
     the /webhook/xai-incoming-call handler — must not block that handler's
     response to xAI.
@@ -529,15 +597,19 @@ async def run_call(call_id: str, client: Business, caller_number: str, session_f
     connect = connect or _default_connect
     if trace is None:
         from db import DATA_DIR
+
         trace = CallTrace(call_id, capture_dir=DATA_DIR / "call_captures")
     thread = _thread_id(call_id, is_test_call)
-    max_duration = MAX_CALL_DURATION_SECONDS if max_duration_seconds is None else max_duration_seconds
+    max_duration = (
+        MAX_CALL_DURATION_SECONDS if max_duration_seconds is None else max_duration_seconds
+    )
     max_tokens = MAX_CALL_TOKEN_BUDGET if max_call_tokens is None else max_call_tokens
 
     try:
         await asyncio.wait_for(
-            _run_call_session(connect, call_id, client, caller_number, session_factory,
-                             thread, trace, max_tokens),
+            _run_call_session(
+                connect, call_id, client, caller_number, session_factory, thread, trace, max_tokens
+            ),
             timeout=max_duration,
         )
     except asyncio.TimeoutError:
@@ -559,12 +631,19 @@ async def run_call(call_id: str, client: Business, caller_number: str, session_f
                 "duration and was ended automatically — call them back"
             )
             alerted = await asyncio.to_thread(
-                notify_owner_of_escalation, client, caller_number, timeout_reason,
+                notify_owner_of_escalation,
+                client,
+                caller_number,
+                timeout_reason,
             )
             with session_factory() as session:
                 record_owner_notification(
-                    session, client.id, KIND_CALL_DROPPED, SOURCE_CALL_DROPPED,
-                    build_escalation_message(client, caller_number, timeout_reason), alerted,
+                    session,
+                    client.id,
+                    KIND_CALL_DROPPED,
+                    SOURCE_CALL_DROPPED,
+                    build_escalation_message(client, caller_number, timeout_reason),
+                    alerted,
                 )
     except _CallBudgetExceeded:
         # Detected (and traced, with the exact token count) inside the loop,
@@ -582,12 +661,19 @@ async def run_call(call_id: str, client: Business, caller_number: str, session_f
                 "was ended automatically — call them back"
             )
             alerted = await asyncio.to_thread(
-                notify_owner_of_escalation, client, caller_number, budget_reason,
+                notify_owner_of_escalation,
+                client,
+                caller_number,
+                budget_reason,
             )
             with session_factory() as session:
                 record_owner_notification(
-                    session, client.id, KIND_CALL_DROPPED, SOURCE_CALL_DROPPED,
-                    build_escalation_message(client, caller_number, budget_reason), alerted,
+                    session,
+                    client.id,
+                    KIND_CALL_DROPPED,
+                    SOURCE_CALL_DROPPED,
+                    build_escalation_message(client, caller_number, budget_reason),
+                    alerted,
                 )
     except Exception as e:
         # A mid-call crash (WS drop, DB error, bad payload) must never vanish
@@ -599,21 +685,29 @@ async def run_call(call_id: str, client: Business, caller_number: str, session_f
         else:
             dropped_reason = "the AI call with this customer dropped mid-call — call them back"
             alerted = await asyncio.to_thread(
-                notify_owner_of_escalation, client, caller_number, dropped_reason,
+                notify_owner_of_escalation,
+                client,
+                caller_number,
+                dropped_reason,
             )
             # Its own short-lived session: this path has no open one, and the
             # crashed call's session is not safe to reuse.
             with session_factory() as session:
                 record_owner_notification(
-                    session, client.id, KIND_CALL_DROPPED, SOURCE_CALL_DROPPED,
-                    build_escalation_message(client, caller_number, dropped_reason), alerted,
+                    session,
+                    client.id,
+                    KIND_CALL_DROPPED,
+                    SOURCE_CALL_DROPPED,
+                    build_escalation_message(client, caller_number, dropped_reason),
+                    alerted,
                 )
     finally:
         trace.close()
 
 
-async def _run_call_session(connect, call_id, client, caller_number, session_factory,
-                            thread, trace, max_tokens: int) -> None:
+async def _run_call_session(
+    connect, call_id, client, caller_number, session_factory, thread, trace, max_tokens: int
+) -> None:
     with session_factory() as session:
         customer_context = build_customer_context(session, client.id, caller_number)
     async with connect(call_id) as ws:
@@ -647,7 +741,9 @@ async def _run_call_session(connect, call_id, client, caller_number, session_fac
             if etype == "response.function_call_arguments.done":
                 with session_factory() as session:
                     session_client = session.get(Business, client.id)
-                    await _handle_function_call(ws, session, session_client, thread, caller_number, event, trace)
+                    await _handle_function_call(
+                        ws, session, session_client, thread, caller_number, event, trace
+                    )
 
             elif etype == "response.done":
                 if not first_response_seen:
@@ -659,12 +755,14 @@ async def _run_call_session(connect, call_id, client, caller_number, session_fac
                 transcript = _extract_transcript(event)
                 if transcript:
                     with session_factory() as session:
-                        session.add(Message(
-                            business_id=client.id,
-                            customer_phone=thread,
-                            role="assistant",
-                            content_json=json.dumps([{"type": "text", "text": transcript}]),
-                        ))
+                        session.add(
+                            Message(
+                                business_id=client.id,
+                                customer_phone=thread,
+                                role="assistant",
+                                content_json=json.dumps([{"type": "text", "text": transcript}]),
+                            )
+                        )
                         session.commit()
                 # Checked AFTER persisting this response's own transcript —
                 # the turn that tips the budget over still gets recorded, and
@@ -672,8 +770,11 @@ async def _run_call_session(connect, call_id, client, caller_number, session_fac
                 # loop already committed synchronously is untouched either way.
                 total_tokens_used += _extract_response_tokens(event)
                 if total_tokens_used > max_tokens:
-                    trace.stage("call_budget_exceeded",
-                               total_tokens=total_tokens_used, max_tokens=max_tokens)
+                    trace.stage(
+                        "call_budget_exceeded",
+                        total_tokens=total_tokens_used,
+                        max_tokens=max_tokens,
+                    )
                     raise _CallBudgetExceeded()
 
             elif etype == USER_TRANSCRIPT_COMPLETED:

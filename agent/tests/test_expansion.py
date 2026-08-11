@@ -4,6 +4,7 @@ Strictly a REQUEST record. It must never imply deployment — that conflation
 is exactly what Business.requested_roster gets wrong today (runner.is_active
 treats "requested" as "live"), and it is what the department migration exists
 to undo."""
+
 from datetime import datetime
 
 import pytest
@@ -157,9 +158,7 @@ def test_recording_interest_deploys_nothing(session):
     session.refresh(biz)
 
     assert biz.requested_roster is None
-    assert session.exec(
-        select(Employee).where(Employee.business_id == biz.id)
-    ).all() == []
+    assert session.exec(select(Employee).where(Employee.business_id == biz.id)).all() == []
 
 
 # --- the ops seam Phase 4 consumes -------------------------------------------
@@ -251,9 +250,7 @@ def test_actioning_a_request_deploys_nothing(session):
     mark_actioned(session, interest.id)
     session.refresh(biz)
 
-    employees = session.exec(
-        select(Employee).where(Employee.business_id == biz.id)
-    ).all()
+    employees = session.exec(select(Employee).where(Employee.business_id == biz.id)).all()
     assert employees == []
     assert active_departments_for(employees) == []
     assert biz.requested_roster is None

@@ -7,7 +7,9 @@ from eventbus import EventBus
 def _make_business(test_engine):
     with Session(test_engine) as s:
         b = Business(business_name="B", trade="hvac", email="bus@test.io")
-        s.add(b); s.commit(); s.refresh(b)
+        s.add(b)
+        s.commit()
+        s.refresh(b)
         return b.id
 
 
@@ -17,7 +19,12 @@ def test_publish_dispatches_and_persists(test_engine):
     bus = EventBus()
     bus.subscribe(MESSAGE_RECEIVED, lambda e: seen.append(e.payload["text"]))
     with Session(test_engine) as s:
-        assert bus.publish(s, DomainEvent(type=MESSAGE_RECEIVED, business_id=bid, payload={"text": "hi"})) is True
+        assert (
+            bus.publish(
+                s, DomainEvent(type=MESSAGE_RECEIVED, business_id=bid, payload={"text": "hi"})
+            )
+            is True
+        )
     assert seen == ["hi"]
     with Session(test_engine) as s:
         assert s.exec(select(Event).where(Event.type == MESSAGE_RECEIVED)).first() is not None
@@ -41,7 +48,9 @@ def test_session_stays_usable_after_dropped_duplicate(test_engine):
     to keep working — otherwise a repeat event would take a booking down with it."""
     bid = _make_business(test_engine)
     bus = EventBus()
-    mk = lambda: DomainEvent(type=MESSAGE_RECEIVED, business_id=bid, payload={}, dedup_key="SM-SAME")
+    mk = lambda: DomainEvent(
+        type=MESSAGE_RECEIVED, business_id=bid, payload={}, dedup_key="SM-SAME"
+    )
     with Session(test_engine) as s:
         assert bus.publish(s, mk()) is True
         assert bus.publish(s, mk()) is False

@@ -12,6 +12,7 @@ CUSTOMER_STATE_LABELS and METRIC_LABELS live here — moved out of portal.py so
 there is exactly one copy of the customer's wording, not two maps that can
 drift. portal.py imports them rather than redefining them.
 """
+
 from dataclasses import dataclass
 from datetime import datetime
 from typing import List, Optional, Tuple
@@ -90,6 +91,7 @@ NOTIFICATION_KIND_LABELS = {
 class EmployeeView:
     """One employee's presence in the workspace: what it did, ready to
     render. Facts from EMPLOYEE_RECORDS, labels from METRIC_LABELS."""
+
     role_key: str
     display_name: str
     outcomes: List[Tuple[str, int]]
@@ -101,7 +103,8 @@ class DepartmentWorkspace:
     """Everything the Department Workspace page renders. The template's job
     is to lay this out — it never queries, joins a registry, or decides
     anything a route or this module hasn't already decided."""
-    department: object          # departments.Department
+
+    department: object  # departments.Department
     question: str
     is_active: bool
     health_label: str
@@ -117,7 +120,8 @@ class EmployeeWorkspace:
     fields: mission and status answer the one question this page opens with,
     before any raw event (founder, 2026-07-29). No charts, no date range, no
     pagination — reopen this design before adding a sixth field."""
-    employee: object       # employees.EmployeeDefinition
+
+    employee: object  # employees.EmployeeDefinition
     mission: str
     status: str
     outcomes: List[Tuple[str, int]]
@@ -143,17 +147,16 @@ def _status_for(session, business_id: int, department_key: str):
     just finds the row matching one key rather than duplicating its filter."""
     from sqlmodel import select
 
-    employees = session.exec(
-        select(Employee).where(Employee.business_id == business_id)
-    ).all()
+    employees = session.exec(select(Employee).where(Employee.business_id == business_id)).all()
     return next(
         (s for s in department_status_for(employees) if s.department.key == department_key),
         None,
     )
 
 
-def _employee_views(session, business_id: int, staffed, since=None,
-                    activity_limit: int = 5) -> List[EmployeeView]:
+def _employee_views(
+    session, business_id: int, staffed, since=None, activity_limit: int = 5
+) -> List[EmployeeView]:
     """EmployeeView per already-deployed employee — shared by
     DepartmentWorkspace and ExpansionWorkspace's 'currently covered' section,
     so 'what this employee has done' is computed exactly once."""
@@ -162,14 +165,17 @@ def _employee_views(session, business_id: int, staffed, since=None,
             role_key=e.key,
             display_name=e.display_name,
             outcomes=_labeled(metrics.employee_outcomes(session, business_id, e.key, since=since)),
-            activity=metrics.employee_activity(session, business_id, e.key, limit=activity_limit, since=since),
+            activity=metrics.employee_activity(
+                session, business_id, e.key, limit=activity_limit, since=since
+            ),
         )
         for e in staffed
     ]
 
 
-def build_department_workspace(session, business_id: int, department_key: str,
-                               since=None) -> Optional[DepartmentWorkspace]:
+def build_department_workspace(
+    session, business_id: int, department_key: str, since=None
+) -> Optional[DepartmentWorkspace]:
     """The one assembly point. Returns None for an unknown department key or
     one that isn't active for this business — the route 404s on either,
     rather than rendering a workspace for a department the customer doesn't
@@ -192,13 +198,16 @@ def build_department_workspace(session, business_id: int, department_key: str,
         is_active=True,
         health_label=CUSTOMER_STATE_LABELS[status.state],
         employees=employee_views,
-        outcomes=_labeled(metrics.department_outcomes(session, business_id, department_key, role_keys)),
+        outcomes=_labeled(
+            metrics.department_outcomes(session, business_id, department_key, role_keys)
+        ),
         activity=metrics.department_activity(session, business_id, role_keys, since=since),
     )
 
 
-def build_employee_workspace(session, business_id: int, department_key: str,
-                             role_key: str, since=None) -> Optional[EmployeeWorkspace]:
+def build_employee_workspace(
+    session, business_id: int, department_key: str, role_key: str, since=None
+) -> Optional[EmployeeWorkspace]:
     """DepartmentWorkspace -> EmployeeWorkspace: derived from the parent
     workspace rather than a second independent lookup, so "is this employee
     actually working" is decided exactly once, by build_department_workspace.
@@ -241,15 +250,17 @@ class ExpansionWorkspace:
     CAPABILITIES the available employees would add, never fabricated
     numbers — they haven't done any work yet.
     """
-    department: object              # departments.Department
+
+    department: object  # departments.Department
     problem: str
     current_state: List[EmployeeView]
-    available_employees: List[object]   # employees.EmployeeDefinition, undeployed
+    available_employees: List[object]  # employees.EmployeeDefinition, undeployed
     expected_outcomes: List[str]
 
 
-def build_expansion_workspace(session, business_id: int,
-                              department_key: str) -> Optional[ExpansionWorkspace]:
+def build_expansion_workspace(
+    session, business_id: int, department_key: str
+) -> Optional[ExpansionWorkspace]:
     """Two directions of growth, one builder: a partially-staffed department
     with room left, or a fully-inactive one with nothing deployed yet. Both
     call the SAME department_status_for computation build_department_workspace
@@ -299,6 +310,7 @@ class BriefingHighlight:
     """One line of the Briefing: what happened, and where to read more. `kind`
     is one of "attention" | "working_well" | "growth" — it drives ordering,
     never a template decision."""
+
     text: str
     kind: str
     href: str
@@ -309,7 +321,8 @@ class BriefingDepartmentRow:
     """One active department's status inside the Briefing — same shape as the
     Departments grid's gateway card, so the two surfaces can never disagree
     about a department's health."""
-    department: object          # departments.Department
+
+    department: object  # departments.Department
     health_label: str
     headline: Optional[Tuple[str, int]]
     href: str
@@ -321,18 +334,20 @@ class BriefingWorkspace:
     independent report (founder, 2026-07-29). Reads like a morning briefing:
     what needs attention, then what's working, then somewhere to grow, then
     links back into the relevant Department or Employee Workspace."""
+
     generated_at: datetime
     summary: str
     highlights: List[BriefingHighlight]
     departments: List[BriefingDepartmentRow]
-    notifications: List          # db_models.OwnerNotification
+    notifications: List  # db_models.OwnerNotification
 
 
 _HIGHLIGHT_ORDER = {"attention": 0, "working_well": 1, "growth": 2}
 
 
-def build_briefing_workspace(session, business_id: int,
-                             notification_limit: int = 10) -> BriefingWorkspace:
+def build_briefing_workspace(
+    session, business_id: int, notification_limit: int = 10
+) -> BriefingWorkspace:
     """Consumes build_department_workspace and build_expansion_workspace — the
     Briefing never queries metrics.py or EMPLOYEE_RECORDS directly, and never
     calls expansion.record_interest (a growth nudge is a suggestion to read,
@@ -346,9 +361,7 @@ def build_briefing_workspace(session, business_id: int,
     """
     from sqlmodel import select
 
-    employees = session.exec(
-        select(Employee).where(Employee.business_id == business_id)
-    ).all()
+    employees = session.exec(select(Employee).where(Employee.business_id == business_id)).all()
     statuses = [s for s in department_status_for(employees) if s.department.hireable]
 
     highlights: List[BriefingHighlight] = []
@@ -360,47 +373,67 @@ def build_briefing_workspace(session, business_id: int,
             dept_ws = build_department_workspace(session, business_id, key)
             href = f"/v2/dashboard/departments/{key}"
             headline = headline_outcome(dept_ws.outcomes)
-            department_rows.append(BriefingDepartmentRow(
-                department=dept_ws.department, health_label=dept_ws.health_label,
-                headline=headline, href=href,
-            ))
+            department_rows.append(
+                BriefingDepartmentRow(
+                    department=dept_ws.department,
+                    health_label=dept_ws.health_label,
+                    headline=headline,
+                    href=href,
+                )
+            )
             if headline is not None:
                 label, value = headline
-                highlights.append(BriefingHighlight(
-                    text=f"{dept_ws.department.display_name}: {value} {label.lower()}",
-                    kind="working_well", href=href,
-                ))
+                highlights.append(
+                    BriefingHighlight(
+                        text=f"{dept_ws.department.display_name}: {value} {label.lower()}",
+                        kind="working_well",
+                        href=href,
+                    )
+                )
             escalation_label = METRIC_LABELS[metrics.ESCALATIONS]
             for employee in dept_ws.employees:
                 count = dict(employee.outcomes).get(escalation_label)
                 if count:
-                    highlights.append(BriefingHighlight(
-                        text=(f"{employee.display_name} sent you {count} thing"
-                              f"{'s' if count != 1 else ''} personally"),
-                        kind="attention",
-                        href=f"/v2/dashboard/departments/{key}/employees/{employee.role_key}",
-                    ))
+                    highlights.append(
+                        BriefingHighlight(
+                            text=(
+                                f"{employee.display_name} sent you {count} thing"
+                                f"{'s' if count != 1 else ''} personally"
+                            ),
+                            kind="attention",
+                            href=f"/v2/dashboard/departments/{key}/employees/{employee.role_key}",
+                        )
+                    )
 
         expansion = build_expansion_workspace(session, business_id, key)
         if expansion is not None and expansion.available_employees:
             first = expansion.available_employees[0]
-            highlights.append(BriefingHighlight(
-                text=(f"{status.department.display_name} isn't staffed yet — "
-                      f"you could add {first.display_name}"
-                      if status.state == "empty" else
-                      f"{status.department.display_name} could also take on {first.display_name}"),
-                kind="growth",
-                href=f"/v2/dashboard/departments/{key}/expand",
-            ))
+            highlights.append(
+                BriefingHighlight(
+                    text=(
+                        f"{status.department.display_name} isn't staffed yet — "
+                        f"you could add {first.display_name}"
+                        if status.state == "empty"
+                        else f"{status.department.display_name} could also take on {first.display_name}"
+                    ),
+                    kind="growth",
+                    href=f"/v2/dashboard/departments/{key}/expand",
+                )
+            )
 
     highlights.sort(key=lambda h: _HIGHLIGHT_ORDER[h.kind])
     highlights = highlights[:5]
 
     attention_count = sum(1 for h in highlights if h.kind == "attention")
     if department_rows:
-        summary = f"{len(department_rows)} department{'s' if len(department_rows) != 1 else ''} working"
-        summary += (f", {attention_count} thing{'s' if attention_count != 1 else ''} need your attention."
-                    if attention_count else ", nothing urgent.")
+        summary = (
+            f"{len(department_rows)} department{'s' if len(department_rows) != 1 else ''} working"
+        )
+        summary += (
+            f", {attention_count} thing{'s' if attention_count != 1 else ''} need your attention."
+            if attention_count
+            else ", nothing urgent."
+        )
     else:
         summary = "Nothing staffed yet."
 

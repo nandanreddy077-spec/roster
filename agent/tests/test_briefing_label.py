@@ -5,6 +5,7 @@ So routes, modules and template filenames stay `briefing` forever, and the
 one thing that changes when the name changes is a single constant. These
 tests make that structural rather than a convention someone has to remember.
 """
+
 from pathlib import Path
 
 import portal
@@ -27,9 +28,7 @@ def test_no_template_hardcodes_the_visible_label():
     no Briefing template exists until Task 7 — but it fails the moment one
     hardcodes the words instead of using {{ briefing_label }}."""
     offenders = [
-        path.name
-        for path in TEMPLATES.rglob("*.html")
-        if portal.BRIEFING_LABEL in path.read_text()
+        path.name for path in TEMPLATES.rglob("*.html") if portal.BRIEFING_LABEL in path.read_text()
     ]
     assert offenders == [], (
         f"{offenders} hardcode the Briefing's visible name — use "

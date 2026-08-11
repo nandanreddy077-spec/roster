@@ -9,6 +9,7 @@ Deployment is idempotent by design rather than by luck: a caller can re-run it
 to finish a half-completed deploy, and the database's unique index makes a
 duplicate impossible even under a concurrent double-submit.
 """
+
 from typing import List, Optional
 
 from sqlalchemy.exc import IntegrityError
@@ -23,9 +24,7 @@ _BY_KEY = {e.key: e for e in _EMPLOYEE_REGISTRY}
 
 def _existing(session, business_id: int, role_key: str) -> Optional[Employee]:
     return session.exec(
-        select(Employee).where(
-            Employee.business_id == business_id, Employee.role_key == role_key
-        )
+        select(Employee).where(Employee.business_id == business_id, Employee.role_key == role_key)
     ).first()
 
 
@@ -42,15 +41,14 @@ def deploy_role(session, business_id: int, role_key: str) -> Optional[Employee]:
     if definition is None:
         raise ValueError(f"unknown role: {role_key!r}")
     if definition.status == "planned":
-        raise ValueError(
-            f"{role_key!r} is planned, not deployable — it has no engine yet"
-        )
+        raise ValueError(f"{role_key!r} is planned, not deployable — it has no engine yet")
 
     if _existing(session, business_id, role_key) is not None:
         return None
 
     row = Employee(
-        business_id=business_id, role_key=role_key,
+        business_id=business_id,
+        role_key=role_key,
         display_name=definition.display_name,
     )
     session.add(row)

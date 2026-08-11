@@ -2,6 +2,7 @@
 system prompts. Pure — no DB or AgentEngine imports here; recovery_service.py
 wires this into AgentEngine.respond() the same way engine.py's own tools do.
 """
+
 from typing import List, Optional
 
 SEQUENCE_DAYS = [1, 3, 7, 14, 21, 28]
@@ -10,6 +11,7 @@ SEQUENCE_DAYS = [1, 3, 7, 14, 21, 28]
 # A separate constant from SEQUENCE_DAYS on purpose: it can be negative
 # (before the renewal date) and is anchored per-customer, not per-campaign.
 MEMBERSHIP_OFFSETS = [-30, -14, -7, 0, 7]
+
 
 def clean_service_type(service_type: str) -> str:
     """Strip a trailing "estimate"/"quote" from a service description.

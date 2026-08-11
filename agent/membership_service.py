@@ -17,6 +17,7 @@ docstring documents. Registered in test_tick_deployment_gate.TICK_FUNCTIONS.
 
 Design doc: docs/superpowers/specs/2026-08-10-gen-2-workforce-design.md §4.1.
 """
+
 from datetime import datetime, timedelta
 from typing import List, Optional
 
@@ -81,8 +82,9 @@ NUDGEABLE_OUTCOMES = ("pending", "unclear")
 _VALID_INTENTS = ("accepted", "declined", "question", "unsubscribe", "unclear")
 
 
-def _customer_for(session: Session, business_id: int, phone: Optional[str],
-                  customer_id: Optional[int]) -> Optional[Customer]:
+def _customer_for(
+    session: Session, business_id: int, phone: Optional[str], customer_id: Optional[int]
+) -> Optional[Customer]:
     """Look up a customer without creating one — a plan check must never have
     the side effect of creating the record it's checking.
 
@@ -392,8 +394,12 @@ def handle_membership_reply(
             session.commit()
         delivered = notify_owner_of_membership(client, customer_name, offer.customer_phone)
         record_owner_notification(
-            session, client.id, KIND_MEMBERSHIP_ACCEPTED, SOURCE_MEMBERSHIP_ACCEPTED,
-            build_membership_message(customer_name, offer.customer_phone), delivered,
+            session,
+            client.id,
+            KIND_MEMBERSHIP_ACCEPTED,
+            SOURCE_MEMBERSHIP_ACCEPTED,
+            build_membership_message(customer_name, offer.customer_phone),
+            delivered,
         )
     elif outcome == "question":
         # Every question goes to a human — the agent has no way to know whether
@@ -402,8 +408,12 @@ def handle_membership_reply(
         reason = "Asked a question about the maintenance plan."
         alerted = notify_owner_of_escalation(client, offer.customer_phone, reason)
         record_owner_notification(
-            session, client.id, KIND_ESCALATION, SOURCE_MEMBERSHIP_QUESTION,
-            build_escalation_message(client, offer.customer_phone, reason), alerted,
+            session,
+            client.id,
+            KIND_ESCALATION,
+            SOURCE_MEMBERSHIP_QUESTION,
+            build_escalation_message(client, offer.customer_phone, reason),
+            alerted,
         )
 
     return OUTCOME_REPLIES.get(outcome, OUTCOME_REPLIES["unclear"])

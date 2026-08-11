@@ -5,6 +5,7 @@ independent of the others' module structure.
 
 Design doc: docs/superpowers/specs/2026-08-10-gen-2-workforce-design.md §4.1.
 """
+
 import os
 
 
@@ -117,18 +118,11 @@ OUTCOME_REPLIES = {
         "They'll confirm the details with you and get it started."
     ),
     "declined": "No problem at all — thanks for letting me know!",
-    "question": (
-        "Good question — let me have someone from the office get back to you "
-        "on that."
-    ),
+    "question": ("Good question — let me have someone from the office get back to you on that."),
     "unsubscribed": (
-        "You've been unsubscribed and won't receive further messages. "
-        "Reply START to resume."
+        "You've been unsubscribed and won't receive further messages. Reply START to resume."
     ),
-    "unclear": (
-        "Thanks for getting back to me! I'll have someone from the office "
-        "follow up."
-    ),
+    "unclear": ("Thanks for getting back to me! I'll have someone from the office follow up."),
 }
 
 

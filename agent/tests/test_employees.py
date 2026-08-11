@@ -1,6 +1,7 @@
 """Employee registry is documentation-as-code, not a live subsystem: these
 tests only guard its own invariants (exactly one live entry, unique keys).
 Nothing else in the app imports this module yet — see spec §4."""
+
 from employees import REGISTRY
 
 
@@ -22,8 +23,12 @@ def test_the_live_employees_are_the_six_graduated_ones():
     a new one must fail here and be argued for rather than drift in."""
     live = {e.key for e in REGISTRY if e.status == "live"}
     assert live == {
-        "frontdesk", "reviews", "quote_chaser",
-        "lead_qualifier", "dispatcher", "retention_manager",
+        "frontdesk",
+        "reviews",
+        "quote_chaser",
+        "lead_qualifier",
+        "dispatcher",
+        "retention_manager",
     }
 
 
@@ -47,8 +52,13 @@ def test_department_tags_are_the_canonical_seven():
     page and the approved product blueprint both use; 'intelligence' was an
     internal-only name that never appeared anywhere customer-facing."""
     expected = {
-        "customer_service", "sales", "operations",
-        "finance", "customer_success", "marketing", "leadership",
+        "customer_service",
+        "sales",
+        "operations",
+        "finance",
+        "customer_success",
+        "marketing",
+        "leadership",
     }
     assert {e.department for e in REGISTRY} == expected
 

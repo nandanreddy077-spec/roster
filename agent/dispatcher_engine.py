@@ -7,6 +7,7 @@ never reads free text at all (2026-07-30 design review).
 Reason codes live in dispatcher_rules.py — this module contains only the
 classification functions.
 """
+
 from typing import Tuple
 
 from db_models import Job, JobQualification
@@ -68,8 +69,12 @@ def plan(job: Job, qualification: JobQualification) -> dict:
     dispatch_reason is a comma-joined list of structured rule-code enums
     (never English prose) — one per axis, in a fixed order."""
     dispatch_priority, priority_reason = classify_dispatch_priority(job, qualification)
-    scheduling_window, window_reason = classify_scheduling_window(qualification.job_type, dispatch_priority)
-    requires_review, review_reason = classify_requires_dispatch_review(job, qualification, dispatch_priority)
+    scheduling_window, window_reason = classify_scheduling_window(
+        qualification.job_type, dispatch_priority
+    )
+    requires_review, review_reason = classify_requires_dispatch_review(
+        job, qualification, dispatch_priority
+    )
 
     return {
         "dispatch_priority": dispatch_priority,

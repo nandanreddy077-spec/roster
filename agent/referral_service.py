@@ -3,6 +3,7 @@ Independent of Recovery — no campaigns, no manually-pasted customer list, no
 multi-touch sequence. Every job marked done becomes automatically eligible
 once the client has an incentive line set.
 """
+
 from datetime import datetime, timedelta
 from typing import List, Optional
 
@@ -62,7 +63,9 @@ def send_due_referral_asks(session: Session) -> List[Job]:
                 service_type=job.service_type,
                 incentive=client.referral_incentive,
             )
-            sms_channel.send(from_number=client.inbound_number or "", to_number=job.callback_number, body=text)
+            sms_channel.send(
+                from_number=client.inbound_number or "", to_number=job.callback_number, body=text
+            )
             job.referral_sent_at = datetime.utcnow()
             session.add(job)
             session.commit()
@@ -75,7 +78,9 @@ def send_due_referral_asks(session: Session) -> List[Job]:
     return sent
 
 
-def find_active_referral_ask(session: Session, client_id: int, customer_phone: str) -> Optional[Job]:
+def find_active_referral_ask(
+    session: Session, client_id: int, customer_phone: str
+) -> Optional[Job]:
     """A referral ask is 'active' — eligible to have an inbound reply routed to
     it — if it was sent within the last REFERRAL_REPLY_WINDOW_DAYS and hasn't
     already produced a captured lead. Time-bounded (unlike Recovery's

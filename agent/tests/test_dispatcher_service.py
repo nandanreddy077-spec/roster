@@ -7,8 +7,11 @@ from deployment import deploy_role
 
 def make_client(session, **overrides) -> Business:
     defaults = dict(
-        business_name="Ridgeline Plumbing", trade="Plumbing", hours="9-5",
-        pricing_faq="n/a", escalation_phone="+15550000000",
+        business_name="Ridgeline Plumbing",
+        trade="Plumbing",
+        hours="9-5",
+        pricing_faq="n/a",
+        escalation_phone="+15550000000",
         inbound_number="+15559990000",
     )
     defaults.update(overrides)
@@ -21,8 +24,11 @@ def make_client(session, **overrides) -> Business:
 
 def _job(session, client, **overrides) -> Job:
     defaults = dict(
-        business_id=client.id, service_type="AC not cooling", urgency="routine",
-        callback_number="+15551234567", address="123 Main St",
+        business_id=client.id,
+        service_type="AC not cooling",
+        urgency="routine",
+        callback_number="+15551234567",
+        address="123 Main St",
     )
     defaults.update(overrides)
     job = Job(**defaults)
@@ -34,9 +40,14 @@ def _job(session, client, **overrides) -> Job:
 
 def _qualify(session, job, **overrides) -> JobQualification:
     defaults = dict(
-        business_id=job.business_id, source_job_id=job.id, job_type="repair",
-        financing_candidate=False, membership_candidate=False,
-        priority="normal", possible_spam=False, reasoning="X",
+        business_id=job.business_id,
+        source_job_id=job.id,
+        job_type="repair",
+        financing_candidate=False,
+        membership_candidate=False,
+        priority="normal",
+        possible_spam=False,
+        reasoning="X",
     )
     defaults.update(overrides)
     row = JobQualification(**defaults)
@@ -49,6 +60,7 @@ def _qualify(session, job, **overrides) -> JobQualification:
 # ---- deployment gating (2026-07-30, Critical Finding #2 fix) ---------------
 # recommend_dispatch now dispatches through runner.dispatch_tick — only
 # businesses with dispatcher deployed are ever processed.
+
 
 def test_recommend_dispatch_skips_a_qualified_job_for_an_undeployed_business(session):
     client = make_client(session)  # never deployed
@@ -63,7 +75,9 @@ def test_recommend_dispatch_skips_a_qualified_job_for_an_undeployed_business(ses
 
 def test_recommend_dispatch_only_processes_deployed_businesses(session):
     deployed = make_client(session, business_name="Deployed Co", inbound_number="+15559990003")
-    not_deployed = make_client(session, business_name="Not Deployed Co", inbound_number="+15559990004")
+    not_deployed = make_client(
+        session, business_name="Not Deployed Co", inbound_number="+15559990004"
+    )
     deploy_role(session, deployed.id, "dispatcher")
     job_a = _job(session, deployed, callback_number="+1")
     job_b = _job(session, not_deployed, callback_number="+2")
@@ -78,6 +92,7 @@ def test_recommend_dispatch_only_processes_deployed_businesses(session):
 
 
 # ---- classification behavior (deployment already established) --------------
+
 
 def test_recommend_dispatch_creates_one_plan_per_qualified_job(session):
     client = make_client(session)

@@ -1,7 +1,9 @@
 import channels
 
 
-def test_get_channel_returns_console_channel_and_warns_when_credentials_missing(monkeypatch, capsys):
+def test_get_channel_returns_console_channel_and_warns_when_credentials_missing(
+    monkeypatch, capsys
+):
     monkeypatch.delenv("TWILIO_ACCOUNT_SID", raising=False)
     monkeypatch.delenv("TWILIO_AUTH_TOKEN", raising=False)
 
@@ -13,7 +15,9 @@ def test_get_channel_returns_console_channel_and_warns_when_credentials_missing(
     assert "WARNING" in captured.err
 
 
-def test_get_channel_returns_twilio_channel_without_warning_when_credentials_set(monkeypatch, capsys):
+def test_get_channel_returns_twilio_channel_without_warning_when_credentials_set(
+    monkeypatch, capsys
+):
     monkeypatch.setenv("TWILIO_ACCOUNT_SID", "AC_test")
     monkeypatch.setenv("TWILIO_AUTH_TOKEN", "token_test")
     monkeypatch.setenv("TWILIO_MESSAGING_SERVICE_SID", "MG_test")
@@ -52,7 +56,10 @@ def test_send_hours_ok_never_true_outside_9am_8pm_in_any_mainland_us_timezone():
     from channels import send_hours_ok
 
     mainland_zones = [
-        "America/New_York", "America/Chicago", "America/Denver", "America/Los_Angeles",
+        "America/New_York",
+        "America/Chicago",
+        "America/Denver",
+        "America/Los_Angeles",
     ]
     for month in (1, 7):  # opposite DST states
         for hour in range(24):
@@ -70,6 +77,7 @@ def test_send_hours_ok_never_true_outside_9am_8pm_in_any_mainland_us_timezone():
 # The bug these pin: an owner typed `770-288-1238`, Twilio resolved it against
 # the US sender, and every escalation alert went to a stranger in Georgia while
 # reporting success.
+
 
 def test_a_number_a_human_typed_becomes_e164():
     for typed in ("770-288-1238", "(770) 288-1238", "770.288.1238", " 7702881238 "):

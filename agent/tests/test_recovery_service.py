@@ -3,7 +3,14 @@ from datetime import datetime, timedelta
 
 from sqlmodel import Session, select
 
-from db_models import Business, Job, OwnerNotification, RecoveryCampaign, RecoveryJob, RecoveryMessageLog
+from db_models import (
+    Business,
+    Job,
+    OwnerNotification,
+    RecoveryCampaign,
+    RecoveryJob,
+    RecoveryMessageLog,
+)
 import recovery_service
 from conftest import StubAgent
 from deployment import deploy_role
@@ -11,8 +18,12 @@ from deployment import deploy_role
 
 def make_client(session: Session) -> Business:
     client = Business(
-        business_name="Test Co", trade="HVAC", services_json=json.dumps(["AC repair"]),
-        hours="9-5", pricing_faq="n/a", escalation_phone="+15550000000",
+        business_name="Test Co",
+        trade="HVAC",
+        services_json=json.dumps(["AC repair"]),
+        hours="9-5",
+        pricing_faq="n/a",
+        escalation_phone="+15550000000",
         inbound_number="+15559990000",
     )
     session.add(client)
@@ -55,7 +66,10 @@ def test_tick_sends_day_one_message_once_elapsed(session, monkeypatch):
 
     client = make_client(session)
     campaign = recovery_service.create_campaign(
-        session, client, "quote", "June quotes",
+        session,
+        client,
+        "quote",
+        "June quotes",
         [{"phone": "+1", "name": "Mike", "service_type": "AC install", "estimate_amount": "8000"}],
     )
     campaign.started_at = datetime.utcnow() - timedelta(days=1)
@@ -78,7 +92,10 @@ def test_tick_does_not_resend_same_day_twice(session, monkeypatch):
 
     client = make_client(session)
     campaign = recovery_service.create_campaign(
-        session, client, "quote", "June quotes",
+        session,
+        client,
+        "quote",
+        "June quotes",
         [{"phone": "+1", "name": "Mike", "service_type": "AC install"}],
     )
     campaign.started_at = datetime.utcnow() - timedelta(days=1)
@@ -98,7 +115,10 @@ def test_tick_marks_no_response_after_final_day(session, monkeypatch):
 
     client = make_client(session)
     campaign = recovery_service.create_campaign(
-        session, client, "quote", "June quotes",
+        session,
+        client,
+        "quote",
+        "June quotes",
         [{"phone": "+1", "name": "Mike", "service_type": "AC install"}],
     )
     campaign.started_at = datetime.utcnow() - timedelta(days=40)
@@ -132,7 +152,10 @@ def test_tick_isolates_per_job_failure(session, monkeypatch):
 
     client = make_client(session)
     campaign = recovery_service.create_campaign(
-        session, client, "quote", "June quotes",
+        session,
+        client,
+        "quote",
+        "June quotes",
         [
             {"phone": "+1", "name": "Bad", "service_type": "AC install"},
             {"phone": "+2", "name": "Good", "service_type": "Furnace repair"},
@@ -156,7 +179,10 @@ def test_tick_isolates_per_job_failure(session, monkeypatch):
 def test_handle_recovery_reply_stop_keyword_bypasses_llm(session, monkeypatch):
     client = make_client(session)
     recovery_service.create_campaign(
-        session, client, "quote", "June quotes",
+        session,
+        client,
+        "quote",
+        "June quotes",
         [{"phone": "+1", "name": "Mike", "service_type": "AC install"}],
     )
     job = session.exec(select(RecoveryJob)).first()
@@ -170,14 +196,18 @@ def test_handle_recovery_reply_stop_keyword_bypasses_llm(session, monkeypatch):
 
     monkeypatch.setattr(recovery_service, "agent", ExplodingAgent())
 
-    session.add(RecoveryMessageLog(recovery_job_id=job.id, message_day=1, message_text="Hi Mike..."))
+    session.add(
+        RecoveryMessageLog(recovery_job_id=job.id, message_day=1, message_text="Hi Mike...")
+    )
     session.commit()
 
     reply = recovery_service.handle_recovery_reply(session, client, job, "STOP")
 
     session.refresh(job)
     assert job.current_status == "declined"
-    log = session.exec(select(RecoveryMessageLog).where(RecoveryMessageLog.recovery_job_id == job.id)).first()
+    log = session.exec(
+        select(RecoveryMessageLog).where(RecoveryMessageLog.recovery_job_id == job.id)
+    ).first()
     assert log.customer_reply == "STOP"  # opt-out text is captured, not silently dropped
     assert "unsubscribed" in reply.lower()
 
@@ -185,27 +215,39 @@ def test_handle_recovery_reply_stop_keyword_bypasses_llm(session, monkeypatch):
 def test_handle_recovery_reply_awaiting_slot_can_decline(session, monkeypatch):
     client = make_client(session)
     recovery_service.create_campaign(
-        session, client, "quote", "June quotes",
+        session,
+        client,
+        "quote",
+        "June quotes",
         [{"phone": "+1", "name": "Mike", "service_type": "AC install"}],
     )
     job = session.exec(select(RecoveryJob)).first()
     job.current_status = "awaiting_slot"
-    job.offered_slots_json = json.dumps(["Monday morning", "Tuesday afternoon", "Wednesday morning"])
+    job.offered_slots_json = json.dumps(
+        ["Monday morning", "Tuesday afternoon", "Wednesday morning"]
+    )
     session.add(job)
     session.commit()
 
     monkeypatch.setattr(
         recovery_service,
         "agent",
-        StubAgent({
-            "reply": "",
-            "jobs": [],
-            "new_messages": [],
-            "pending_tool_call": {"name": "record_response", "input": {"intent": "not_interested"}},
-        }),
+        StubAgent(
+            {
+                "reply": "",
+                "jobs": [],
+                "new_messages": [],
+                "pending_tool_call": {
+                    "name": "record_response",
+                    "input": {"intent": "not_interested"},
+                },
+            }
+        ),
     )
 
-    recovery_service.handle_recovery_reply(session, client, job, "actually never mind, don't text me again")
+    recovery_service.handle_recovery_reply(
+        session, client, job, "actually never mind, don't text me again"
+    )
 
     session.refresh(job)
     assert job.current_status == "declined"
@@ -215,25 +257,32 @@ def test_handle_recovery_reply_awaiting_slot_can_decline(session, monkeypatch):
 def test_handle_recovery_reply_interested_offers_slots(session, monkeypatch):
     client = make_client(session)
     recovery_service.create_campaign(
-        session, client, "quote", "June quotes",
+        session,
+        client,
+        "quote",
+        "June quotes",
         [{"phone": "+1", "name": "Mike", "service_type": "AC install"}],
     )
     job = session.exec(select(RecoveryJob)).first()
     job.last_sent_day = 1
     session.add(job)
     session.commit()
-    session.add(RecoveryMessageLog(recovery_job_id=job.id, message_day=1, message_text="Hi Mike..."))
+    session.add(
+        RecoveryMessageLog(recovery_job_id=job.id, message_day=1, message_text="Hi Mike...")
+    )
     session.commit()
 
     monkeypatch.setattr(
         recovery_service,
         "agent",
-        StubAgent({
-            "reply": "",
-            "jobs": [],
-            "new_messages": [],
-            "pending_tool_call": {"name": "record_response", "input": {"intent": "interested"}},
-        }),
+        StubAgent(
+            {
+                "reply": "",
+                "jobs": [],
+                "new_messages": [],
+                "pending_tool_call": {"name": "record_response", "input": {"intent": "interested"}},
+            }
+        ),
     )
 
     reply = recovery_service.handle_recovery_reply(session, client, job, "Yes I'm interested!")
@@ -247,24 +296,31 @@ def test_handle_recovery_reply_interested_offers_slots(session, monkeypatch):
 def test_handle_recovery_reply_confirm_slot_books_job(session, monkeypatch):
     client = make_client(session)
     recovery_service.create_campaign(
-        session, client, "quote", "June quotes",
+        session,
+        client,
+        "quote",
+        "June quotes",
         [{"phone": "+1", "name": "Mike", "service_type": "AC install"}],
     )
     job = session.exec(select(RecoveryJob)).first()
     job.current_status = "awaiting_slot"
-    job.offered_slots_json = json.dumps(["Monday morning", "Tuesday afternoon", "Wednesday morning"])
+    job.offered_slots_json = json.dumps(
+        ["Monday morning", "Tuesday afternoon", "Wednesday morning"]
+    )
     session.add(job)
     session.commit()
 
     monkeypatch.setattr(
         recovery_service,
         "agent",
-        StubAgent({
-            "reply": "",
-            "jobs": [],
-            "new_messages": [],
-            "pending_tool_call": {"name": "confirm_slot", "input": {"slot_index": 1}},
-        }),
+        StubAgent(
+            {
+                "reply": "",
+                "jobs": [],
+                "new_messages": [],
+                "pending_tool_call": {"name": "confirm_slot", "input": {"slot_index": 1}},
+            }
+        ),
     )
 
     reply = recovery_service.handle_recovery_reply(session, client, job, "Tuesday afternoon works")
@@ -280,19 +336,28 @@ def test_handle_recovery_reply_confirm_slot_books_job(session, monkeypatch):
 def test_handle_recovery_reply_declined_stops_sequence(session, monkeypatch):
     client = make_client(session)
     recovery_service.create_campaign(
-        session, client, "reactivation", "Dormant", [{"phone": "+1", "name": "Sue", "service_type": "Tune-up"}],
+        session,
+        client,
+        "reactivation",
+        "Dormant",
+        [{"phone": "+1", "name": "Sue", "service_type": "Tune-up"}],
     )
     job = session.exec(select(RecoveryJob)).first()
 
     monkeypatch.setattr(
         recovery_service,
         "agent",
-        StubAgent({
-            "reply": "",
-            "jobs": [],
-            "new_messages": [],
-            "pending_tool_call": {"name": "record_response", "input": {"intent": "not_interested"}},
-        }),
+        StubAgent(
+            {
+                "reply": "",
+                "jobs": [],
+                "new_messages": [],
+                "pending_tool_call": {
+                    "name": "record_response",
+                    "input": {"intent": "not_interested"},
+                },
+            }
+        ),
     )
 
     recovery_service.handle_recovery_reply(session, client, job, "No thanks")
@@ -304,7 +369,11 @@ def test_handle_recovery_reply_declined_stops_sequence(session, monkeypatch):
 def test_find_active_recovery_job_only_matches_active_statuses(session):
     client = make_client(session)
     recovery_service.create_campaign(
-        session, client, "quote", "June", [{"phone": "+1", "name": "Mike", "service_type": "AC install"}],
+        session,
+        client,
+        "quote",
+        "June",
+        [{"phone": "+1", "name": "Mike", "service_type": "AC install"}],
     )
     job = session.exec(select(RecoveryJob)).first()
     job.last_sent_day = 1  # simulate the first sequence message having gone out
@@ -324,7 +393,11 @@ def test_find_active_recovery_job_only_matches_active_statuses(session):
 def test_find_active_recovery_job_excludes_jobs_never_sent_to(session):
     client = make_client(session)
     recovery_service.create_campaign(
-        session, client, "quote", "June", [{"phone": "+1", "name": "Mike", "service_type": "AC install"}],
+        session,
+        client,
+        "quote",
+        "June",
+        [{"phone": "+1", "name": "Mike", "service_type": "AC install"}],
     )
     job = session.exec(select(RecoveryJob)).first()
 
@@ -336,24 +409,31 @@ def test_find_active_recovery_job_excludes_jobs_never_sent_to(session):
 def test_handle_recovery_reply_out_of_range_slot_index_does_not_book(session, monkeypatch):
     client = make_client(session)
     recovery_service.create_campaign(
-        session, client, "quote", "June quotes",
+        session,
+        client,
+        "quote",
+        "June quotes",
         [{"phone": "+1", "name": "Mike", "service_type": "AC install"}],
     )
     job = session.exec(select(RecoveryJob)).first()
     job.current_status = "awaiting_slot"
-    job.offered_slots_json = json.dumps(["Monday morning", "Tuesday afternoon", "Wednesday morning"])
+    job.offered_slots_json = json.dumps(
+        ["Monday morning", "Tuesday afternoon", "Wednesday morning"]
+    )
     session.add(job)
     session.commit()
 
     monkeypatch.setattr(
         recovery_service,
         "agent",
-        StubAgent({
-            "reply": "",
-            "jobs": [],
-            "new_messages": [],
-            "pending_tool_call": {"name": "confirm_slot", "input": {"slot_index": 99}},
-        }),
+        StubAgent(
+            {
+                "reply": "",
+                "jobs": [],
+                "new_messages": [],
+                "pending_tool_call": {"name": "confirm_slot", "input": {"slot_index": 99}},
+            }
+        ),
     )
 
     recovery_service.handle_recovery_reply(session, client, job, "uh, the fourth one?")
@@ -366,24 +446,31 @@ def test_handle_recovery_reply_out_of_range_slot_index_does_not_book(session, mo
 def test_handle_recovery_reply_awaiting_slot_no_tool_call_does_not_crash(session, monkeypatch):
     client = make_client(session)
     recovery_service.create_campaign(
-        session, client, "quote", "June quotes",
+        session,
+        client,
+        "quote",
+        "June quotes",
         [{"phone": "+1", "name": "Mike", "service_type": "AC install"}],
     )
     job = session.exec(select(RecoveryJob)).first()
     job.current_status = "awaiting_slot"
-    job.offered_slots_json = json.dumps(["Monday morning", "Tuesday afternoon", "Wednesday morning"])
+    job.offered_slots_json = json.dumps(
+        ["Monday morning", "Tuesday afternoon", "Wednesday morning"]
+    )
     session.add(job)
     session.commit()
 
     monkeypatch.setattr(
         recovery_service,
         "agent",
-        StubAgent({
-            "reply": "Sorry, which day did you mean?",
-            "jobs": [],
-            "new_messages": [],
-            "pending_tool_call": None,
-        }),
+        StubAgent(
+            {
+                "reply": "Sorry, which day did you mean?",
+                "jobs": [],
+                "new_messages": [],
+                "pending_tool_call": None,
+            }
+        ),
     )
 
     reply = recovery_service.handle_recovery_reply(session, client, job, "hmm not sure")
@@ -400,7 +487,9 @@ def test_create_campaign_membership_sets_anchor_date(session):
         {"phone": "+1", "name": "Sarah", "service_type": "AC tune-up", "anchor_date": "2026-07-15"},
     ]
 
-    campaign = recovery_service.create_campaign(session, client, "membership", "July renewals", customers)
+    campaign = recovery_service.create_campaign(
+        session, client, "membership", "July renewals", customers
+    )
 
     job = session.exec(select(RecoveryJob).where(RecoveryJob.campaign_id == campaign.id)).first()
     assert job.anchor_date == "2026-07-15"
@@ -408,7 +497,9 @@ def test_create_campaign_membership_sets_anchor_date(session):
 
 def test_create_campaign_quote_leaves_anchor_date_none(session):
     client = make_client(session)
-    customers = [{"phone": "+1", "name": "Mike", "service_type": "AC install", "estimate_amount": "8000"}]
+    customers = [
+        {"phone": "+1", "name": "Mike", "service_type": "AC install", "estimate_amount": "8000"}
+    ]
 
     campaign = recovery_service.create_campaign(session, client, "quote", "June quotes", customers)
 
@@ -423,7 +514,10 @@ def test_tick_sends_membership_offset_before_renewal(session, monkeypatch):
     client = make_client(session)
     renewal = (datetime.utcnow() + timedelta(days=25)).strftime("%Y-%m-%d")
     campaign = recovery_service.create_campaign(
-        session, client, "membership", "July renewals",
+        session,
+        client,
+        "membership",
+        "July renewals",
         [{"phone": "+1", "name": "Sarah", "service_type": "AC tune-up", "anchor_date": renewal}],
     )
 
@@ -443,7 +537,10 @@ def test_tick_membership_catch_up_lands_on_latest_offset_not_burst(session, monk
     client = make_client(session)
     renewal = (datetime.utcnow() + timedelta(days=5)).strftime("%Y-%m-%d")  # added late, 5 days out
     recovery_service.create_campaign(
-        session, client, "membership", "July renewals",
+        session,
+        client,
+        "membership",
+        "July renewals",
         [{"phone": "+1", "name": "Sarah", "service_type": "AC tune-up", "anchor_date": renewal}],
     )
 
@@ -461,7 +558,10 @@ def test_tick_membership_does_not_resend_same_offset_twice(session, monkeypatch)
     client = make_client(session)
     renewal = (datetime.utcnow() + timedelta(days=25)).strftime("%Y-%m-%d")
     recovery_service.create_campaign(
-        session, client, "membership", "July renewals",
+        session,
+        client,
+        "membership",
+        "July renewals",
         [{"phone": "+1", "name": "Sarah", "service_type": "AC tune-up", "anchor_date": renewal}],
     )
 
@@ -479,7 +579,10 @@ def test_tick_membership_marks_no_response_after_final_offset(session, monkeypat
     client = make_client(session)
     renewal = (datetime.utcnow() - timedelta(days=10)).strftime("%Y-%m-%d")  # renewed 10 days ago
     recovery_service.create_campaign(
-        session, client, "membership", "July renewals",
+        session,
+        client,
+        "membership",
+        "July renewals",
         [{"phone": "+1", "name": "Sarah", "service_type": "AC tune-up", "anchor_date": renewal}],
     )
 
@@ -497,7 +600,10 @@ def test_tick_quote_face_unaffected_by_membership_branch(session, monkeypatch):
 
     client = make_client(session)
     campaign = recovery_service.create_campaign(
-        session, client, "quote", "June quotes",
+        session,
+        client,
+        "quote",
+        "June quotes",
         [{"phone": "+1", "name": "Mike", "service_type": "AC install", "estimate_amount": "8000"}],
     )
     campaign.started_at = datetime.utcnow() - timedelta(days=1)
@@ -526,6 +632,7 @@ class ReentrantTickChannel:
         if not self._reentered:
             self._reentered = True
             from sqlmodel import Session as _S
+
             with _S(self.engine) as inner:
                 recovery_service.tick(inner)
 
@@ -539,7 +646,10 @@ def test_overlapping_ticks_cannot_double_text_a_customer(test_engine, monkeypatc
     with _S(test_engine) as session:
         client = make_client(session)
         campaign = recovery_service.create_campaign(
-            session, client, "quote", "June quotes",
+            session,
+            client,
+            "quote",
+            "June quotes",
             [{"phone": "+15550001111", "name": "Pat", "service_type": "AC install"}],
         )
         campaign.started_at = datetime.utcnow() - timedelta(days=1)
@@ -567,11 +677,16 @@ def test_overlapping_ticks_cannot_double_text_a_customer(test_engine, monkeypatc
 # "last chance" message on a lead's very first tick. One campaign per job
 # keeps that math correct with zero changes to the frozen tick() engine.
 
+
 def _completed_estimate_job(session, client, **overrides) -> Job:
     defaults = dict(
-        business_id=client.id, service_type="AC replacement", urgency="routine",
-        customer_name="Mike", callback_number="+15551234567",
-        is_estimate=True, completed_at=datetime.utcnow(),
+        business_id=client.id,
+        service_type="AC replacement",
+        urgency="routine",
+        customer_name="Mike",
+        callback_number="+15551234567",
+        is_estimate=True,
+        completed_at=datetime.utcnow(),
     )
     defaults.update(overrides)
     job = Job(**defaults)
@@ -639,9 +754,14 @@ def test_enroll_completed_estimates_is_idempotent(session):
 
 def test_enroll_completed_estimates_business_isolation(session):
     client_a = make_client(session)
-    client_b = Business(business_name="Other Co", trade="HVAC", hours="9-5",
-                        pricing_faq="n/a", escalation_phone="+15550009999",
-                        inbound_number="+15559991111")
+    client_b = Business(
+        business_name="Other Co",
+        trade="HVAC",
+        hours="9-5",
+        pricing_faq="n/a",
+        escalation_phone="+15550009999",
+        inbound_number="+15559991111",
+    )
     session.add(client_b)
     session.commit()
     session.refresh(client_b)
@@ -706,17 +826,25 @@ def test_enroll_completed_estimates_then_tick_sends_after_the_sequence_delay(ses
 # then let general handling take over" shape Reviews' negative-outcome path
 # already uses).
 
+
 def _stub_escalation(reason: str = "asked for a discount") -> StubAgent:
-    return StubAgent({
-        "reply": "", "jobs": [], "new_messages": [],
-        "pending_tool_call": {"name": "escalate_to_owner", "input": {"reason": reason}},
-    })
+    return StubAgent(
+        {
+            "reply": "",
+            "jobs": [],
+            "new_messages": [],
+            "pending_tool_call": {"name": "escalate_to_owner", "input": {"reason": reason}},
+        }
+    )
 
 
 def test_handle_recovery_reply_escalates_on_price_negotiation(session, monkeypatch):
     client = make_client(session)
     recovery_service.create_campaign(
-        session, client, "quote", "June quotes",
+        session,
+        client,
+        "quote",
+        "June quotes",
         [{"phone": "+1", "name": "Mike", "service_type": "AC install"}],
     )
     job = session.exec(select(RecoveryJob)).first()
@@ -725,10 +853,15 @@ def test_handle_recovery_reply_escalates_on_price_negotiation(session, monkeypat
     session.commit()
     monkeypatch.setattr(recovery_service, "agent", _stub_escalation("wants 10% off the quote"))
     calls = []
-    monkeypatch.setattr(recovery_service, "notify_owner_of_escalation",
-                        lambda business, caller, reason, **k: calls.append((caller, reason)) or True)
+    monkeypatch.setattr(
+        recovery_service,
+        "notify_owner_of_escalation",
+        lambda business, caller, reason, **k: calls.append((caller, reason)) or True,
+    )
 
-    reply = recovery_service.handle_recovery_reply(session, client, job, "can you do any better on price?")
+    reply = recovery_service.handle_recovery_reply(
+        session, client, job, "can you do any better on price?"
+    )
 
     session.refresh(job)
     assert job.current_status == "escalated"
@@ -751,7 +884,10 @@ def test_handle_recovery_reply_escalates_from_awaiting_slot_state(session, monke
     the first reply."""
     client = make_client(session)
     recovery_service.create_campaign(
-        session, client, "quote", "June quotes",
+        session,
+        client,
+        "quote",
+        "June quotes",
         [{"phone": "+1", "name": "Mike", "service_type": "AC install"}],
     )
     job = session.exec(select(RecoveryJob)).first()
@@ -759,12 +895,21 @@ def test_handle_recovery_reply_escalates_from_awaiting_slot_state(session, monke
     job.offered_slots_json = json.dumps(["Monday morning", "Tuesday afternoon"])
     session.add(job)
     session.commit()
-    monkeypatch.setattr(recovery_service, "agent", _stub_escalation("none of those times work, needs a different week"))
+    monkeypatch.setattr(
+        recovery_service,
+        "agent",
+        _stub_escalation("none of those times work, needs a different week"),
+    )
     calls = []
-    monkeypatch.setattr(recovery_service, "notify_owner_of_escalation",
-                        lambda business, caller, reason, **k: calls.append(1) or True)
+    monkeypatch.setattr(
+        recovery_service,
+        "notify_owner_of_escalation",
+        lambda business, caller, reason, **k: calls.append(1) or True,
+    )
 
-    recovery_service.handle_recovery_reply(session, client, job, "none of those work, can we do next month instead?")
+    recovery_service.handle_recovery_reply(
+        session, client, job, "none of those work, can we do next month instead?"
+    )
 
     session.refresh(job)
     assert job.current_status == "escalated"
@@ -776,7 +921,10 @@ def test_handle_recovery_reply_escalation_stops_future_sequence_messages(session
     monkeypatch.setattr(recovery_service, "sms_channel", fake_channel)
     client = make_client(session)
     campaign = recovery_service.create_campaign(
-        session, client, "quote", "June quotes",
+        session,
+        client,
+        "quote",
+        "June quotes",
         [{"phone": "+1", "name": "Mike", "service_type": "AC install"}],
     )
     campaign.started_at = datetime.utcnow() - timedelta(days=1)
@@ -802,7 +950,10 @@ def test_handle_recovery_reply_escalation_stops_future_sequence_messages(session
 def test_find_active_recovery_job_excludes_escalated_jobs(session, monkeypatch):
     client = make_client(session)
     recovery_service.create_campaign(
-        session, client, "quote", "June quotes",
+        session,
+        client,
+        "quote",
+        "June quotes",
         [{"phone": "+1", "name": "Mike", "service_type": "AC install"}],
     )
     job = session.exec(select(RecoveryJob)).first()
@@ -822,7 +973,10 @@ def test_handle_recovery_reply_normal_interest_does_not_escalate(session, monkey
     owner."""
     client = make_client(session)
     recovery_service.create_campaign(
-        session, client, "quote", "June quotes",
+        session,
+        client,
+        "quote",
+        "June quotes",
         [{"phone": "+1", "name": "Mike", "service_type": "AC install"}],
     )
     job = session.exec(select(RecoveryJob)).first()
@@ -830,14 +984,21 @@ def test_handle_recovery_reply_normal_interest_does_not_escalate(session, monkey
     session.add(job)
     session.commit()
     monkeypatch.setattr(
-        recovery_service, "agent",
-        StubAgent({
-            "reply": "", "jobs": [], "new_messages": [],
-            "pending_tool_call": {"name": "record_response", "input": {"intent": "interested"}},
-        }),
+        recovery_service,
+        "agent",
+        StubAgent(
+            {
+                "reply": "",
+                "jobs": [],
+                "new_messages": [],
+                "pending_tool_call": {"name": "record_response", "input": {"intent": "interested"}},
+            }
+        ),
     )
     calls = []
-    monkeypatch.setattr(recovery_service, "notify_owner_of_escalation", lambda *a, **k: calls.append(1) or True)
+    monkeypatch.setattr(
+        recovery_service, "notify_owner_of_escalation", lambda *a, **k: calls.append(1) or True
+    )
 
     recovery_service.handle_recovery_reply(session, client, job, "yes, sign me up")
 
@@ -853,10 +1014,14 @@ def test_handle_recovery_reply_normal_interest_does_not_escalate(session, monkey
 # a real bug, not a missing feature: notify_owner_of_booking already accepts
 # an employee_name specifically so other booking employees could plug in.
 
+
 def test_handle_recovery_reply_confirm_slot_notifies_the_owner(session, monkeypatch):
     client = make_client(session)
     recovery_service.create_campaign(
-        session, client, "quote", "June quotes",
+        session,
+        client,
+        "quote",
+        "June quotes",
         [{"phone": "+15551234567", "name": "Mike", "service_type": "AC install"}],
     )
     job = session.exec(select(RecoveryJob)).first()
@@ -865,15 +1030,23 @@ def test_handle_recovery_reply_confirm_slot_notifies_the_owner(session, monkeypa
     session.add(job)
     session.commit()
     monkeypatch.setattr(
-        recovery_service, "agent",
-        StubAgent({
-            "reply": "", "jobs": [], "new_messages": [],
-            "pending_tool_call": {"name": "confirm_slot", "input": {"slot_index": 1}},
-        }),
+        recovery_service,
+        "agent",
+        StubAgent(
+            {
+                "reply": "",
+                "jobs": [],
+                "new_messages": [],
+                "pending_tool_call": {"name": "confirm_slot", "input": {"slot_index": 1}},
+            }
+        ),
     )
     calls = []
-    monkeypatch.setattr(recovery_service, "notify_owner_of_booking",
-                        lambda business, job, employee_name="Frontdesk", **k: calls.append(employee_name) or True)
+    monkeypatch.setattr(
+        recovery_service,
+        "notify_owner_of_booking",
+        lambda business, job, employee_name="Frontdesk", **k: calls.append(employee_name) or True,
+    )
 
     recovery_service.handle_recovery_reply(session, client, job, "Tuesday afternoon works")
 
@@ -890,7 +1063,10 @@ def test_handle_recovery_reply_out_of_range_slot_does_not_notify_owner(session, 
     """Regression: no booking happened, so no notification should fire."""
     client = make_client(session)
     recovery_service.create_campaign(
-        session, client, "quote", "June quotes",
+        session,
+        client,
+        "quote",
+        "June quotes",
         [{"phone": "+1", "name": "Mike", "service_type": "AC install"}],
     )
     job = session.exec(select(RecoveryJob)).first()
@@ -899,14 +1075,21 @@ def test_handle_recovery_reply_out_of_range_slot_does_not_notify_owner(session, 
     session.add(job)
     session.commit()
     monkeypatch.setattr(
-        recovery_service, "agent",
-        StubAgent({
-            "reply": "", "jobs": [], "new_messages": [],
-            "pending_tool_call": {"name": "confirm_slot", "input": {"slot_index": 99}},
-        }),
+        recovery_service,
+        "agent",
+        StubAgent(
+            {
+                "reply": "",
+                "jobs": [],
+                "new_messages": [],
+                "pending_tool_call": {"name": "confirm_slot", "input": {"slot_index": 99}},
+            }
+        ),
     )
     calls = []
-    monkeypatch.setattr(recovery_service, "notify_owner_of_booking", lambda *a, **k: calls.append(1) or True)
+    monkeypatch.setattr(
+        recovery_service, "notify_owner_of_booking", lambda *a, **k: calls.append(1) or True
+    )
 
     recovery_service.handle_recovery_reply(session, client, job, "the third one")
 

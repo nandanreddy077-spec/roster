@@ -7,6 +7,7 @@ and that DDL can only run once duplicates are gone.
 audit F3: nothing prevents duplicates today. _hire_employee is a
 SELECT-then-INSERT with no constraint behind it, and FastAPI runs sync handlers
 in a threadpool even at --workers 1."""
+
 import pytest
 from sqlalchemy import inspect, text
 from sqlalchemy.exc import IntegrityError

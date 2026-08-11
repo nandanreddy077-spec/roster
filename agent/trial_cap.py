@@ -5,6 +5,7 @@ crossed. When a client first crosses the hard cap, the founder gets a
 one-time best-effort SMS alert. See
 docs/superpowers/specs/2026-07-10-self-serve-signup-dashboard-design.md.
 """
+
 import os
 
 from sqlalchemy import update as sa_update
@@ -38,7 +39,9 @@ def can_respond(client: Business) -> bool:
     return client.trial_spend_cents < (client.trial_cap_cents + client.trial_soft_buffer_cents)
 
 
-def record_usage(session: Session, client: Business, cost_cents: int = TRIAL_TURN_COST_CENTS) -> None:
+def record_usage(
+    session: Session, client: Business, cost_cents: int = TRIAL_TURN_COST_CENTS
+) -> None:
     # Atomic in-database increment: concurrent turns each add their cost even
     # when both loaded the same stale Business row (a read-modify-write here
     # silently loses updates under concurrency).
@@ -85,7 +88,9 @@ def _notify_owner_cap_reached(session, client: Business) -> None:
     customer's turn has already been decided and must not fail on a notice.
     """
     from notifications import (
-        KIND_TRIAL_CAP_REACHED, SOURCE_TRIAL_CAP, record_owner_notification,
+        KIND_TRIAL_CAP_REACHED,
+        SOURCE_TRIAL_CAP,
+        record_owner_notification,
     )
 
     message = (
@@ -95,13 +100,17 @@ def _notify_owner_cap_reached(session, client: Business) -> None:
     delivered = False
     if client.escalation_phone:
         try:
-            sms_channel.send(from_number=client.inbound_number or "",
-                             to_number=client.escalation_phone, body=message)
+            sms_channel.send(
+                from_number=client.inbound_number or "",
+                to_number=client.escalation_phone,
+                body=message,
+            )
             delivered = True
         except Exception as e:
             print(f"Trial cap: failed to notify owner for client {client.id}: {e}")
-    record_owner_notification(session, client.id, KIND_TRIAL_CAP_REACHED,
-                              SOURCE_TRIAL_CAP, message, delivered)
+    record_owner_notification(
+        session, client.id, KIND_TRIAL_CAP_REACHED, SOURCE_TRIAL_CAP, message, delivered
+    )
 
 
 def _notify_founder_cap_reached(client: Business) -> None:

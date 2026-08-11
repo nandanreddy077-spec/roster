@@ -6,6 +6,7 @@ set up — number bought, voice wired, departments staffed — had no way at all
 reach its own dashboard. These tests pin that door open, and pin it shut
 against forged and expired links.
 """
+
 import os
 
 from fastapi.testclient import TestClient
@@ -110,9 +111,10 @@ def test_a_forged_link_gets_no_session(monkeypatch, test_engine):
     response = client.get("/access/not-a-real-token", follow_redirects=False)
     assert response.status_code == 400
     # No session was granted, so the dashboard still turns them away.
-    assert client.get(portal_module.DASHBOARD_HOME, follow_redirects=False).headers[
-        "location"
-    ] == "/login"
+    assert (
+        client.get(portal_module.DASHBOARD_HOME, follow_redirects=False).headers["location"]
+        == "/login"
+    )
 
 
 def test_a_link_for_a_deleted_business_fails_instead_of_500ing(monkeypatch, test_engine):

@@ -7,7 +7,12 @@
 # is already there rather than imposing a new one.
 line-length = 100
 target-version = "py313"
-extend-exclude = [".venv", "basecheck", "strix_runs"]
+# docs/ is excluded because the formatter rewrites Python code blocks embedded
+# in markdown. Those blocks are historical planning records — reformatting them
+# rewrites what the code looked like at the time, which is the one thing a plan
+# document exists to preserve. basecheck/ and strix_runs/ are vendored tool
+# output, not ours to style.
+extend-exclude = [".venv", "basecheck", "strix_runs", "docs"]
 
 [tool.ruff.lint]
 # Deliberately small: pyflakes (real bugs), pycodestyle errors, import order.

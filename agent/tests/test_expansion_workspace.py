@@ -4,6 +4,7 @@ covering both directions of growth (a partial department with room left, and
 a fully-inactive one with nothing deployed at all). Both share one builder
 over the same department_status_for call DepartmentWorkspace already uses —
 two view models, one shared computation."""
+
 from sqlmodel import Session
 
 from db_models import Business
@@ -23,8 +24,11 @@ def test_the_view_model_has_exactly_its_five_fields():
     """The same structural guard every workspace in this migration has: this
     page stays educate-then-ask, not a growing feature surface."""
     assert set(ExpansionWorkspace.__dataclass_fields__) == {
-        "department", "problem", "current_state",
-        "available_employees", "expected_outcomes",
+        "department",
+        "problem",
+        "current_state",
+        "available_employees",
+        "expected_outcomes",
     }
 
 

@@ -12,10 +12,10 @@ from models import ClientConfig
 # needs to name what would have lost each job. That claim is exactly these
 # labels, so they are a first-class column rather than a guess made at read
 # time from notes or thread shape.
-ORIGIN_INBOUND = "inbound"                  # the customer reached us first
-ORIGIN_MISSED_CALL = "missed_call"          # rang out, we texted back, they booked
-ORIGIN_QUOTE_RECOVERY = "quote_recovery"    # a cold estimate Quote Chaser revived
-ORIGIN_REACTIVATION = "reactivation"        # a dormant customer Retention brought back
+ORIGIN_INBOUND = "inbound"  # the customer reached us first
+ORIGIN_MISSED_CALL = "missed_call"  # rang out, we texted back, they booked
+ORIGIN_QUOTE_RECOVERY = "quote_recovery"  # a cold estimate Quote Chaser revived
+ORIGIN_REACTIVATION = "reactivation"  # a dormant customer Retention brought back
 # NOT work. bookings.record_escalation writes a Job purely to give alert_owner
 # the same idempotency book_job gives log_job; it represents a page to the
 # owner, never a booking. Every read path that counts or recalls jobs filters
@@ -48,11 +48,19 @@ class Business(SQLModel, table=True):
     # asserts no service-area restriction (Sprint 2, 2026-07-29 audit).
     service_area: str = ""
     escalation_phone: str = ""
-    answer_mode: str = Field(default="backup")  # "primary" (AI picks up every call) or "backup" (AI catches only calls the owner misses) - asked during onboarding; drives the call-forwarding instructions
+    answer_mode: str = Field(
+        default="backup"
+    )  # "primary" (AI picks up every call) or "backup" (AI catches only calls the owner misses) - asked during onboarding; drives the call-forwarding instructions
     business_phone: str = ""  # the number customers currently dial; the owner forwards it to inbound_number so calls reach the receptionist
-    inbound_number: Optional[str] = None  # the business line customers text/call; routes inbound SMS
-    xai_phone_number: Optional[str] = None  # number registered with xAI's Voice Agent API (see xai_voice_adapter.py); unset = no live-voice receptionist configured for this client yet
-    xai_signing_secret: Optional[str] = None  # webhook signing secret returned when xai_phone_number was registered (per-number, not account-wide — see provisioning.py)
+    inbound_number: Optional[str] = (
+        None  # the business line customers text/call; routes inbound SMS
+    )
+    xai_phone_number: Optional[str] = (
+        None  # number registered with xAI's Voice Agent API (see xai_voice_adapter.py); unset = no live-voice receptionist configured for this client yet
+    )
+    xai_signing_secret: Optional[str] = (
+        None  # webhook signing secret returned when xai_phone_number was registered (per-number, not account-wide — see provisioning.py)
+    )
     # Why the failure needs to be a ROW, not a log line: voice provisioning is
     # multi-step and partially retryable, and the self-serve activation path has
     # no request to redirect an error onto. Printing to stderr is what let a
@@ -60,9 +68,15 @@ class Business(SQLModel, table=True):
     # SMS-ready while voice silently never worked. Set on every failed step,
     # cleared on success (provisioning.provision_voice).
     voice_provisioning_error: Optional[str] = None
-    twilio_number_sid: Optional[str] = None  # Twilio's SID for the purchased number, needed to later attach it to a SIP trunk
-    review_link: Optional[str] = None  # owner's Google/Yelp review URL; unset until they provide one
-    referral_incentive: Optional[str] = None  # e.g. "$25 off"; unset = referrals off for this client
+    twilio_number_sid: Optional[str] = (
+        None  # Twilio's SID for the purchased number, needed to later attach it to a SIP trunk
+    )
+    review_link: Optional[str] = (
+        None  # owner's Google/Yelp review URL; unset until they provide one
+    )
+    referral_incentive: Optional[str] = (
+        None  # e.g. "$25 off"; unset = referrals off for this client
+    )
     # The owner's maintenance plan in THEIR OWN words, e.g. "Comfort Club —
     # $19/month, two tune-ups a year plus priority scheduling and 15% off
     # repairs." Unset = Membership Agent sends nothing for this business.
@@ -71,7 +85,9 @@ class Business(SQLModel, table=True):
     # benefit or a price the owner didn't actually offer (same precedent as
     # pricing_faq and referral_incentive).
     membership_plan: Optional[str] = None
-    requested_roster: Optional[str] = None  # JSON list of extra roles queued for founder setup — self-serve "Hire" clicks on Quote Chaser/Retention Manager append here (see agent/roles.py), same mechanism the old /hire addons used
+    requested_roster: Optional[str] = (
+        None  # JSON list of extra roles queued for founder setup — self-serve "Hire" clicks on Quote Chaser/Retention Manager append here (see agent/roles.py), same mechanism the old /hire addons used
+    )
     email: Optional[str] = Field(default=None, unique=True, index=True)
     password_hash: Optional[str] = None
     tone: str = "professional and friendly"
@@ -79,11 +95,15 @@ class Business(SQLModel, table=True):
     # §10a). Set explicitly by the founder — never auto-advanced, so a
     # double-submit can't silently skip a stage.
     pipeline_stage: str = Field(default="lead")
-    source: Optional[str] = None  # how the owner heard about Roster; asked from the dashboard, not at signup
+    source: Optional[str] = (
+        None  # how the owner heard about Roster; asked from the dashboard, not at signup
+    )
     source_prompt_dismissed: bool = False
     frontdesk_live: bool = False
     activated_at: Optional[datetime] = None
-    tested_at: Optional[datetime] = None  # set the first time an owner's dashboard test message gets a real reply back — this, not form submission, is what earns the honest "Working" status (see portal.py)
+    tested_at: Optional[datetime] = (
+        None  # set the first time an owner's dashboard test message gets a real reply back — this, not form submission, is what earns the honest "Working" status (see portal.py)
+    )
     trial_spend_cents: int = 0
     trial_cap_cents: int = 2000  # $20 hard cap
     trial_soft_buffer_cents: int = 200  # $2 grace on top of the hard cap — see trial_cap.py
@@ -144,7 +164,9 @@ class Message(SQLModel, table=True):
     customer_phone: str = "dashboard"  # threads a conversation per customer on a business's line
     role: str  # "user" or "assistant"
     content_json: str  # JSON-encoded content (str or list of content blocks)
-    external_id: Optional[str] = Field(default=None, index=True)  # provider message id (e.g. Twilio MessageSid) — lets a retried webhook skip re-inserting the same inbound message
+    external_id: Optional[str] = Field(
+        default=None, index=True
+    )  # provider message id (e.g. Twilio MessageSid) — lets a retried webhook skip re-inserting the same inbound message
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
 
@@ -154,6 +176,7 @@ class WebhookDelivery(SQLModel, table=True):
     atomic insert — a concurrent or retried delivery loses the race and is
     either replayed (response_text cached) or dropped, never reprocessed
     into duplicate side effects."""
+
     id: Optional[int] = Field(default=None, primary_key=True)
     provider: str
     dedup_key: str = Field(unique=True, index=True)
@@ -174,7 +197,9 @@ class Job(SQLModel, table=True):
     notes: Optional[str] = None
     created_at: datetime = Field(default_factory=datetime.utcnow)
     completed_at: Optional[datetime] = None  # set by the "Mark done" action; drives the Reviews SMS
-    referral_sent_at: Optional[datetime] = None  # set once the referral ask has gone out for this job
+    referral_sent_at: Optional[datetime] = (
+        None  # set once the referral ask has gone out for this job
+    )
     # Set where the review SMS is actually sent (review_service.
     # send_due_review_requests), so "review requests sent" counts real sends
     # rather than inferring them from completion. Every review request is a
@@ -244,7 +269,9 @@ class RecoveryJob(SQLModel, table=True):
     estimate_amount: Optional[str] = None
     days_since: Optional[str] = None
     anchor_date: Optional[str] = None  # ISO YYYY-MM-DD; only set for the "membership" face
-    current_status: str = "pending"  # pending, awaiting_slot, booked, declined, no_response, escalated
+    current_status: str = (
+        "pending"  # pending, awaiting_slot, booked, declined, no_response, escalated
+    )
     # Set alongside current_status == "escalated" (recovery_service._escalate,
     # PR #2) — the model's own short reason, drill-down-able next to the
     # status without cross-referencing the OwnerNotification it also created.
@@ -302,6 +329,7 @@ class JobQualification(SQLModel, table=True):
     second Job model. One row per Job, written once (idempotent, gated by
     source_job_id), never updated. Deterministic: no AgentEngine involved in
     producing any field here (2026-07-30 design review)."""
+
     id: Optional[int] = Field(default=None, primary_key=True)
     business_id: int = Field(foreign_key="business.id")
     source_job_id: int = Field(foreign_key="job.id")
@@ -322,6 +350,7 @@ class DispatchPlan(SQLModel, table=True):
     gated by source_job_id), never updated. Deterministic — every field is a
     lookup over Job.urgency and JobQualification's already-structured fields,
     no AgentEngine involved (2026-07-30 design review)."""
+
     id: Optional[int] = Field(default=None, primary_key=True)
     business_id: int = Field(foreign_key="business.id")
     source_job_id: int = Field(foreign_key="job.id")
@@ -368,10 +397,12 @@ class MembershipOffer(SQLModel, table=True):
     billing. `accepted` is the honest word for what this table knows, and the
     metric is named to match (ARCHITECTURE.md invariant 10).
     """
+
     __table_args__ = (
         Index("uq_membership_offer_source_job", "source_job_id", unique=True),
-        Index("uq_membership_offer_business_customer",
-              "business_id", "customer_phone", unique=True),
+        Index(
+            "uq_membership_offer_business_customer", "business_id", "customer_phone", unique=True
+        ),
     )
 
     id: Optional[int] = Field(default=None, primary_key=True)
@@ -422,6 +453,7 @@ class AccessRequest(SQLModel, table=True):
     form. The only inbound conversion path while Twilio KYC is pending — the
     founder follows up from the /clients dashboard and hand-onboards the first
     few shops."""
+
     id: Optional[int] = Field(default=None, primary_key=True)
     name: str = ""
     business_name: str = ""
@@ -444,6 +476,7 @@ class DepartmentInterest(SQLModel, table=True):
     Distinct from AccessRequest, which is the NEW-LEAD contact form (it has no
     business_id — the business doesn't exist yet).
     """
+
     __table_args__ = (
         # One OPEN request per business per department, enforced by the
         # database because a double-submit is genuinely concurrent: FastAPI
@@ -454,7 +487,8 @@ class DepartmentInterest(SQLModel, table=True):
         # whose request was declined months ago can ask again.
         Index(
             "uq_department_interest_open",
-            "business_id", "department_key",
+            "business_id",
+            "department_key",
             unique=True,
             sqlite_where=text("actioned_at IS NULL"),
             postgresql_where=text("actioned_at IS NULL"),
@@ -479,6 +513,7 @@ class OwnerNotification(SQLModel, table=True):
     SMS/voice path publishes through eventbus.py today, and wiring the bus
     into that path is a far larger change than a notifications list needs.
     """
+
     id: Optional[int] = Field(default=None, primary_key=True)
     business_id: int = Field(foreign_key="business.id", index=True)
     kind: str  # notifications.KIND_* — WHAT happened: job_booked | escalation | call_dropped

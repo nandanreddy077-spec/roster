@@ -6,12 +6,15 @@ a real client asks for a specific one violates Roster's own build rule (ROSTER.m
 "Guess integrations — never do this"). Only the manual fallback is wired up today.
 Adding a live provider later is a new class here, same shape as channels.py.
 """
+
 from datetime import datetime, timedelta
 from typing import List, Protocol
 
 
 class CalendarProvider(Protocol):
-    def get_available_slots(self, business_hours: str, days_ahead: int = 7, count: int = 3) -> List[str]: ...
+    def get_available_slots(
+        self, business_hours: str, days_ahead: int = 7, count: int = 3
+    ) -> List[str]: ...
 
 
 class ManualCalendarProvider:
@@ -19,7 +22,9 @@ class ManualCalendarProvider:
     Sunday), alternating morning/afternoon windows, starting 2 days out to leave
     booking lead time."""
 
-    def get_available_slots(self, business_hours: str, days_ahead: int = 7, count: int = 3) -> List[str]:
+    def get_available_slots(
+        self, business_hours: str, days_ahead: int = 7, count: int = 3
+    ) -> List[str]:
         slots: List[str] = []
         day = datetime.utcnow().date() + timedelta(days=2)
         while len(slots) < count:

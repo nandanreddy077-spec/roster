@@ -2,11 +2,17 @@
 renders (founder, 2026-07-29). It joins DepartmentStatus + EMPLOYEE_RECORDS +
 METRIC_RECORDS exactly once, so the template never has to; no route or
 template contains the join logic tested here."""
+
 from sqlmodel import Session
 
 from db_models import Business, Employee, Job
 from deployment import deploy_department, deploy_role
-from workspace import ACTIVE_STATES, CUSTOMER_STATE_LABELS, METRIC_LABELS, build_department_workspace
+from workspace import (
+    ACTIVE_STATES,
+    CUSTOMER_STATE_LABELS,
+    METRIC_LABELS,
+    build_department_workspace,
+)
 
 
 def _business(session, email):
@@ -41,8 +47,14 @@ def test_a_department_with_no_deployable_employees_returns_none(session):
 def test_an_active_department_assembles_the_full_workspace(session):
     b = _business(session, "w4@test.io")
     deploy_department(session, b.id, "customer_service")
-    session.add(Job(business_id=b.id, customer_phone="+15125550100",
-                    service_type="AC repair", urgency="routine"))
+    session.add(
+        Job(
+            business_id=b.id,
+            customer_phone="+15125550100",
+            service_type="AC repair",
+            urgency="routine",
+        )
+    )
     session.commit()
 
     ws = build_department_workspace(session, b.id, "customer_service")
@@ -68,8 +80,14 @@ def test_a_partially_staffed_department_is_still_active_and_working(session):
 def test_employees_come_from_employee_records_with_their_own_outcomes(session):
     b = _business(session, "w6@test.io")
     deploy_department(session, b.id, "customer_service")
-    session.add(Job(business_id=b.id, customer_phone="+15125550100",
-                    service_type="AC repair", urgency="routine"))
+    session.add(
+        Job(
+            business_id=b.id,
+            customer_phone="+15125550100",
+            service_type="AC repair",
+            urgency="routine",
+        )
+    )
     session.commit()
 
     ws = build_department_workspace(session, b.id, "customer_service")
@@ -97,10 +115,16 @@ def test_department_activity_is_the_union_of_its_employees_newest_first(session)
 
     b = _business(session, "w8@test.io")
     deploy_department(session, b.id, "customer_service")
-    session.add(Job(business_id=b.id, customer_phone="+1", service_type="older",
-                    urgency="routine", created_at=datetime.utcnow() - timedelta(hours=3)))
-    session.add(Job(business_id=b.id, customer_phone="+2", service_type="newer",
-                    urgency="routine"))
+    session.add(
+        Job(
+            business_id=b.id,
+            customer_phone="+1",
+            service_type="older",
+            urgency="routine",
+            created_at=datetime.utcnow() - timedelta(hours=3),
+        )
+    )
+    session.add(Job(business_id=b.id, customer_phone="+2", service_type="newer", urgency="routine"))
     session.commit()
 
     ws = build_department_workspace(session, b.id, "customer_service")
@@ -132,8 +156,9 @@ def test_workspace_never_crosses_businesses(session):
     a = _business(session, "w10a@test.io")
     b = _business(session, "w10b@test.io")
     deploy_department(session, a.id, "customer_service")
-    session.add(Job(business_id=a.id, customer_phone="+1", service_type="theirs",
-                    urgency="routine"))
+    session.add(
+        Job(business_id=a.id, customer_phone="+1", service_type="theirs", urgency="routine")
+    )
     session.commit()
 
     assert build_department_workspace(session, b.id, "customer_service") is None
@@ -157,7 +182,10 @@ def test_sales_workspace_uses_quote_chaser_lead_qualifier_and_membership(session
     ws = build_department_workspace(session, b.id, "sales")
 
     assert {e.role_key for e in ws.employees} == {
-        "quote_chaser", "lead_qualifier", "membership_agent"}
+        "quote_chaser",
+        "lead_qualifier",
+        "membership_agent",
+    }
 
 
 def test_customer_state_labels_and_active_states_are_consistent():

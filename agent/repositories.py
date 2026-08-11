@@ -5,7 +5,9 @@ from sqlmodel import Session, select
 from db_models import Customer
 
 
-def get_or_create_customer(session: Session, business_id: int, phone: str, name: Optional[str] = None) -> Customer:
+def get_or_create_customer(
+    session: Session, business_id: int, phone: str, name: Optional[str] = None
+) -> Customer:
     existing = session.exec(
         select(Customer).where(Customer.business_id == business_id, Customer.phone == phone)
     ).first()

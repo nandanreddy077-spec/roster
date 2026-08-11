@@ -5,6 +5,7 @@ failures (e.g. missing XAI_API_KEY, or the xAI call itself failing) — SMS-only
 is still a fully working Frontdesk, and voice can be finished later from the
 admin dashboard.
 """
+
 import sys
 from datetime import datetime
 
@@ -38,7 +39,10 @@ def activate_frontdesk(session: Session, client: Business) -> None:
             # number, no funds, geo-permissions, etc.) — still go live SMS-less;
             # founder can provision a number later from /clients/{id}. Onboarding
             # must ALWAYS complete, never 500 on a provisioning failure.
-            print(f"[activation] number provisioning failed for business {client.id}: {e}", file=sys.stderr)
+            print(
+                f"[activation] number provisioning failed for business {client.id}: {e}",
+                file=sys.stderr,
+            )
 
     client.frontdesk_live = True
     client.activated_at = datetime.utcnow()
@@ -51,5 +55,7 @@ def activate_frontdesk(session: Session, client: Business) -> None:
     try:
         deploy_role(session, client.id, "frontdesk")
     except Exception as e:
-        print(f"[activation] failed to create frontdesk employee for business "
-              f"{client.id}: {e}", file=sys.stderr)
+        print(
+            f"[activation] failed to create frontdesk employee for business {client.id}: {e}",
+            file=sys.stderr,
+        )

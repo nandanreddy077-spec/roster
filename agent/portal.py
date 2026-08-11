@@ -3,6 +3,7 @@ customer-facing dashboard. Fully separate from the founder's HTTP-Basic
 /clients routes in app.py — session-cookie auth only (see SessionMiddleware
 in app.py), one client per logged-in session.
 """
+
 import json
 import os
 from datetime import datetime, timedelta
@@ -26,7 +27,13 @@ from google_auth import callback_url, get_oauth, google_enabled
 from locks import conversation_lock
 import metrics
 from notifications import is_test_thread, recent_notifications
-from roles import ROSTER_DESCRIPTIONS, coming_later_after, next_hire, receptionist_display_name, role_key_for
+from roles import (
+    ROSTER_DESCRIPTIONS,
+    coming_later_after,
+    next_hire,
+    receptionist_display_name,
+    role_key_for,
+)
 from service import handle_customer_message
 
 BASE_DIR = Path(__file__).parent
@@ -176,7 +183,11 @@ def login_submit(request: Request, email: str = Form(...), password: str = Form(
     email = email.strip().lower()
     with Session(engine) as session:
         client = session.exec(select(Business).where(Business.email == email)).first()
-        if client is None or not client.password_hash or not verify_password(password, client.password_hash):
+        if (
+            client is None
+            or not client.password_hash
+            or not verify_password(password, client.password_hash)
+        ):
             return templates.TemplateResponse(
                 request,
                 "login.html",
@@ -246,7 +257,7 @@ def _login_by_email(request: Request, session: Session, email: str) -> RedirectR
             "login.html",
             {
                 "error": "We don't have an account for that email yet. "
-                         "Talk to Roster and we'll get you set up.",
+                "Talk to Roster and we'll get you set up.",
                 "email": email,
                 "google_enabled": google_enabled(),
             },
@@ -273,7 +284,11 @@ async def google_callback(request: Request):
         return templates.TemplateResponse(
             request,
             "login.html",
-            {"error": "Google sign-in didn't complete. Please try again.", "email": "", "google_enabled": True},
+            {
+                "error": "Google sign-in didn't complete. Please try again.",
+                "email": "",
+                "google_enabled": True,
+            },
             status_code=400,
         )
 
@@ -283,7 +298,11 @@ async def google_callback(request: Request):
         return templates.TemplateResponse(
             request,
             "login.html",
-            {"error": "We couldn't get a verified email from Google.", "email": "", "google_enabled": True},
+            {
+                "error": "We couldn't get a verified email from Google.",
+                "email": "",
+                "google_enabled": True,
+            },
             status_code=400,
         )
 
@@ -413,9 +432,7 @@ def dashboard(request: Request):
 def _statuses(session, business_id: int):
     """This business's real department states, from Employee rows via the ONE
     shared helper the founder console also uses."""
-    employees = session.exec(
-        select(Employee).where(Employee.business_id == business_id)
-    ).all()
+    employees = session.exec(select(Employee).where(Employee.business_id == business_id)).all()
     return department_status_for(employees)
 
 
@@ -492,12 +509,14 @@ def v2_departments(request: Request):
             if status.state in _ACTIVE_STATES:
                 cards.append({"active": True, **_gateway_card(session, business.id, status)})
             else:
-                cards.append({
-                    "active": False,
-                    "department": status.department,
-                    "label": CUSTOMER_STATE_LABELS[status.state],
-                    "can_expand": status.state == "empty",
-                })
+                cards.append(
+                    {
+                        "active": False,
+                        "department": status.department,
+                        "label": CUSTOMER_STATE_LABELS[status.state],
+                        "can_expand": status.state == "empty",
+                    }
+                )
         return templates.TemplateResponse(
             request,
             "dashboard_v2/departments.html",
@@ -529,8 +548,11 @@ def v2_department_workspace(request: Request, department_key: str):
             request,
             "dashboard_v2/department.html",
             {
-                "business": business, "active_nav": "departments", "workspace": ws,
-                "department_key": department_key, "can_expand": can_expand,
+                "business": business,
+                "active_nav": "departments",
+                "workspace": ws,
+                "department_key": department_key,
+                "can_expand": can_expand,
             },
         )
 
@@ -552,9 +574,13 @@ def v2_employee_workspace(request: Request, department_key: str, role_key: str):
             request,
             "dashboard_v2/employee.html",
             {
-                "business": business, "active_nav": "departments", "workspace": ws,
+                "business": business,
+                "active_nav": "departments",
+                "workspace": ws,
                 "department_key": department_key,
-                "department_display_name": department.display_name if department else department_key,
+                "department_display_name": department.display_name
+                if department
+                else department_key,
             },
         )
 
@@ -577,8 +603,11 @@ def v2_expand_department(request: Request, department_key: str, requested: bool 
             request,
             "dashboard_v2/expansion.html",
             {
-                "business": business, "active_nav": "departments", "workspace": ws,
-                "department_key": department_key, "requested": requested,
+                "business": business,
+                "active_nav": "departments",
+                "workspace": ws,
+                "department_key": department_key,
+                "requested": requested,
             },
         )
 
@@ -666,7 +695,11 @@ def v2_settings(request: Request):
         return templates.TemplateResponse(
             request,
             "dashboard_v2/settings.html",
-            {"business": business, "active_nav": "settings", "saved": "saved" in request.query_params},
+            {
+                "business": business,
+                "active_nav": "settings",
+                "saved": "saved" in request.query_params,
+            },
         )
 
 

@@ -2,6 +2,7 @@
 not a separate destination (founder, 2026-07-29). Renders one
 ExpansionWorkspace (workspace.py); the route never touches DepartmentInterest
 or deployment state beyond calling expansion.record_interest."""
+
 from sqlmodel import Session, select
 from starlette.testclient import TestClient
 
@@ -19,8 +20,12 @@ def _client_for(test_engine, monkeypatch, deploy=None):
     monkeypatch.setattr(portal, "engine", test_engine)
     email = next(_EMAIL)
     with Session(test_engine) as s:
-        b = Business(business_name="Ridgeline Plumbing", trade="Plumbing",
-                     email=email, password_hash=hash_password("pw12345"))
+        b = Business(
+            business_name="Ridgeline Plumbing",
+            trade="Plumbing",
+            email=email,
+            password_hash=hash_password("pw12345"),
+        )
         s.add(b)
         s.commit()
         s.refresh(b)
@@ -120,9 +125,7 @@ def test_requesting_expansion_records_interest_and_redirects_back(test_engine, m
     assert r.status_code == 303
     assert r.headers["location"] == "/v2/dashboard/departments/sales/expand?requested=true"
     with Session(test_engine) as s:
-        rows = s.exec(
-            select(DepartmentInterest).where(DepartmentInterest.business_id == bid)
-        ).all()
+        rows = s.exec(select(DepartmentInterest).where(DepartmentInterest.business_id == bid)).all()
         assert len(rows) == 1
         assert rows[0].department_key == "sales"
 
@@ -135,9 +138,7 @@ def test_a_double_submit_records_exactly_one_interest(test_engine, monkeypatch):
     client.post("/v2/dashboard/departments/sales/expand")
 
     with Session(test_engine) as s:
-        rows = s.exec(
-            select(DepartmentInterest).where(DepartmentInterest.business_id == bid)
-        ).all()
+        rows = s.exec(select(DepartmentInterest).where(DepartmentInterest.business_id == bid)).all()
         assert len(rows) == 1
 
 

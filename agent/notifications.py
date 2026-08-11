@@ -9,6 +9,7 @@ exactly one subscriber to a booking today. Move it onto the bus only if a second
 subscriber ever appears (see ROADMAP.md). Best-effort by design: a failed
 owner-text must never break the booking that already committed.
 """
+
 import sys
 
 from channels import get_channel
@@ -74,7 +75,7 @@ def build_owner_message(job: Job, employee_name: str) -> str:
     who = job.customer_name or "a customer"
     callback = job.callback_number or "no number given"
     return (
-        f"\U0001F4CB {employee_name} just booked a job: {job.service_type} "
+        f"\U0001f4cb {employee_name} just booked a job: {job.service_type} "
         f"({job.urgency}) for {who}. Callback: {callback}"
     )
 
@@ -90,7 +91,7 @@ def build_membership_message(customer_name: str, customer_phone: str) -> str:
     """
     who = customer_name or "A customer"
     return (
-        f"\U0001F4B3 {who} ({customer_phone}) wants to sign up for your "
+        f"\U0001f4b3 {who} ({customer_phone}) wants to sign up for your "
         f"maintenance plan. Give them a call to set it up."
     )
 
@@ -124,12 +125,14 @@ def recent_notifications(session, business_id: int, limit: int = 50):
     """
     from sqlmodel import select
 
-    return list(session.exec(
-        select(OwnerNotification)
-        .where(OwnerNotification.business_id == business_id)
-        .order_by(OwnerNotification.id.desc())
-        .limit(limit)
-    ).all())
+    return list(
+        session.exec(
+            select(OwnerNotification)
+            .where(OwnerNotification.business_id == business_id)
+            .order_by(OwnerNotification.id.desc())
+            .limit(limit)
+        ).all()
+    )
 
 
 def build_escalation_message(business: Business, caller_number: str, reason: str) -> str:
@@ -185,8 +188,9 @@ def is_test_thread(customer_phone: str) -> bool:
     return customer_phone in _TEST_THREADS or customer_phone.startswith(VOICE_TEST_THREAD_PREFIX)
 
 
-def record_owner_notification(session, business_id: int, kind: str, source: str,
-                              message: str, delivered: bool):
+def record_owner_notification(
+    session, business_id: int, kind: str, source: str, message: str, delivered: bool
+):
     """Persist an owner alert so it survives the SMS. Returns the row, or None
     if the write failed.
 
@@ -202,8 +206,11 @@ def record_owner_notification(session, business_id: int, kind: str, source: str,
     """
     try:
         row = OwnerNotification(
-            business_id=business_id, kind=kind, source=source,
-            message=message, delivered=delivered,
+            business_id=business_id,
+            kind=kind,
+            source=source,
+            message=message,
+            delivered=delivered,
         )
         session.add(row)
         session.commit()
@@ -213,8 +220,10 @@ def record_owner_notification(session, business_id: int, kind: str, source: str,
         # Loud, unlike the sends above: a lost notification row is invisible
         # everywhere else, and this is the module meant to end exactly that
         # class of silence.
-        print(f"[notifications] failed to record {kind} for business {business_id}: {e}",
-              file=sys.stderr)
+        print(
+            f"[notifications] failed to record {kind} for business {business_id}: {e}",
+            file=sys.stderr,
+        )
         try:
             session.rollback()
         except Exception:

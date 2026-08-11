@@ -54,7 +54,9 @@ def test_activate_frontdesk_survives_twilio_api_error(test_engine, monkeypatch):
 def test_activate_frontdesk_skips_provisioning_if_number_already_set(test_engine):
     with Session(test_engine) as session:
         client = Business(
-            email="owner@example.com", password_hash="x", business_name="Ridgeline",
+            email="owner@example.com",
+            password_hash="x",
+            business_name="Ridgeline",
             inbound_number="+15550001111",
         )
         session.add(client)

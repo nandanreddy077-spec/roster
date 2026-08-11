@@ -3,6 +3,7 @@ Renewals, Reviews) onto the customer-facing employee model. Customers never
 see internal agent names — only roles tied to the problem being solved. See
 docs/superpowers/specs/2026-07-10-self-serve-signup-dashboard-design.md.
 """
+
 from typing import List, Optional
 
 RECEPTIONIST_TRADE_NAMES = {
@@ -55,8 +56,10 @@ def coming_later_after(next_role: Optional[str]) -> Optional[str]:
 # truth for both the live hire path and db.py's backfill, so they can never
 # derive a different key for the same role name.
 ROLE_KEYS = {
-    "frontdesk": "frontdesk", "receptionist": "frontdesk",
-    "quote chaser": "quote_chaser", "retention manager": "retention",
+    "frontdesk": "frontdesk",
+    "receptionist": "frontdesk",
+    "quote chaser": "quote_chaser",
+    "retention manager": "retention",
     "reviews": "reviews",
 }
 

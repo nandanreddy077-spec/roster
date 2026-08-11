@@ -1,6 +1,7 @@
 """Settings was in the nav for weeks pointing at a route that didn't exist —
 a 404 in the customer's top bar, and the exact thing ARCHITECTURE.md invariant
 9 ("no dead controls") forbids. These tests keep it real."""
+
 from fastapi.testclient import TestClient
 from sqlmodel import Session, select
 
@@ -34,7 +35,9 @@ def test_every_nav_item_resolves_to_a_real_page(monkeypatch, test_engine):
     client = _logged_in(monkeypatch, test_engine)
     for item in portal_module.NAV_ITEMS:
         response = client.get(item["href"], follow_redirects=False)
-        assert response.status_code == 200, f"{item['label']} → {item['href']} gave {response.status_code}"
+        assert response.status_code == 200, (
+            f"{item['label']} → {item['href']} gave {response.status_code}"
+        )
 
 
 def test_settings_requires_a_session(monkeypatch, test_engine):
@@ -47,8 +50,10 @@ def test_settings_requires_a_session(monkeypatch, test_engine):
 
 def test_settings_shows_the_owners_current_values(monkeypatch, test_engine):
     client = _logged_in(
-        monkeypatch, test_engine,
-        review_link="https://g.page/r/existing", referral_incentive="$25 off",
+        monkeypatch,
+        test_engine,
+        review_link="https://g.page/r/existing",
+        referral_incentive="$25 off",
     )
     body = client.get(portal_module.SETTINGS_HOME).text
     assert "https://g.page/r/existing" in body

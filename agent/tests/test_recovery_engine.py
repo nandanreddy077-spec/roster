@@ -9,7 +9,9 @@ class FakeRecoveryJob:
 
 def test_render_template_substitutes_known_variables():
     text = render_template(
-        "Hi {customer_name}, about your {service_type}", customer_name="Mike", service_type="AC repair"
+        "Hi {customer_name}, about your {service_type}",
+        customer_name="Mike",
+        service_type="AC repair",
     )
     assert text == "Hi Mike, about your AC repair"
 
@@ -23,7 +25,10 @@ def test_templates_cover_every_sequence_day_for_both_faces():
     for face in ("quote", "reactivation"):
         for day in SEQUENCE_DAYS:
             assert day in TEMPLATES[face]
-            assert "{service_type}" in TEMPLATES[face][day] or "{customer_name}" in TEMPLATES[face][day]
+            assert (
+                "{service_type}" in TEMPLATES[face][day]
+                or "{customer_name}" in TEMPLATES[face][day]
+            )
 
 
 def test_prompt_without_slots_asks_for_intent_tool():
@@ -32,7 +37,9 @@ def test_prompt_without_slots_asks_for_intent_tool():
 
 
 def test_prompt_with_slots_asks_for_confirm_slot_tool():
-    prompt = build_recovery_reply_prompt(FakeRecoveryJob(), offered_slots=["Monday morning", "Tuesday afternoon"])
+    prompt = build_recovery_reply_prompt(
+        FakeRecoveryJob(), offered_slots=["Monday morning", "Tuesday afternoon"]
+    )
     assert "confirm_slot" in prompt
     assert "Monday morning" in prompt
 

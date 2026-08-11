@@ -16,6 +16,7 @@ future tick employee that forgets the gate fails this test without anyone
 remembering to add a case for it — which is the only kind of enforcement that
 has actually worked here.
 """
+
 import importlib
 
 import pytest
@@ -45,8 +46,12 @@ TICK_FUNCTIONS = (
 )
 
 _RELOADED = (
-    "review_engine", "review_service", "referral_engine", "referral_service",
-    "membership_engine", "membership_service",
+    "review_engine",
+    "review_service",
+    "referral_engine",
+    "referral_service",
+    "membership_engine",
+    "membership_service",
 )
 
 
@@ -54,8 +59,12 @@ _RELOADED = (
 def tick(monkeypatch):
     """Zero delays so every scheduled send is due immediately — the point is
     which sends are ALLOWED, not when they fire."""
-    for var in ("REVIEW_DELAY_DAYS", "REVIEW_FOLLOWUP_DELAY_DAYS",
-                "MEMBERSHIP_OFFER_DELAY_DAYS", "MEMBERSHIP_FOLLOWUP_DELAY_DAYS"):
+    for var in (
+        "REVIEW_DELAY_DAYS",
+        "REVIEW_FOLLOWUP_DELAY_DAYS",
+        "MEMBERSHIP_OFFER_DELAY_DAYS",
+        "MEMBERSHIP_FOLLOWUP_DELAY_DAYS",
+    ):
         monkeypatch.setenv(var, "0")
     for name in _RELOADED:
         importlib.reload(importlib.import_module(name))
@@ -67,6 +76,7 @@ def tick(monkeypatch):
             sent.append({"to": to_number, "body": body})
 
     import membership_service, recovery_service, referral_service, review_service
+
     for mod in (review_service, referral_service, recovery_service, membership_service):
         mod.sms_channel = Spy()
 
@@ -90,8 +100,12 @@ def _fully_configured_business(session, **overrides):
     """Every field that any tick employee treats as its trigger, all set. The
     only thing missing is the hire."""
     fields = dict(
-        business_name="Ridgeline HVAC", trade="hvac", services_json="[]", hours="9-5",
-        escalation_phone="+15125550149", inbound_number="+15125557777",
+        business_name="Ridgeline HVAC",
+        trade="hvac",
+        services_json="[]",
+        hours="9-5",
+        escalation_phone="+15125550149",
+        inbound_number="+15125557777",
         review_link="https://g.page/r/ridgeline/review",
         referral_incentive="$25 off your next visit",
         membership_plan="Comfort Club — $19/month, two tune-ups a year.",
@@ -119,19 +133,30 @@ def _completed_job(session, business, phone="+15125550001"):
     trigger has to exist independently of another employee being deployed.
     """
     job = Job(
-        business_id=business.id, customer_phone=phone, customer_name="Dana Cruz",
-        service_type="AC compressor replacement", urgency="same_day",
-        callback_number=phone, is_estimate=True,
+        business_id=business.id,
+        customer_phone=phone,
+        customer_name="Dana Cruz",
+        service_type="AC compressor replacement",
+        urgency="same_day",
+        callback_number=phone,
+        is_estimate=True,
         completed_at=datetime.utcnow() - timedelta(hours=2),
     )
     session.add(job)
     session.commit()
     session.refresh(job)
-    session.add(JobQualification(
-        business_id=business.id, source_job_id=job.id, job_type="repair",
-        financing_candidate=False, membership_candidate=True, priority="normal",
-        possible_spam=False, reasoning="test-fixture",
-    ))
+    session.add(
+        JobQualification(
+            business_id=business.id,
+            source_job_id=job.id,
+            job_type="repair",
+            financing_candidate=False,
+            membership_candidate=True,
+            priority="normal",
+            possible_spam=False,
+            reasoning="test-fixture",
+        )
+    )
     session.commit()
     return job
 
@@ -149,9 +174,7 @@ def _queued_contacts(session, business_id):
     from db_models import MembershipOffer, RecoveryJob
 
     return (
-        session.exec(
-            select(RecoveryJob).where(RecoveryJob.business_id == business_id)
-        ).all()
+        session.exec(select(RecoveryJob).where(RecoveryJob.business_id == business_id)).all()
         + session.exec(
             select(MembershipOffer).where(MembershipOffer.business_id == business_id)
         ).all()
@@ -168,8 +191,7 @@ def test_a_fully_configured_business_that_hired_nobody_is_never_texted(test_engi
             tick.run_all(session)
 
         assert tick.messages == [], (
-            "a business that hired nobody was texted by the tick — "
-            "configuration is not consent"
+            "a business that hired nobody was texted by the tick — configuration is not consent"
         )
         assert _queued_contacts(session, business.id) == [], (
             "a business that hired nobody had customers enrolled into a "
@@ -191,8 +213,7 @@ def test_hiring_reviews_permits_reviews_and_nothing_else(test_engine, tick):
         assert tick.messages, "hiring Reviews did not enable it"
         for msg in tick.messages:
             assert "$25 off" not in msg["body"], "Referral sent without being hired"
-            assert "Comfort Club" not in msg["body"], (
-                "Membership Agent sent without being hired")
+            assert "Comfort Club" not in msg["body"], "Membership Agent sent without being hired"
 
 
 def test_referral_cannot_be_deployed_while_its_registry_entry_is_planned(test_engine):
@@ -212,7 +233,8 @@ def test_a_hired_employee_at_one_business_never_acts_for_another(test_engine, ti
     with Session(test_engine) as session:
         hired = _fully_configured_business(session, email="hired@test.io")
         unhired = _fully_configured_business(
-            session, email="unhired@test.io", business_name="Other Co")
+            session, email="unhired@test.io", business_name="Other Co"
+        )
         _completed_job(session, hired, phone="+15125550002")
         _completed_job(session, unhired, phone="+15125550003")
         deploy_role(session, hired.id, "reviews")
@@ -222,7 +244,8 @@ def test_a_hired_employee_at_one_business_never_acts_for_another(test_engine, ti
 
         recipients = {m["to"] for m in tick.messages}
         assert recipients == {"+15125550002"}, (
-            f"the unhired business's customer was texted: {recipients}")
+            f"the unhired business's customer was texted: {recipients}"
+        )
 
 
 def test_firing_an_employee_stops_the_texts(test_engine, tick):
@@ -235,7 +258,8 @@ def test_firing_an_employee_stops_the_texts(test_engine, tick):
 
         employee = session.exec(
             select(Employee).where(
-                Employee.business_id == business.id, Employee.role_key == "reviews")
+                Employee.business_id == business.id, Employee.role_key == "reviews"
+            )
         ).first()
         employee.status = "fired"
         session.add(employee)
@@ -248,6 +272,7 @@ def test_firing_an_employee_stops_the_texts(test_engine, tick):
 
 
 # ---- the guard must not silently fall behind the scheduler -----------------
+
 
 def test_the_guard_covers_every_function_the_scheduler_drives():
     """The failure this file exists to prevent, applied to the file itself.

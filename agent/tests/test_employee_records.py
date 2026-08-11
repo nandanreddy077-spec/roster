@@ -9,12 +9,19 @@ No record in the database carries an employee_id (the only such column is on
 `event`, which nothing publishes in the live path), so attribution here is by
 DECLARED convention rather than by a foreign key — which is exactly why it has
 to be declared rather than implied."""
+
 from datetime import datetime, timedelta
 
 import metrics
 from db_models import (
-    Business, DispatchPlan, Job, JobQualification, OwnerNotification, RecoveryCampaign,
-    RecoveryJob, ReviewReply,
+    Business,
+    DispatchPlan,
+    Job,
+    JobQualification,
+    OwnerNotification,
+    RecoveryCampaign,
+    RecoveryJob,
+    ReviewReply,
 )
 from metrics import (
     CALLS_ANSWERED,
@@ -95,10 +102,22 @@ def test_reviews_declares_requests_sent_and_nothing_about_reviews_received():
 
 def test_frontdesk_counts_booked_jobs_excluding_tests(session):
     b = _business(session, "er1@test.io")
-    session.add(Job(business_id=b.id, customer_phone="+15125550100",
-                    service_type="AC repair", urgency="routine"))
-    session.add(Job(business_id=b.id, customer_phone="portal-test",
-                    service_type="AC repair", urgency="routine"))
+    session.add(
+        Job(
+            business_id=b.id,
+            customer_phone="+15125550100",
+            service_type="AC repair",
+            urgency="routine",
+        )
+    )
+    session.add(
+        Job(
+            business_id=b.id,
+            customer_phone="portal-test",
+            service_type="AC repair",
+            urgency="routine",
+        )
+    )
     session.commit()
 
     assert employee_outcomes(session, b.id, "frontdesk")[JOBS_BOOKED] == 1
@@ -111,10 +130,19 @@ def test_frontdesk_counts_each_voice_call_once(session):
     b = _business(session, "er2@test.io")
     for thread, turns in (("xai-voice:c1", 3), ("xai-voice:c2", 2)):
         for _ in range(turns):
-            session.add(Message(business_id=b.id, customer_phone=thread,
-                                role="assistant", content_json='"hi"'))
-    session.add(Message(business_id=b.id, customer_phone="+15125550100",
-                        role="user", content_json='"sms not a call"'))
+            session.add(
+                Message(
+                    business_id=b.id, customer_phone=thread, role="assistant", content_json='"hi"'
+                )
+            )
+    session.add(
+        Message(
+            business_id=b.id,
+            customer_phone="+15125550100",
+            role="user",
+            content_json='"sms not a call"',
+        )
+    )
     session.commit()
 
     assert employee_outcomes(session, b.id, "frontdesk")[CALLS_ANSWERED] == 2
@@ -122,12 +150,25 @@ def test_frontdesk_counts_each_voice_call_once(session):
 
 def test_frontdesk_counts_escalations_it_raised(session):
     b = _business(session, "er3@test.io")
-    session.add(OwnerNotification(business_id=b.id, kind="escalation",
-                                  source="alert_owner", message="m", delivered=True))
-    session.add(OwnerNotification(business_id=b.id, kind="call_dropped",
-                                  source="call_dropped", message="m", delivered=True))
-    session.add(OwnerNotification(business_id=b.id, kind="job_booked",
-                                  source="sms_booking", message="m", delivered=True))
+    session.add(
+        OwnerNotification(
+            business_id=b.id, kind="escalation", source="alert_owner", message="m", delivered=True
+        )
+    )
+    session.add(
+        OwnerNotification(
+            business_id=b.id,
+            kind="call_dropped",
+            source="call_dropped",
+            message="m",
+            delivered=True,
+        )
+    )
+    session.add(
+        OwnerNotification(
+            business_id=b.id, kind="job_booked", source="sms_booking", message="m", delivered=True
+        )
+    )
     session.commit()
 
     assert employee_outcomes(session, b.id, "frontdesk")[ESCALATIONS] == 2
@@ -140,10 +181,24 @@ def test_reviews_counts_only_requests_actually_sent(session):
     """review_requested_at is set where the SMS is sent, so this counts sends
     rather than inferring them from completion."""
     b = _business(session, "er4@test.io")
-    session.add(Job(business_id=b.id, customer_phone="+1", service_type="x",
-                    urgency="routine", review_requested_at=datetime.utcnow()))
-    session.add(Job(business_id=b.id, customer_phone="+2", service_type="x",
-                    urgency="routine", completed_at=datetime.utcnow()))
+    session.add(
+        Job(
+            business_id=b.id,
+            customer_phone="+1",
+            service_type="x",
+            urgency="routine",
+            review_requested_at=datetime.utcnow(),
+        )
+    )
+    session.add(
+        Job(
+            business_id=b.id,
+            customer_phone="+2",
+            service_type="x",
+            urgency="routine",
+            completed_at=datetime.utcnow(),
+        )
+    )
     session.commit()
 
     assert employee_outcomes(session, b.id, "reviews")[REVIEW_REQUESTS_SENT] == 1
@@ -152,17 +207,52 @@ def test_reviews_counts_only_requests_actually_sent(session):
 def test_reviews_counts_followups_responses_self_reported_and_negative(session):
     b = _business(session, "er4b@test.io")
     other = _business(session, "er4c@test.io")
-    session.add(Job(business_id=b.id, customer_phone="+1", service_type="x",
-                    urgency="routine", review_followup_sent_at=datetime.utcnow()))
-    session.add(ReviewReply(business_id=b.id, source_job_id=1, customer_phone="+1",
-                            outcome="left_review", raw_reply_text="left a review!"))
-    session.add(ReviewReply(business_id=b.id, source_job_id=1, customer_phone="+2",
-                            outcome="negative", raw_reply_text="not happy"))
-    session.add(ReviewReply(business_id=b.id, source_job_id=1, customer_phone="+3",
-                            outcome="neutral", raw_reply_text="ok"))
+    session.add(
+        Job(
+            business_id=b.id,
+            customer_phone="+1",
+            service_type="x",
+            urgency="routine",
+            review_followup_sent_at=datetime.utcnow(),
+        )
+    )
+    session.add(
+        ReviewReply(
+            business_id=b.id,
+            source_job_id=1,
+            customer_phone="+1",
+            outcome="left_review",
+            raw_reply_text="left a review!",
+        )
+    )
+    session.add(
+        ReviewReply(
+            business_id=b.id,
+            source_job_id=1,
+            customer_phone="+2",
+            outcome="negative",
+            raw_reply_text="not happy",
+        )
+    )
+    session.add(
+        ReviewReply(
+            business_id=b.id,
+            source_job_id=1,
+            customer_phone="+3",
+            outcome="neutral",
+            raw_reply_text="ok",
+        )
+    )
     # a reply on a DIFFERENT business must never bleed into b's counts
-    session.add(ReviewReply(business_id=other.id, source_job_id=1, customer_phone="+4",
-                            outcome="left_review", raw_reply_text="great job!"))
+    session.add(
+        ReviewReply(
+            business_id=other.id,
+            source_job_id=1,
+            customer_phone="+4",
+            outcome="left_review",
+            raw_reply_text="great job!",
+        )
+    )
     session.commit()
 
     outcomes = employee_outcomes(session, b.id, "reviews")
@@ -186,10 +276,16 @@ def test_outcomes_never_cross_businesses(session):
 
 def test_a_since_window_narrows_the_count(session):
     b = _business(session, "er6@test.io")
-    session.add(Job(business_id=b.id, customer_phone="+1", service_type="x",
-                    urgency="routine", created_at=datetime.utcnow() - timedelta(days=5)))
-    session.add(Job(business_id=b.id, customer_phone="+2", service_type="x",
-                    urgency="routine"))
+    session.add(
+        Job(
+            business_id=b.id,
+            customer_phone="+1",
+            service_type="x",
+            urgency="routine",
+            created_at=datetime.utcnow() - timedelta(days=5),
+        )
+    )
+    session.add(Job(business_id=b.id, customer_phone="+2", service_type="x", urgency="routine"))
     session.commit()
 
     since = datetime.utcnow() - timedelta(days=1)
@@ -210,10 +306,14 @@ def test_activity_resolves_to_real_rows_newest_first(session):
     """The drill-down itself: the same declaration that produces the number
     produces the rows behind it."""
     b = _business(session, "er8@test.io")
-    older = Job(business_id=b.id, customer_phone="+1", service_type="older",
-                urgency="routine", created_at=datetime.utcnow() - timedelta(hours=2))
-    newer = Job(business_id=b.id, customer_phone="+2", service_type="newer",
-                urgency="routine")
+    older = Job(
+        business_id=b.id,
+        customer_phone="+1",
+        service_type="older",
+        urgency="routine",
+        created_at=datetime.utcnow() - timedelta(hours=2),
+    )
+    newer = Job(business_id=b.id, customer_phone="+2", service_type="newer", urgency="routine")
     session.add(older)
     session.add(newer)
     session.commit()
@@ -227,8 +327,9 @@ def test_activity_resolves_to_real_rows_newest_first(session):
 def test_activity_is_business_scoped(session):
     a = _business(session, "er9a@test.io")
     b = _business(session, "er9b@test.io")
-    session.add(Job(business_id=a.id, customer_phone="+1", service_type="theirs",
-                    urgency="routine"))
+    session.add(
+        Job(business_id=a.id, customer_phone="+1", service_type="theirs", urgency="routine")
+    )
     session.commit()
 
     assert employee_activity(session, b.id, "frontdesk") == []
@@ -242,10 +343,8 @@ def test_department_outcomes_are_the_union_of_its_deployed_employees(session):
     session.add(Job(business_id=b.id, customer_phone="+1", service_type="x", urgency="routine"))
     session.commit()
 
-    both = metrics.department_outcomes(session, b.id, "customer_service",
-                                       ["frontdesk", "reviews"])
-    only_frontdesk = metrics.department_outcomes(session, b.id, "customer_service",
-                                                 ["frontdesk"])
+    both = metrics.department_outcomes(session, b.id, "customer_service", ["frontdesk", "reviews"])
+    only_frontdesk = metrics.department_outcomes(session, b.id, "customer_service", ["frontdesk"])
 
     assert JOBS_BOOKED in both and REVIEW_REQUESTS_SENT in both
     assert REVIEW_REQUESTS_SENT not in only_frontdesk, (
@@ -265,8 +364,15 @@ def test_sales_outcomes_come_from_quote_chaser(session):
     session.add(camp)
     session.commit()
     session.refresh(camp)
-    session.add(RecoveryJob(campaign_id=camp.id, business_id=b.id, customer_phone="+1",
-                            service_type="x", current_status="booked"))
+    session.add(
+        RecoveryJob(
+            campaign_id=camp.id,
+            business_id=b.id,
+            customer_phone="+1",
+            service_type="x",
+            current_status="booked",
+        )
+    )
     session.commit()
 
     assert metrics.department_outcomes(session, b.id, "sales", ["quote_chaser"])[QUOTES_CHASED] == 1
@@ -275,33 +381,58 @@ def test_sales_outcomes_come_from_quote_chaser(session):
 def test_lead_qualifier_counts_every_qualification_axis(session):
     b = _business(session, "er13@test.io")
     other = _business(session, "er13b@test.io")
-    job1 = Job(business_id=b.id, customer_phone="+1", service_type="AC not cooling", urgency="routine")
-    job2 = Job(business_id=b.id, customer_phone="+2", service_type="AC not cooling", urgency="routine")
+    job1 = Job(
+        business_id=b.id, customer_phone="+1", service_type="AC not cooling", urgency="routine"
+    )
+    job2 = Job(
+        business_id=b.id, customer_phone="+2", service_type="AC not cooling", urgency="routine"
+    )
     session.add(job1)
     session.add(job2)
     session.commit()
     session.refresh(job1)
     session.refresh(job2)
-    session.add(JobQualification(
-        business_id=b.id, source_job_id=job1.id, job_type="replacement",
-        financing_candidate=True, membership_candidate=False, priority="high",
-        possible_spam=False, reasoning="X",
-    ))
-    session.add(JobQualification(
-        business_id=b.id, source_job_id=job2.id, job_type="repair",
-        financing_candidate=False, membership_candidate=True, priority="normal",
-        possible_spam=True, reasoning="Y",
-    ))
+    session.add(
+        JobQualification(
+            business_id=b.id,
+            source_job_id=job1.id,
+            job_type="replacement",
+            financing_candidate=True,
+            membership_candidate=False,
+            priority="high",
+            possible_spam=False,
+            reasoning="X",
+        )
+    )
+    session.add(
+        JobQualification(
+            business_id=b.id,
+            source_job_id=job2.id,
+            job_type="repair",
+            financing_candidate=False,
+            membership_candidate=True,
+            priority="normal",
+            possible_spam=True,
+            reasoning="Y",
+        )
+    )
     # a qualification on a DIFFERENT business must never bleed into b's counts
     other_job = Job(business_id=other.id, customer_phone="+3", service_type="x", urgency="routine")
     session.add(other_job)
     session.commit()
     session.refresh(other_job)
-    session.add(JobQualification(
-        business_id=other.id, source_job_id=other_job.id, job_type="replacement",
-        financing_candidate=True, membership_candidate=False, priority="high",
-        possible_spam=False, reasoning="Z",
-    ))
+    session.add(
+        JobQualification(
+            business_id=other.id,
+            source_job_id=other_job.id,
+            job_type="replacement",
+            financing_candidate=True,
+            membership_candidate=False,
+            priority="high",
+            possible_spam=False,
+            reasoning="Z",
+        )
+    )
     session.commit()
 
     outcomes = metrics.department_outcomes(session, b.id, "sales", ["lead_qualifier"])
@@ -322,23 +453,43 @@ def test_dispatcher_counts_every_dispatch_axis(session):
     session.commit()
     session.refresh(job1)
     session.refresh(job2)
-    session.add(DispatchPlan(
-        business_id=b.id, source_job_id=job1.id, dispatch_priority="emergency",
-        scheduling_window="immediate", requires_dispatch_review=True, dispatch_reason="X",
-    ))
-    session.add(DispatchPlan(
-        business_id=b.id, source_job_id=job2.id, dispatch_priority="normal",
-        scheduling_window="flexible", requires_dispatch_review=False, dispatch_reason="Y",
-    ))
+    session.add(
+        DispatchPlan(
+            business_id=b.id,
+            source_job_id=job1.id,
+            dispatch_priority="emergency",
+            scheduling_window="immediate",
+            requires_dispatch_review=True,
+            dispatch_reason="X",
+        )
+    )
+    session.add(
+        DispatchPlan(
+            business_id=b.id,
+            source_job_id=job2.id,
+            dispatch_priority="normal",
+            scheduling_window="flexible",
+            requires_dispatch_review=False,
+            dispatch_reason="Y",
+        )
+    )
     # a plan on a DIFFERENT business must never bleed into b's counts
-    other_job = Job(business_id=other.id, customer_phone="+3", service_type="x", urgency="emergency")
+    other_job = Job(
+        business_id=other.id, customer_phone="+3", service_type="x", urgency="emergency"
+    )
     session.add(other_job)
     session.commit()
     session.refresh(other_job)
-    session.add(DispatchPlan(
-        business_id=other.id, source_job_id=other_job.id, dispatch_priority="emergency",
-        scheduling_window="immediate", requires_dispatch_review=True, dispatch_reason="Z",
-    ))
+    session.add(
+        DispatchPlan(
+            business_id=other.id,
+            source_job_id=other_job.id,
+            dispatch_priority="emergency",
+            scheduling_window="immediate",
+            requires_dispatch_review=True,
+            dispatch_reason="Z",
+        )
+    )
     session.commit()
 
     outcomes = metrics.department_outcomes(session, b.id, "operations", ["dispatcher"])

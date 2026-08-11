@@ -11,6 +11,7 @@ it's only ever called with a Business the dispatcher has already confirmed
 has lead_qualifier deployed. There is no reachable path to an undeployed
 business's jobs to forget to guard.
 """
+
 from typing import List, Optional
 
 from sqlmodel import Session, select
@@ -47,9 +48,7 @@ def qualify_jobs_for_business(session: Session, business: Business) -> List[JobQ
     # Filtering here is enough to stop both: dispatcher_service only plans
     # jobs that already have a qualification.
     jobs = session.exec(
-        select(Job).where(
-            Job.business_id == business.id, Job.origin != ORIGIN_ESCALATION
-        )
+        select(Job).where(Job.business_id == business.id, Job.origin != ORIGIN_ESCALATION)
     ).all()
 
     for job in jobs:

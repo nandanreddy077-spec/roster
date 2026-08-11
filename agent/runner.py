@@ -20,6 +20,7 @@ Design choices, honestly:
   calls `dispatch_job_completed`, so that first employee plugs in by adding
   one `RoleDefinition` here — no other change.
 """
+
 import json
 from dataclasses import dataclass
 from typing import Callable, List, Optional
@@ -58,9 +59,7 @@ def is_active(session, business: Business, role_key: str) -> bool:
     from departments import canonical_role_key
 
     wanted = canonical_role_key(role_key)
-    for e in session.exec(
-        select(Employee).where(Employee.business_id == business.id)
-    ).all():
+    for e in session.exec(select(Employee).where(Employee.business_id == business.id)).all():
         if canonical_role_key(e.role_key) == wanted and e.status != "fired":
             return True
     return False

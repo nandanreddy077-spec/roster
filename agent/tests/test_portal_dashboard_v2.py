@@ -4,6 +4,7 @@ Deployment state comes from departments.department_status_for over Employee
 rows, never from requested_roster or a hardcoded badge (the blueprint's
 state-derivation invariant). Numbers come from metrics.py, the same module the
 founder console uses."""
+
 from sqlmodel import Session, select
 from starlette.testclient import TestClient
 
@@ -21,8 +22,12 @@ def _client_for(test_engine, monkeypatch, deploy=None, jobs=0):
     monkeypatch.setattr(portal, "engine", test_engine)
     email = next(_EMAIL)
     with Session(test_engine) as s:
-        b = Business(business_name="Ridgeline Plumbing", trade="Plumbing",
-                     email=email, password_hash=hash_password("pw12345"))
+        b = Business(
+            business_name="Ridgeline Plumbing",
+            trade="Plumbing",
+            email=email,
+            password_hash=hash_password("pw12345"),
+        )
         s.add(b)
         s.commit()
         s.refresh(b)
@@ -32,8 +37,14 @@ def _client_for(test_engine, monkeypatch, deploy=None, jobs=0):
         elif deploy == "partial":
             deploy_role(s, bid, "frontdesk")
         for i in range(jobs):
-            s.add(Job(business_id=bid, customer_phone=f"+1512555{i:04d}",
-                      service_type="Drain cleaning", urgency="routine"))
+            s.add(
+                Job(
+                    business_id=bid,
+                    customer_phone=f"+1512555{i:04d}",
+                    service_type="Drain cleaning",
+                    urgency="routine",
+                )
+            )
         s.commit()
     client = TestClient(app_module.app)
     client.post("/login", data={"email": email, "password": "pw12345"})
@@ -72,16 +83,32 @@ def test_overview_shows_at_most_one_headline_number_per_department(test_engine, 
     monkeypatch.setattr(portal, "engine", test_engine)
     email = next(_EMAIL)
     with Session(test_engine) as s:
-        b = Business(business_name="Ridgeline Plumbing", trade="Plumbing",
-                     email=email, password_hash=hash_password("pw12345"))
+        b = Business(
+            business_name="Ridgeline Plumbing",
+            trade="Plumbing",
+            email=email,
+            password_hash=hash_password("pw12345"),
+        )
         s.add(b)
         s.commit()
         s.refresh(b)
         deploy_department(s, b.id, "customer_service")
-        s.add(Job(business_id=b.id, customer_phone="+15125550100",
-                  service_type="Drain cleaning", urgency="routine"))
-        s.add(Message(business_id=b.id, customer_phone="xai-voice:call1",
-                      role="assistant", content_json='"hi"'))
+        s.add(
+            Job(
+                business_id=b.id,
+                customer_phone="+15125550100",
+                service_type="Drain cleaning",
+                urgency="routine",
+            )
+        )
+        s.add(
+            Message(
+                business_id=b.id,
+                customer_phone="xai-voice:call1",
+                role="assistant",
+                content_json='"hi"',
+            )
+        )
         s.commit()
     client = TestClient(app_module.app)
     client.post("/login", data={"email": email, "password": "pw12345"})
@@ -128,8 +155,14 @@ DEPARTMENTS = "/v2/dashboard/departments"
 def test_the_grid_lists_every_hireable_department(test_engine, monkeypatch):
     body = _page(test_engine, monkeypatch, path=DEPARTMENTS)
 
-    for name in ("Customer Service", "Sales", "Operations",
-                 "Finance", "Customer Success", "Marketing"):
+    for name in (
+        "Customer Service",
+        "Sales",
+        "Operations",
+        "Finance",
+        "Customer Success",
+        "Marketing",
+    ):
         assert name in body, f"{name} missing from the departments grid"
 
 

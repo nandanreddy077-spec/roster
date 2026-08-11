@@ -3,6 +3,7 @@ after waiting REVIEW_DELAY_DAYS so the ask doesn't feel instant. Independent
 of Recovery/Referral — no campaigns, no manually-pasted list, mirroring
 referral_service.py's own shape.
 """
+
 from datetime import datetime, timedelta
 from typing import List, Optional
 
@@ -69,7 +70,9 @@ def send_due_review_requests(session: Session) -> List[Job]:
                 business_name=client.business_name,
                 review_link=client.review_link,
             )
-            sms_channel.send(from_number=client.inbound_number or "", to_number=job.callback_number, body=text)
+            sms_channel.send(
+                from_number=client.inbound_number or "", to_number=job.callback_number, body=text
+            )
             job.review_requested_at = datetime.utcnow()
             session.add(job)
             session.commit()
@@ -125,7 +128,9 @@ def send_due_review_followups(session: Session) -> List[Job]:
                 business_name=client.business_name,
                 review_link=client.review_link,
             )
-            sms_channel.send(from_number=client.inbound_number or "", to_number=job.callback_number, body=text)
+            sms_channel.send(
+                from_number=client.inbound_number or "", to_number=job.callback_number, body=text
+            )
             job.review_followup_sent_at = datetime.utcnow()
             session.add(job)
             session.commit()
@@ -215,8 +220,12 @@ def handle_review_reply(session: Session, client: Business, job: Job, text: str)
         reason = "Customer replied negatively to a review request."
         alerted = notify_owner_of_escalation(client, job.callback_number, reason)
         record_owner_notification(
-            session, client.id, KIND_ESCALATION, SOURCE_NEGATIVE_REVIEW_REPLY,
-            build_escalation_message(client, job.callback_number, reason), alerted,
+            session,
+            client.id,
+            KIND_ESCALATION,
+            SOURCE_NEGATIVE_REVIEW_REPLY,
+            build_escalation_message(client, job.callback_number, reason),
+            alerted,
         )
 
     return OUTCOME_REPLIES.get(outcome, OUTCOME_REPLIES["unclear"])

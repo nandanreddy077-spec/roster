@@ -8,6 +8,7 @@ at all. These tests pin the promise to the mechanism: if Frontdesk says the
 owner was alerted, an urgent page actually went out, or the customer is told
 plainly that it didn't.
 """
+
 from datetime import datetime, timedelta
 
 from sqlmodel import Session, select
@@ -46,9 +47,15 @@ class EscalatingAgent:
         self.tools_seen = tools
         jobs = []
         if self._with_job:
-            jobs = [{"id": "t1", "input": {
-                "service_type": "Gas smell from furnace", "urgency": "emergency",
-            }}]
+            jobs = [
+                {
+                    "id": "t1",
+                    "input": {
+                        "service_type": "Gas smell from furnace",
+                        "urgency": "emergency",
+                    },
+                }
+            ]
         return {
             "reply": "I'm alerting the team right now. Please get outside and call 911.",
             "jobs": jobs,
@@ -59,9 +66,14 @@ class EscalatingAgent:
 
 def _business(session, **overrides):
     fields = dict(
-        business_name="Ridgeline HVAC", trade="hvac", services_json="[]", hours="9-5",
-        escalation_phone="+15125550149", inbound_number="+15125557777",
-        frontdesk_live=True, trial_cap_cents=100000,
+        business_name="Ridgeline HVAC",
+        trade="hvac",
+        services_json="[]",
+        hours="9-5",
+        escalation_phone="+15125550149",
+        inbound_number="+15125557777",
+        frontdesk_live=True,
+        trial_cap_cents=100000,
     )
     fields.update(overrides)
     b = Business(**fields)
@@ -71,8 +83,15 @@ def _business(session, **overrides):
     return b
 
 
-def _run(session, client, monkeypatch, agent=None, phone="+15125559999",
-         channel=None, text=EMERGENCY_TEXT):
+def _run(
+    session,
+    client,
+    monkeypatch,
+    agent=None,
+    phone="+15125559999",
+    channel=None,
+    text=EMERGENCY_TEXT,
+):
     monkeypatch.setattr(service, "agent", agent or EscalatingAgent())
     monkeypatch.setattr(notifications, "_owner_channel", channel or SpyChannel())
     return service.handle_customer_message(session, client, phone, text)
@@ -80,16 +99,24 @@ def _run(session, client, monkeypatch, agent=None, phone="+15125559999",
 
 # ---- the tool is actually reachable on SMS ---------------------------------
 
+
 def test_sms_prompt_no_longer_promises_an_alert_it_cannot_send():
     """The old prompt said "tell the customer you're alerting someone" with no
     alert_owner tool exposed. Whatever the wording, the promise and the tool
     must now appear together."""
     from models import ClientConfig
 
-    prompt = build_system_prompt(ClientConfig(
-        client_id="1", business_name="B", trade="hvac", services=["AC"], hours="9-5",
-        pricing_faq="", escalation_phone="+15125550149",
-    ))
+    prompt = build_system_prompt(
+        ClientConfig(
+            client_id="1",
+            business_name="B",
+            trade="hvac",
+            services=["AC"],
+            hours="9-5",
+            pricing_faq="",
+            escalation_phone="+15125550149",
+        )
+    )
     assert "alert_owner" in prompt
 
 
@@ -103,6 +130,7 @@ def test_sms_turn_exposes_both_tools(test_engine, monkeypatch):
 
 
 # ---- the page actually goes out -------------------------------------------
+
 
 def test_emergency_sms_sends_an_urgent_page_not_a_booking_notice(test_engine, monkeypatch):
     with Session(test_engine) as session:
@@ -122,7 +150,8 @@ def test_emergency_sms_records_an_escalation_notification(test_engine, monkeypat
         _run(session, client, monkeypatch)
 
         kinds = [
-            n.kind for n in session.exec(
+            n.kind
+            for n in session.exec(
                 select(OwnerNotification).where(OwnerNotification.business_id == client.id)
             ).all()
         ]
@@ -167,6 +196,7 @@ def test_the_lead_is_still_captured_alongside_the_escalation(test_engine, monkey
 
 
 # ---- honesty when the page fails ------------------------------------------
+
 
 def test_a_failed_page_tells_the_customer_and_gives_the_real_number(test_engine, monkeypatch):
     with Session(test_engine) as session:
@@ -225,13 +255,13 @@ def test_a_retry_after_a_failed_page_still_reaches_the_owner(test_engine, monkey
         _run(session, client, monkeypatch, channel=SpyChannel(explode=True))
 
         working = SpyChannel()
-        _run(session, client, monkeypatch, channel=working,
-             text="its getting worse, please hurry")
+        _run(session, client, monkeypatch, channel=working, text="its getting worse, please hurry")
 
         assert [m for m in working.sent if m["body"].startswith("URGENT")]
 
 
 # ---- idempotency ----------------------------------------------------------
+
 
 def test_a_second_emergency_text_in_the_same_conversation_does_not_double_page(
     test_engine, monkeypatch
@@ -272,8 +302,13 @@ def test_a_new_emergency_after_the_window_pages_the_owner_again(test_engine, mon
         session.commit()
 
         later = SpyChannel()
-        _run(session, client, monkeypatch, channel=later,
-             text="different problem, water heater is leaking everywhere")
+        _run(
+            session,
+            client,
+            monkeypatch,
+            channel=later,
+            text="different problem, water heater is leaking everywhere",
+        )
 
         assert [m for m in later.sent if m["body"].startswith("URGENT")]
 
@@ -284,18 +319,22 @@ def test_voice_style_per_call_threads_are_unaffected_by_the_window(test_engine):
     with Session(test_engine) as session:
         client = _business(session, email="voice@test.io")
         job_a, notify_a = record_escalation(
-            session, client, "xai-voice:call-1", "+15125559999", "emergency")
+            session, client, "xai-voice:call-1", "+15125559999", "emergency"
+        )
         job_b, notify_b = record_escalation(
-            session, client, "xai-voice:call-1", "+15125559999", "still needs help")
+            session, client, "xai-voice:call-1", "+15125559999", "still needs help"
+        )
         assert notify_a is True
         assert job_b.id == job_a.id and notify_b is True  # not yet paged
 
         job_c, notify_c = record_escalation(
-            session, client, "xai-voice:call-2", "+15125559999", "new call")
+            session, client, "xai-voice:call-2", "+15125559999", "new call"
+        )
         assert job_c.id != job_a.id and notify_c is True
 
 
 # ---- the owner's own test chat must never page them ------------------------
+
 
 def test_the_dashboard_test_chat_never_pages_the_owner(test_engine, monkeypatch):
     with Session(test_engine) as session:
@@ -304,24 +343,34 @@ def test_the_dashboard_test_chat_never_pages_the_owner(test_engine, monkeypatch)
         _run(session, client, monkeypatch, channel=spy, phone="dashboard")
 
         assert [m for m in spy.sent if m["body"].startswith("URGENT")] == []
-        assert session.exec(
-            select(OwnerNotification).where(
-                OwnerNotification.business_id == client.id,
-                OwnerNotification.kind == KIND_ESCALATION,
-            )
-        ).first() is None
+        assert (
+            session.exec(
+                select(OwnerNotification).where(
+                    OwnerNotification.business_id == client.id,
+                    OwnerNotification.kind == KIND_ESCALATION,
+                )
+            ).first()
+            is None
+        )
 
 
 # ---- an ordinary conversation is untouched ---------------------------------
+
 
 def test_a_routine_conversation_still_sends_no_urgent_page(test_engine, monkeypatch):
     class RoutineAgent:
         def respond(self, client_config, history, tools=None, system_prompt=None, max_iters=None):
             return {
                 "reply": "You're booked!",
-                "jobs": [{"id": "t1", "input": {
-                    "service_type": "AC tune-up", "urgency": "routine",
-                }}],
+                "jobs": [
+                    {
+                        "id": "t1",
+                        "input": {
+                            "service_type": "AC tune-up",
+                            "urgency": "routine",
+                        },
+                    }
+                ],
                 "new_messages": [],
                 "pending_tool_call": None,
             }
@@ -329,14 +378,23 @@ def test_a_routine_conversation_still_sends_no_urgent_page(test_engine, monkeypa
     with Session(test_engine) as session:
         client = _business(session, email="routine@test.io")
         spy = SpyChannel()
-        result = _run(session, client, monkeypatch, agent=RoutineAgent(), channel=spy,
-                      text="can I get a tune up sometime next week")
+        result = _run(
+            session,
+            client,
+            monkeypatch,
+            agent=RoutineAgent(),
+            channel=spy,
+            text="can I get a tune up sometime next week",
+        )
 
         assert result["reply"] == "You're booked!"
         assert [m for m in spy.sent if m["body"].startswith("URGENT")] == []
-        assert session.exec(
-            select(Job).where(
-                Job.business_id == client.id,
-                Job.service_type == ESCALATION_SERVICE_TYPE,
-            )
-        ).first() is None
+        assert (
+            session.exec(
+                select(Job).where(
+                    Job.business_id == client.id,
+                    Job.service_type == ESCALATION_SERVICE_TYPE,
+                )
+            ).first()
+            is None
+        )

@@ -2,6 +2,7 @@
 DepartmentWorkspace object (workspace.py); these tests check what actually
 appears in the HTML, and that no route logic recomputes what the view model
 already assembled."""
+
 from sqlmodel import Session
 from starlette.testclient import TestClient
 
@@ -19,8 +20,12 @@ def _client_for(test_engine, monkeypatch, deploy=None, jobs=0):
     monkeypatch.setattr(portal, "engine", test_engine)
     email = next(_EMAIL)
     with Session(test_engine) as s:
-        b = Business(business_name="Ridgeline Plumbing", trade="Plumbing",
-                     email=email, password_hash=hash_password("pw12345"))
+        b = Business(
+            business_name="Ridgeline Plumbing",
+            trade="Plumbing",
+            email=email,
+            password_hash=hash_password("pw12345"),
+        )
         s.add(b)
         s.commit()
         s.refresh(b)
@@ -28,8 +33,14 @@ def _client_for(test_engine, monkeypatch, deploy=None, jobs=0):
         if deploy:
             deploy_department(s, bid, deploy)
         for i in range(jobs):
-            s.add(Job(business_id=bid, customer_phone=f"+1512555{i:04d}",
-                      service_type="Drain cleaning", urgency="routine"))
+            s.add(
+                Job(
+                    business_id=bid,
+                    customer_phone=f"+1512555{i:04d}",
+                    service_type="Drain cleaning",
+                    urgency="routine",
+                )
+            )
         s.commit()
     client = TestClient(app_module.app)
     client.post("/login", data={"email": email, "password": "pw12345"})
@@ -85,9 +96,11 @@ def test_employee_cards_link_to_their_workspace(test_engine, monkeypatch):
 
 
 def test_no_ai_internal_term_appears(test_engine, monkeypatch):
-    body = _client_for(test_engine, monkeypatch, deploy="sales").get(
-        "/v2/dashboard/departments/sales"
-    ).text
+    body = (
+        _client_for(test_engine, monkeypatch, deploy="sales")
+        .get("/v2/dashboard/departments/sales")
+        .text
+    )
 
     for word in ("token", "model", "prompt", "LLM"):
         assert word.lower() not in body.lower()

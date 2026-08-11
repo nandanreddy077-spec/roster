@@ -2,6 +2,7 @@
 webhooks) and a founder-only one (/clients dashboard, behind HTTP Basic).
 These tests pin that boundary — the dashboard must never serve without
 credentials, and the public surface must never *require* them."""
+
 import base64
 
 from fastapi.testclient import TestClient
@@ -170,10 +171,17 @@ def test_sms_webhook_stays_silent_once_trial_cap_exhausted(monkeypatch, test_eng
     with Session(test_engine) as session:
         session.add(
             Business(
-                email="owner@example.com", password_hash="x", business_name="Ridgeline",
-                trade="Plumbing", services_json="[]", hours="9-5", escalation_phone="555",
+                email="owner@example.com",
+                password_hash="x",
+                business_name="Ridgeline",
+                trade="Plumbing",
+                services_json="[]",
+                hours="9-5",
+                escalation_phone="555",
                 inbound_number="+15559998888",
-                trial_spend_cents=2200, trial_cap_cents=2000, trial_soft_buffer_cents=200,
+                trial_spend_cents=2200,
+                trial_cap_cents=2000,
+                trial_soft_buffer_cents=200,
             )
         )
         session.commit()

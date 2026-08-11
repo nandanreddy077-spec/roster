@@ -8,7 +8,9 @@ import db_models  # noqa: F401  (registers tables with SQLModel.metadata)
 # middleware). Tests run against a fixed password so they don't depend on
 # whatever ADMIN_PASSWORD happens to be in the developer's real environment.
 TEST_ADMIN_PASSWORD = "test-admin-password"
-DASH_AUTH = {"Authorization": "Basic YWRtaW46dGVzdC1hZG1pbi1wYXNzd29yZA=="}  # admin:test-admin-password
+DASH_AUTH = {
+    "Authorization": "Basic YWRtaW46dGVzdC1hZG1pbi1wYXNzd29yZA=="
+}  # admin:test-admin-password
 
 
 @pytest.fixture(autouse=True)

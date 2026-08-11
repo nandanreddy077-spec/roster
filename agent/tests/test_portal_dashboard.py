@@ -86,7 +86,9 @@ def test_dashboard_test_message_earns_working_status(monkeypatch, test_engine):
     monkeypatch.setattr(app_module, "engine", test_engine)
     monkeypatch.setattr(db_module, "engine", test_engine)
     monkeypatch.setattr(portal_module, "engine", test_engine)
-    monkeypatch.setattr(service_module, "agent", _stub_reply("Yes — we do same-day drain cleaning!"))
+    monkeypatch.setattr(
+        service_module, "agent", _stub_reply("Yes — we do same-day drain cleaning!")
+    )
     client = TestClient(app_module.app)
     _fully_onboarded_client(client, monkeypatch, test_engine)
 

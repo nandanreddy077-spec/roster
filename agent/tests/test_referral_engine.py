@@ -11,7 +11,9 @@ from referral_engine import (
 def test_render_referral_template_substitutes_known_variables():
     text = render_referral_template(
         REFERRAL_MESSAGE_TEMPLATE,
-        customer_name="Mike", service_type="AC repair", incentive="$25 off your next service",
+        customer_name="Mike",
+        service_type="AC repair",
+        incentive="$25 off your next service",
     )
     assert "Mike" in text
     assert "AC repair" in text

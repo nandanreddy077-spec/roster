@@ -25,6 +25,7 @@ Honesty rule: an employee or department with nothing attributable reports NO
 metrics rather than zeros. "0 jobs dispatched" implies a department that ran
 and achieved nothing; the truth is it was never built.
 """
+
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Callable, Optional
@@ -33,11 +34,21 @@ from sqlmodel import func, select
 
 from db_models import (
     ORIGIN_ESCALATION,
-    DispatchPlan, Job, JobQualification, MembershipOffer, Message, OwnerNotification,
-    RecoveryCampaign, RecoveryJob, ReferralLead, ReviewReply,
+    DispatchPlan,
+    Job,
+    JobQualification,
+    MembershipOffer,
+    Message,
+    OwnerNotification,
+    RecoveryCampaign,
+    RecoveryJob,
+    ReferralLead,
+    ReviewReply,
 )
 from notifications import (
-    KIND_CALL_DROPPED, KIND_ESCALATION, is_test_thread,
+    KIND_CALL_DROPPED,
+    KIND_ESCALATION,
+    is_test_thread,
 )
 
 # Voice conversations thread under this prefix (xai_voice_adapter.VOICE_THREAD_PREFIX).
@@ -110,6 +121,7 @@ class ActivityRow:
     """One real record, normalized for display. `when` orders it; `summary`
     describes it; `kind` lets a template style it. Facts only — the wording of
     the surrounding page stays in the template."""
+
     when: datetime
     kind: str
     summary: str
@@ -123,10 +135,11 @@ class RecordSource:
     resolves them, and `metric` is the metric key its count exposes (None for
     a source that is activity-only).
     """
+
     key: str
     records: str
     metric: Optional[str]
-    fetch: Callable      # (session, business_id, since) -> list[ActivityRow]
+    fetch: Callable  # (session, business_id, since) -> list[ActivityRow]
 
 
 @dataclass(frozen=True)
@@ -136,6 +149,7 @@ class EmployeeRecords:
 
 
 # ---- resolvers: every one returns real rows, business-scoped ----------------
+
 
 def _jobs(session, business_id, since=None):
     q = select(Job).where(
@@ -149,9 +163,13 @@ def _jobs(session, business_id, since=None):
     if since is not None:
         q = q.where(Job.created_at >= since)
     return [
-        ActivityRow(j.created_at, "job_booked",
-                    f"Booked {j.service_type}" + (f" for {j.customer_name}" if j.customer_name else ""))
-        for j in session.exec(q).all() if not is_test_thread(j.customer_phone)
+        ActivityRow(
+            j.created_at,
+            "job_booked",
+            f"Booked {j.service_type}" + (f" for {j.customer_name}" if j.customer_name else ""),
+        )
+        for j in session.exec(q).all()
+        if not is_test_thread(j.customer_phone)
     ]
 
 
@@ -167,8 +185,7 @@ def _voice_conversations(session, business_id, since=None):
         seen = first_turn.get(m.customer_phone)
         if seen is None or m.created_at < seen:
             first_turn[m.customer_phone] = m.created_at
-    return [ActivityRow(when, "call_answered", "Answered a call")
-            for when in first_turn.values()]
+    return [ActivityRow(when, "call_answered", "Answered a call") for when in first_turn.values()]
 
 
 def _escalations(session, business_id, since=None):
@@ -182,25 +199,27 @@ def _escalations(session, business_id, since=None):
 
 
 def _review_requests(session, business_id, since=None):
-    q = select(Job).where(
-        Job.business_id == business_id, Job.review_requested_at.is_not(None)
-    )
+    q = select(Job).where(Job.business_id == business_id, Job.review_requested_at.is_not(None))
     if since is not None:
         q = q.where(Job.review_requested_at >= since)
-    return [ActivityRow(j.review_requested_at, "review_requested",
-                        f"Asked for a review after {j.service_type}")
-            for j in session.exec(q).all()]
+    return [
+        ActivityRow(
+            j.review_requested_at, "review_requested", f"Asked for a review after {j.service_type}"
+        )
+        for j in session.exec(q).all()
+    ]
 
 
 def _review_followups(session, business_id, since=None):
-    q = select(Job).where(
-        Job.business_id == business_id, Job.review_followup_sent_at.is_not(None)
-    )
+    q = select(Job).where(Job.business_id == business_id, Job.review_followup_sent_at.is_not(None))
     if since is not None:
         q = q.where(Job.review_followup_sent_at >= since)
-    return [ActivityRow(j.review_followup_sent_at, "review_followup",
-                        f"Follow-up nudge after {j.service_type}")
-            for j in session.exec(q).all()]
+    return [
+        ActivityRow(
+            j.review_followup_sent_at, "review_followup", f"Follow-up nudge after {j.service_type}"
+        )
+        for j in session.exec(q).all()
+    ]
 
 
 def _review_replies(outcomes=None, kind="review_reply"):
@@ -210,8 +229,11 @@ def _review_replies(outcomes=None, kind="review_reply"):
             q = q.where(ReviewReply.outcome.in_(outcomes))
         if since is not None:
             q = q.where(ReviewReply.created_at >= since)
-        return [ActivityRow(r.created_at, kind, f"Review reply: {r.outcome}")
-                for r in session.exec(q).all()]
+        return [
+            ActivityRow(r.created_at, kind, f"Review reply: {r.outcome}")
+            for r in session.exec(q).all()
+        ]
+
     return _fetch
 
 
@@ -226,9 +248,13 @@ def _recovery(faces, only_booked=False, kind="recovery"):
             q = q.where(RecoveryJob.current_status == "booked")
         if since is not None:
             q = q.where(RecoveryJob.created_at >= since)
-        return [ActivityRow(r.created_at, kind,
-                            f"{r.service_type} — {r.current_status.replace('_', ' ')}")
-                for r in session.exec(q).all()]
+        return [
+            ActivityRow(
+                r.created_at, kind, f"{r.service_type} — {r.current_status.replace('_', ' ')}"
+            )
+            for r in session.exec(q).all()
+        ]
+
     return _fetch
 
 
@@ -236,8 +262,10 @@ def _referrals(session, business_id, since=None):
     q = select(ReferralLead).where(ReferralLead.business_id == business_id)
     if since is not None:
         q = q.where(ReferralLead.created_at >= since)
-    return [ActivityRow(r.created_at, "referral",
-                        f"Referral from {r.asker_phone}") for r in session.exec(q).all()]
+    return [
+        ActivityRow(r.created_at, "referral", f"Referral from {r.asker_phone}")
+        for r in session.exec(q).all()
+    ]
 
 
 def _job_qualifications(condition=None, kind="lead_qualified"):
@@ -247,8 +275,11 @@ def _job_qualifications(condition=None, kind="lead_qualified"):
             q = q.where(condition)
         if since is not None:
             q = q.where(JobQualification.created_at >= since)
-        return [ActivityRow(r.created_at, kind, f"{r.job_type} — {r.priority} priority")
-                for r in session.exec(q).all()]
+        return [
+            ActivityRow(r.created_at, kind, f"{r.job_type} — {r.priority} priority")
+            for r in session.exec(q).all()
+        ]
+
     return _fetch
 
 
@@ -267,9 +298,11 @@ def _membership_offers(condition=None, kind="membership_offer"):
             q = q.where(condition)
         if since is not None:
             q = q.where(MembershipOffer.sent_at >= since)
-        return [ActivityRow(r.sent_at, kind,
-                            f"Membership offer to {r.customer_phone} — {r.outcome}")
-                for r in session.exec(q).all()]
+        return [
+            ActivityRow(r.sent_at, kind, f"Membership offer to {r.customer_phone} — {r.outcome}")
+            for r in session.exec(q).all()
+        ]
+
     return _fetch
 
 
@@ -280,9 +313,11 @@ def _dispatch_plans(condition=None, kind="dispatch_planned"):
             q = q.where(condition)
         if since is not None:
             q = q.where(DispatchPlan.created_at >= since)
-        return [ActivityRow(r.created_at, kind,
-                            f"{r.dispatch_priority} — {r.scheduling_window}")
-                for r in session.exec(q).all()]
+        return [
+            ActivityRow(r.created_at, kind, f"{r.dispatch_priority} — {r.scheduling_window}")
+            for r in session.exec(q).all()
+        ]
+
     return _fetch
 
 
@@ -294,91 +329,203 @@ def _dispatch_plans(condition=None, kind="dispatch_planned"):
 # attribution is settled before Marketing productizes, not invented then.
 
 EMPLOYEE_RECORDS = {
-    "frontdesk": EmployeeRecords("frontdesk", (
-        RecordSource("booked_jobs", METRIC_RECORDS[JOBS_BOOKED], JOBS_BOOKED, _jobs),
-        RecordSource("voice_conversations", METRIC_RECORDS[CALLS_ANSWERED],
-                     CALLS_ANSWERED, _voice_conversations),
-        RecordSource("escalations", METRIC_RECORDS[ESCALATIONS], ESCALATIONS, _escalations),
-    )),
-    "reviews": EmployeeRecords("reviews", (
-        RecordSource("review_requests", METRIC_RECORDS[REVIEW_REQUESTS_SENT],
-                     REVIEW_REQUESTS_SENT, _review_requests),
-        RecordSource("review_followups", METRIC_RECORDS[REVIEW_FOLLOWUPS_SENT],
-                     REVIEW_FOLLOWUPS_SENT, _review_followups),
-        RecordSource("review_responses", METRIC_RECORDS[REVIEW_RESPONSES],
-                     REVIEW_RESPONSES, _review_replies()),
-        RecordSource("reviews_self_reported", METRIC_RECORDS[REVIEWS_SELF_REPORTED],
-                     REVIEWS_SELF_REPORTED, _review_replies(("left_review",), kind="review_self_reported")),
-        RecordSource("review_negative_replies", METRIC_RECORDS[REVIEW_NEGATIVE_REPLIES],
-                     REVIEW_NEGATIVE_REPLIES, _review_replies(("negative",), kind="review_negative")),
-        # Reviews RECEIVED (a verified Google/Yelp count) is deliberately
-        # absent: unknowable without that integration, and inventing it would
-        # be the dashboard's first fabricated number (founder, 2026-07-29).
-        # reviews_self_reported is NOT that number — it's what the customer
-        # told us, never presented as verified.
-    )),
-    "quote_chaser": EmployeeRecords("quote_chaser", (
-        RecordSource("recovery_jobs", METRIC_RECORDS[QUOTES_CHASED], QUOTES_CHASED,
-                     _recovery(("quote",), kind="quote_chase")),
-        RecordSource("booked_recoveries", METRIC_RECORDS[QUOTES_RECOVERED], QUOTES_RECOVERED,
-                     _recovery(("quote",), only_booked=True, kind="quote_recovered")),
-    )),
-    "retention_manager": EmployeeRecords("retention_manager", (
-        RecordSource("recovery_jobs", METRIC_RECORDS[CUSTOMERS_REACHED], CUSTOMERS_REACHED,
-                     _recovery(("reactivation", "membership"), kind="retention")),
-        RecordSource("booked_recoveries", METRIC_RECORDS[CUSTOMERS_RETURNED], CUSTOMERS_RETURNED,
-                     _recovery(("reactivation", "membership"), only_booked=True,
-                               kind="customer_returned")),
-    )),
-    "referral": EmployeeRecords("referral", (
-        RecordSource("referral_leads", METRIC_RECORDS[REFERRALS_RECEIVED],
-                     REFERRALS_RECEIVED, _referrals),
-    )),
-    "lead_qualifier": EmployeeRecords("lead_qualifier", (
-        RecordSource("jobs_qualified", METRIC_RECORDS[LEADS_QUALIFIED],
-                     LEADS_QUALIFIED, _job_qualifications()),
-        RecordSource("high_priority_leads", METRIC_RECORDS[HIGH_PRIORITY_LEADS],
-                     HIGH_PRIORITY_LEADS,
-                     _job_qualifications(JobQualification.priority == "high", "high_priority_lead")),
-        RecordSource("financing_candidates", METRIC_RECORDS[FINANCING_CANDIDATES],
-                     FINANCING_CANDIDATES,
-                     _job_qualifications(JobQualification.financing_candidate == True,  # noqa: E712
-                                         "financing_candidate")),
-        RecordSource("membership_candidates", METRIC_RECORDS[MEMBERSHIP_CANDIDATES],
-                     MEMBERSHIP_CANDIDATES,
-                     _job_qualifications(JobQualification.membership_candidate == True,  # noqa: E712
-                                         "membership_candidate")),
-        RecordSource("possible_spam_flagged", METRIC_RECORDS[POSSIBLE_SPAM_FLAGGED],
-                     POSSIBLE_SPAM_FLAGGED,
-                     _job_qualifications(JobQualification.possible_spam == True,  # noqa: E712
-                                         "possible_spam")),
-    )),
-    "membership_agent": EmployeeRecords("membership_agent", (
-        RecordSource("membership_offers", METRIC_RECORDS[MEMBERSHIP_OFFERS_SENT],
-                     MEMBERSHIP_OFFERS_SENT, _membership_offers()),
-        RecordSource("memberships_accepted", METRIC_RECORDS[MEMBERSHIPS_ACCEPTED],
-                     MEMBERSHIPS_ACCEPTED,
-                     _membership_offers(MembershipOffer.outcome == "accepted",
-                                        "membership_accepted")),
-    )),
-    "dispatcher": EmployeeRecords("dispatcher", (
-        RecordSource("dispatch_plans", METRIC_RECORDS[JOBS_DISPATCHED],
-                     JOBS_DISPATCHED, _dispatch_plans()),
-        RecordSource("emergency_dispatches", METRIC_RECORDS[EMERGENCY_DISPATCHES],
-                     EMERGENCY_DISPATCHES,
-                     _dispatch_plans(DispatchPlan.dispatch_priority == "emergency", "emergency_dispatch")),
-        RecordSource("same_day_dispatches", METRIC_RECORDS[SAME_DAY_DISPATCHES],
-                     SAME_DAY_DISPATCHES,
-                     _dispatch_plans(DispatchPlan.dispatch_priority == "same_day", "same_day_dispatch")),
-        RecordSource("manual_review_flagged", METRIC_RECORDS[MANUAL_REVIEW_FLAGGED],
-                     MANUAL_REVIEW_FLAGGED,
-                     _dispatch_plans(DispatchPlan.requires_dispatch_review == True,  # noqa: E712
-                                     "manual_review_flagged")),
-    )),
+    "frontdesk": EmployeeRecords(
+        "frontdesk",
+        (
+            RecordSource("booked_jobs", METRIC_RECORDS[JOBS_BOOKED], JOBS_BOOKED, _jobs),
+            RecordSource(
+                "voice_conversations",
+                METRIC_RECORDS[CALLS_ANSWERED],
+                CALLS_ANSWERED,
+                _voice_conversations,
+            ),
+            RecordSource("escalations", METRIC_RECORDS[ESCALATIONS], ESCALATIONS, _escalations),
+        ),
+    ),
+    "reviews": EmployeeRecords(
+        "reviews",
+        (
+            RecordSource(
+                "review_requests",
+                METRIC_RECORDS[REVIEW_REQUESTS_SENT],
+                REVIEW_REQUESTS_SENT,
+                _review_requests,
+            ),
+            RecordSource(
+                "review_followups",
+                METRIC_RECORDS[REVIEW_FOLLOWUPS_SENT],
+                REVIEW_FOLLOWUPS_SENT,
+                _review_followups,
+            ),
+            RecordSource(
+                "review_responses",
+                METRIC_RECORDS[REVIEW_RESPONSES],
+                REVIEW_RESPONSES,
+                _review_replies(),
+            ),
+            RecordSource(
+                "reviews_self_reported",
+                METRIC_RECORDS[REVIEWS_SELF_REPORTED],
+                REVIEWS_SELF_REPORTED,
+                _review_replies(("left_review",), kind="review_self_reported"),
+            ),
+            RecordSource(
+                "review_negative_replies",
+                METRIC_RECORDS[REVIEW_NEGATIVE_REPLIES],
+                REVIEW_NEGATIVE_REPLIES,
+                _review_replies(("negative",), kind="review_negative"),
+            ),
+            # Reviews RECEIVED (a verified Google/Yelp count) is deliberately
+            # absent: unknowable without that integration, and inventing it would
+            # be the dashboard's first fabricated number (founder, 2026-07-29).
+            # reviews_self_reported is NOT that number — it's what the customer
+            # told us, never presented as verified.
+        ),
+    ),
+    "quote_chaser": EmployeeRecords(
+        "quote_chaser",
+        (
+            RecordSource(
+                "recovery_jobs",
+                METRIC_RECORDS[QUOTES_CHASED],
+                QUOTES_CHASED,
+                _recovery(("quote",), kind="quote_chase"),
+            ),
+            RecordSource(
+                "booked_recoveries",
+                METRIC_RECORDS[QUOTES_RECOVERED],
+                QUOTES_RECOVERED,
+                _recovery(("quote",), only_booked=True, kind="quote_recovered"),
+            ),
+        ),
+    ),
+    "retention_manager": EmployeeRecords(
+        "retention_manager",
+        (
+            RecordSource(
+                "recovery_jobs",
+                METRIC_RECORDS[CUSTOMERS_REACHED],
+                CUSTOMERS_REACHED,
+                _recovery(("reactivation", "membership"), kind="retention"),
+            ),
+            RecordSource(
+                "booked_recoveries",
+                METRIC_RECORDS[CUSTOMERS_RETURNED],
+                CUSTOMERS_RETURNED,
+                _recovery(
+                    ("reactivation", "membership"), only_booked=True, kind="customer_returned"
+                ),
+            ),
+        ),
+    ),
+    "referral": EmployeeRecords(
+        "referral",
+        (
+            RecordSource(
+                "referral_leads", METRIC_RECORDS[REFERRALS_RECEIVED], REFERRALS_RECEIVED, _referrals
+            ),
+        ),
+    ),
+    "lead_qualifier": EmployeeRecords(
+        "lead_qualifier",
+        (
+            RecordSource(
+                "jobs_qualified",
+                METRIC_RECORDS[LEADS_QUALIFIED],
+                LEADS_QUALIFIED,
+                _job_qualifications(),
+            ),
+            RecordSource(
+                "high_priority_leads",
+                METRIC_RECORDS[HIGH_PRIORITY_LEADS],
+                HIGH_PRIORITY_LEADS,
+                _job_qualifications(JobQualification.priority == "high", "high_priority_lead"),
+            ),
+            RecordSource(
+                "financing_candidates",
+                METRIC_RECORDS[FINANCING_CANDIDATES],
+                FINANCING_CANDIDATES,
+                _job_qualifications(
+                    JobQualification.financing_candidate == True,  # noqa: E712
+                    "financing_candidate",
+                ),
+            ),
+            RecordSource(
+                "membership_candidates",
+                METRIC_RECORDS[MEMBERSHIP_CANDIDATES],
+                MEMBERSHIP_CANDIDATES,
+                _job_qualifications(
+                    JobQualification.membership_candidate == True,  # noqa: E712
+                    "membership_candidate",
+                ),
+            ),
+            RecordSource(
+                "possible_spam_flagged",
+                METRIC_RECORDS[POSSIBLE_SPAM_FLAGGED],
+                POSSIBLE_SPAM_FLAGGED,
+                _job_qualifications(
+                    JobQualification.possible_spam == True,  # noqa: E712
+                    "possible_spam",
+                ),
+            ),
+        ),
+    ),
+    "membership_agent": EmployeeRecords(
+        "membership_agent",
+        (
+            RecordSource(
+                "membership_offers",
+                METRIC_RECORDS[MEMBERSHIP_OFFERS_SENT],
+                MEMBERSHIP_OFFERS_SENT,
+                _membership_offers(),
+            ),
+            RecordSource(
+                "memberships_accepted",
+                METRIC_RECORDS[MEMBERSHIPS_ACCEPTED],
+                MEMBERSHIPS_ACCEPTED,
+                _membership_offers(MembershipOffer.outcome == "accepted", "membership_accepted"),
+            ),
+        ),
+    ),
+    "dispatcher": EmployeeRecords(
+        "dispatcher",
+        (
+            RecordSource(
+                "dispatch_plans",
+                METRIC_RECORDS[JOBS_DISPATCHED],
+                JOBS_DISPATCHED,
+                _dispatch_plans(),
+            ),
+            RecordSource(
+                "emergency_dispatches",
+                METRIC_RECORDS[EMERGENCY_DISPATCHES],
+                EMERGENCY_DISPATCHES,
+                _dispatch_plans(
+                    DispatchPlan.dispatch_priority == "emergency", "emergency_dispatch"
+                ),
+            ),
+            RecordSource(
+                "same_day_dispatches",
+                METRIC_RECORDS[SAME_DAY_DISPATCHES],
+                SAME_DAY_DISPATCHES,
+                _dispatch_plans(DispatchPlan.dispatch_priority == "same_day", "same_day_dispatch"),
+            ),
+            RecordSource(
+                "manual_review_flagged",
+                METRIC_RECORDS[MANUAL_REVIEW_FLAGGED],
+                MANUAL_REVIEW_FLAGGED,
+                _dispatch_plans(
+                    DispatchPlan.requires_dispatch_review == True,  # noqa: E712
+                    "manual_review_flagged",
+                ),
+            ),
+        ),
+    ),
 }
 
 
 # ---- the public read model --------------------------------------------------
+
 
 def employee_outcomes(session, business_id: int, role_key: str, since=None) -> dict:
     """{metric_key: count} for one employee. Empty for an employee with no
@@ -390,12 +537,14 @@ def employee_outcomes(session, business_id: int, role_key: str, since=None) -> d
         return {}
     return {
         source.metric: len(source.fetch(session, business_id, since))
-        for source in entry.sources if source.metric is not None
+        for source in entry.sources
+        if source.metric is not None
     }
 
 
-def employee_activity(session, business_id: int, role_key: str, limit: int = 20,
-                      since=None) -> list:
+def employee_activity(
+    session, business_id: int, role_key: str, limit: int = 20, since=None
+) -> list:
     """The rows behind this employee's numbers, newest first — the drill-down
     the metric invariant promises, resolved through the same declaration that
     produced the count."""
@@ -411,8 +560,9 @@ def employee_activity(session, business_id: int, role_key: str, limit: int = 20,
     return rows[:limit]
 
 
-def department_outcomes(session, business_id: int, department_key: str,
-                        role_keys, since=None) -> dict:
+def department_outcomes(
+    session, business_id: int, department_key: str, role_keys, since=None
+) -> dict:
     """The union of what this department's DEPLOYED employees report.
 
     Derived from the employees rather than computed separately, so a
@@ -425,8 +575,7 @@ def department_outcomes(session, business_id: int, department_key: str,
     return outcomes
 
 
-def department_activity(session, business_id: int, role_keys, since=None,
-                        limit: int = 20) -> list:
+def department_activity(session, business_id: int, role_keys, since=None, limit: int = 20) -> list:
     """The department's whole timeline — the union of its deployed employees'
     activity, newest first. Derived by unioning employee_activity, the same
     way department_outcomes unions employee_outcomes: a department's feed can
@@ -442,15 +591,13 @@ def booked_jobs(session, business_id: int) -> int:
     """Real customer jobs booked. Excludes the owner's own dashboard tests —
     testing your own AI is not revenue, and both surfaces must agree on that —
     and escalation rows, which are pages to the owner rather than work."""
-    real = select(Job).where(
-        Job.business_id == business_id, Job.origin != ORIGIN_ESCALATION
-    )
-    return session.exec(
-        select(func.count()).select_from(real.subquery())
-    ).one() - sum(
-        1 for phone in session.exec(
+    real = select(Job).where(Job.business_id == business_id, Job.origin != ORIGIN_ESCALATION)
+    return session.exec(select(func.count()).select_from(real.subquery())).one() - sum(
+        1
+        for phone in session.exec(
             select(Job.customer_phone).where(
                 Job.business_id == business_id, Job.origin != ORIGIN_ESCALATION
             )
-        ).all() if is_test_thread(phone)
+        ).all()
+        if is_test_thread(phone)
     )

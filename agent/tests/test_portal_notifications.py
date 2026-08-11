@@ -1,6 +1,7 @@
 """The Notifications page — reads Phase 2's recent_notifications() directly;
 no new view model, since there's no synthesis to do over a list that's
 already exactly what the page shows."""
+
 from sqlmodel import Session
 
 import app as app_module
@@ -18,8 +19,12 @@ def _client_for(test_engine, monkeypatch):
     monkeypatch.setattr(portal, "engine", test_engine)
     email = next(_EMAIL)
     with Session(test_engine) as s:
-        b = Business(business_name="Ridgeline Plumbing", trade="Plumbing",
-                     email=email, password_hash=hash_password("pw12345"))
+        b = Business(
+            business_name="Ridgeline Plumbing",
+            trade="Plumbing",
+            email=email,
+            password_hash=hash_password("pw12345"),
+        )
         s.add(b)
         s.commit()
         s.refresh(b)
@@ -53,10 +58,16 @@ def test_an_empty_log_shows_an_honest_empty_state(test_engine, monkeypatch):
 def test_notifications_render_newest_first(test_engine, monkeypatch):
     client, bid = _client_for(test_engine, monkeypatch)
     with Session(test_engine) as s:
-        s.add(OwnerNotification(business_id=bid, kind="job_booked", source="sms_booking",
-                                 message="job one"))
-        s.add(OwnerNotification(business_id=bid, kind="escalation", source="alert_owner",
-                                 message="job two"))
+        s.add(
+            OwnerNotification(
+                business_id=bid, kind="job_booked", source="sms_booking", message="job one"
+            )
+        )
+        s.add(
+            OwnerNotification(
+                business_id=bid, kind="escalation", source="alert_owner", message="job two"
+            )
+        )
         s.commit()
 
     body = client.get("/v2/dashboard/notifications").text
@@ -67,8 +78,14 @@ def test_notifications_render_newest_first(test_engine, monkeypatch):
 def test_kind_renders_as_a_customer_label_not_a_raw_string(test_engine, monkeypatch):
     client, bid = _client_for(test_engine, monkeypatch)
     with Session(test_engine) as s:
-        s.add(OwnerNotification(business_id=bid, kind="escalation", source="alert_owner",
-                                 message="URGENT — caller needs you"))
+        s.add(
+            OwnerNotification(
+                business_id=bid,
+                kind="escalation",
+                source="alert_owner",
+                message="URGENT — caller needs you",
+            )
+        )
         s.commit()
 
     body = client.get("/v2/dashboard/notifications").text
@@ -83,8 +100,11 @@ def test_never_leaks_another_businesss_notifications(test_engine, monkeypatch):
         s.add(other)
         s.commit()
         s.refresh(other)
-        s.add(OwnerNotification(business_id=other.id, kind="job_booked", source="sms_booking",
-                                 message="not yours"))
+        s.add(
+            OwnerNotification(
+                business_id=other.id, kind="job_booked", source="sms_booking", message="not yours"
+            )
+        )
         s.commit()
 
     body = client.get("/v2/dashboard/notifications").text

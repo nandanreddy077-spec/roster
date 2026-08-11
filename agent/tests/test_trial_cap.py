@@ -48,7 +48,12 @@ def test_record_usage_notifies_founder_once_on_crossing_cap(test_engine, monkeyp
 
     monkeypatch.setattr(trial_cap, "sms_channel", Recorder())
     with Session(test_engine) as session:
-        client = _client(business_name="Ridgeline", trial_spend_cents=1960, trial_cap_cents=2000, trial_soft_buffer_cents=200)
+        client = _client(
+            business_name="Ridgeline",
+            trial_spend_cents=1960,
+            trial_cap_cents=2000,
+            trial_soft_buffer_cents=200,
+        )
         session.add(client)
         session.commit()
         session.refresh(client)
@@ -78,6 +83,7 @@ def test_record_usage_no_alert_when_founder_phone_unset(test_engine, monkeypatch
 
 # ---- Concurrency: spend accounting must survive stale reads -----------------
 
+
 def test_record_usage_is_atomic_against_stale_reads(test_engine):
     """Two concurrent turns load the same Business, then both record usage.
     A read-modify-write implementation loses one increment; the atomic
@@ -88,12 +94,14 @@ def test_record_usage_is_atomic_against_stale_reads(test_engine):
 
     with Session(test_engine) as seed:
         b = Business(business_name="X", trial_spend_cents=0)
-        seed.add(b); seed.commit(); seed.refresh(b)
+        seed.add(b)
+        seed.commit()
+        seed.refresh(b)
         bid = b.id
 
     with Session(test_engine) as s1, Session(test_engine) as s2:
         c1 = s1.get(Business, bid)
-        c2 = s2.get(Business, bid)      # stale copy: loaded before c1's update
+        c2 = s2.get(Business, bid)  # stale copy: loaded before c1's update
         trial_cap.record_usage(s1, c1)
         trial_cap.record_usage(s2, c2)
 
@@ -110,19 +118,23 @@ def test_cap_alert_fires_exactly_once_even_with_stale_clients(test_engine, monke
     sent = []
 
     class Rec:
-        def send(self, from_number, to_number, body): sent.append(body)
+        def send(self, from_number, to_number, body):
+            sent.append(body)
 
     monkeypatch.setattr(trial_cap, "sms_channel", Rec())
 
     with Session(test_engine) as seed:
-        b = Business(business_name="X", trial_spend_cents=0,
-                     trial_cap_cents=trial_cap.TRIAL_TURN_COST_CENTS)  # first turn crosses
-        seed.add(b); seed.commit(); seed.refresh(b)
+        b = Business(
+            business_name="X", trial_spend_cents=0, trial_cap_cents=trial_cap.TRIAL_TURN_COST_CENTS
+        )  # first turn crosses
+        seed.add(b)
+        seed.commit()
+        seed.refresh(b)
         bid = b.id
 
     with Session(test_engine) as s1, Session(test_engine) as s2:
         c1 = s1.get(Business, bid)
-        c2 = s2.get(Business, bid)      # stale: still shows not-notified
+        c2 = s2.get(Business, bid)  # stale: still shows not-notified
         trial_cap.record_usage(s1, c1)
         trial_cap.record_usage(s2, c2)
 
@@ -135,16 +147,25 @@ def test_cap_alert_fires_exactly_once_even_with_stale_clients(test_engine, monke
 # Quote Chaser, Reviews, Membership Agent and Referral replies would all go
 # silent after roughly 44 turns.
 
+
 def test_a_paying_customer_is_never_capped():
-    client = _client(billing_state=BILLING_PAID, trial_spend_cents=999_999,
-                     trial_cap_cents=2000, trial_soft_buffer_cents=200)
+    client = _client(
+        billing_state=BILLING_PAID,
+        trial_spend_cents=999_999,
+        trial_cap_cents=2000,
+        trial_soft_buffer_cents=200,
+    )
     assert can_respond(client) is True
 
 
 def test_a_trial_customer_is_still_capped():
     """The guard must keep working — an unattended trial is what it is for."""
-    client = _client(billing_state=BILLING_TRIAL, trial_spend_cents=2200,
-                     trial_cap_cents=2000, trial_soft_buffer_cents=200)
+    client = _client(
+        billing_state=BILLING_TRIAL,
+        trial_spend_cents=2200,
+        trial_cap_cents=2000,
+        trial_soft_buffer_cents=200,
+    )
     assert can_respond(client) is False
 
 
@@ -160,9 +181,15 @@ def test_paid_usage_is_tracked_but_never_alerts(test_engine, monkeypatch):
     alerts = []
     monkeypatch.setattr(trial_cap, "_notify_founder_cap_reached", lambda c: alerts.append(c))
     with Session(test_engine) as s:
-        client = _client(billing_state=BILLING_PAID, trial_spend_cents=0,
-                         trial_cap_cents=2000, trial_soft_buffer_cents=200)
-        s.add(client); s.commit(); s.refresh(client)
+        client = _client(
+            billing_state=BILLING_PAID,
+            trial_spend_cents=0,
+            trial_cap_cents=2000,
+            trial_soft_buffer_cents=200,
+        )
+        s.add(client)
+        s.commit()
+        s.refresh(client)
         for _ in range(10):
             record_usage(s, client)
         assert client.trial_spend_cents == 10 * TRIAL_TURN_COST_CENTS
@@ -172,6 +199,7 @@ def test_paid_usage_is_tracked_but_never_alerts(test_engine, monkeypatch):
 
 # ---- the owner has to find out ------------------------------------------------
 
+
 def test_crossing_the_cap_tells_the_owner_not_just_the_founder(test_engine, monkeypatch):
     """Before this the owner learned nothing: their employees stopped replying,
     the customer got silence, and only the founder was paged. The failure was
@@ -180,20 +208,30 @@ def test_crossing_the_cap_tells_the_owner_not_just_the_founder(test_engine, monk
     from sqlmodel import select
 
     texts = []
+
     class _Rec:
-        def send(self, from_number, to_number, body): texts.append((to_number, body))
+        def send(self, from_number, to_number, body):
+            texts.append((to_number, body))
+
     monkeypatch.setattr(trial_cap, "sms_channel", _Rec())
     monkeypatch.setattr(trial_cap, "_notify_founder_cap_reached", lambda c: None)
 
     with Session(test_engine) as s:
-        client = _client(trial_spend_cents=1950, trial_cap_cents=2000,
-                         trial_soft_buffer_cents=200, escalation_phone="+15550001111")
-        s.add(client); s.commit(); s.refresh(client)
-        record_usage(s, client)          # crosses the cap
-        record_usage(s, client)          # must not alert twice
+        client = _client(
+            trial_spend_cents=1950,
+            trial_cap_cents=2000,
+            trial_soft_buffer_cents=200,
+            escalation_phone="+15550001111",
+        )
+        s.add(client)
+        s.commit()
+        s.refresh(client)
+        record_usage(s, client)  # crosses the cap
+        record_usage(s, client)  # must not alert twice
 
-        notes = s.exec(select(OwnerNotification).where(
-            OwnerNotification.business_id == client.id)).all()
+        notes = s.exec(
+            select(OwnerNotification).where(OwnerNotification.business_id == client.id)
+        ).all()
 
     assert len(texts) == 1, f"owner alerted {len(texts)} times"
     assert texts[0][0] == "+15550001111"

@@ -5,6 +5,7 @@ automate — the founder pastes the number + its webhook signing secret and this
 attaches them so an inbound call routes to this business and verifies. This is
 what unblocks the first real voice call without Twilio.
 """
+
 from sqlmodel import Session
 
 import app as app_module
@@ -22,7 +23,9 @@ def _client(test_engine, monkeypatch):
     monkeypatch.setattr(portal_module, "engine", test_engine)
     with Session(test_engine) as s:
         b = Business(business_name="Ridgeline Plumbing", escalation_phone="512-555-0148")
-        s.add(b); s.commit(); s.refresh(b)
+        s.add(b)
+        s.commit()
+        s.refresh(b)
         bid = b.id
     return TestClient(app_module.app), bid
 
@@ -30,10 +33,12 @@ def _client(test_engine, monkeypatch):
 def test_attach_sets_number_and_secret_and_routes(test_engine, monkeypatch):
     client, bid = _client(test_engine, monkeypatch)
 
-    r = client.post(f"/clients/{bid}/attach-xai-number",
-                    data={"xai_phone_number": "+15125550123",
-                          "xai_signing_secret": "whsec_abc123"},
-                    headers=DASH_AUTH, follow_redirects=False)
+    r = client.post(
+        f"/clients/{bid}/attach-xai-number",
+        data={"xai_phone_number": "+15125550123", "xai_signing_secret": "whsec_abc123"},
+        headers=DASH_AUTH,
+        follow_redirects=False,
+    )
 
     assert r.status_code == 303
     with Session(test_engine) as s:
@@ -46,11 +51,17 @@ def test_attach_sets_number_and_secret_and_routes(test_engine, monkeypatch):
 def test_attach_does_not_clobber_existing_inbound_number(test_engine, monkeypatch):
     client, bid = _client(test_engine, monkeypatch)
     with Session(test_engine) as s:
-        b = s.get(Business, bid); b.inbound_number = "+15559998888"; s.add(b); s.commit()
+        b = s.get(Business, bid)
+        b.inbound_number = "+15559998888"
+        s.add(b)
+        s.commit()
 
-    client.post(f"/clients/{bid}/attach-xai-number",
-                data={"xai_phone_number": "+15125550123", "xai_signing_secret": "s"},
-                headers=DASH_AUTH, follow_redirects=False)
+    client.post(
+        f"/clients/{bid}/attach-xai-number",
+        data={"xai_phone_number": "+15125550123", "xai_signing_secret": "s"},
+        headers=DASH_AUTH,
+        follow_redirects=False,
+    )
 
     with Session(test_engine) as s:
         assert s.get(Business, bid).inbound_number == "+15559998888"
@@ -59,9 +70,12 @@ def test_attach_does_not_clobber_existing_inbound_number(test_engine, monkeypatc
 def test_attach_ignores_blank_submit(test_engine, monkeypatch):
     client, bid = _client(test_engine, monkeypatch)
 
-    client.post(f"/clients/{bid}/attach-xai-number",
-                data={"xai_phone_number": "  ", "xai_signing_secret": "  "},
-                headers=DASH_AUTH, follow_redirects=False)
+    client.post(
+        f"/clients/{bid}/attach-xai-number",
+        data={"xai_phone_number": "  ", "xai_signing_secret": "  "},
+        headers=DASH_AUTH,
+        follow_redirects=False,
+    )
 
     with Session(test_engine) as s:
         b = s.get(Business, bid)
@@ -71,13 +85,17 @@ def test_attach_ignores_blank_submit(test_engine, monkeypatch):
 
 def test_attach_requires_admin_auth(test_engine, monkeypatch):
     client, bid = _client(test_engine, monkeypatch)
-    r = client.post(f"/clients/{bid}/attach-xai-number",
-                    data={"xai_phone_number": "+15125550123", "xai_signing_secret": "s"},
-                    follow_redirects=False)
+    r = client.post(
+        f"/clients/{bid}/attach-xai-number",
+        data={"xai_phone_number": "+15125550123", "xai_signing_secret": "s"},
+        follow_redirects=False,
+    )
     assert r.status_code == 401
 
 
-def test_client_detail_offers_retry_when_number_bought_but_voice_incomplete(test_engine, monkeypatch):
+def test_client_detail_offers_retry_when_number_bought_but_voice_incomplete(
+    test_engine, monkeypatch
+):
     """A real Twilio purchase (twilio_number_sid set) with xAI registration
     still incomplete (xai_phone_number None) must not be a dead end — the
     founder needs the manual attach-xai-number form to retry."""
@@ -86,7 +104,8 @@ def test_client_detail_offers_retry_when_number_bought_but_voice_incomplete(test
         b = s.get(Business, bid)
         b.inbound_number = "+15125550199"
         b.twilio_number_sid = "PN_fake_sid"
-        s.add(b); s.commit()
+        s.add(b)
+        s.commit()
 
     r = client.get(f"/clients/{bid}", headers=DASH_AUTH)
 
@@ -102,7 +121,10 @@ def test_client_detail_does_not_claim_bought_for_manually_typed_number(test_engi
     'bought' in that case — it must still offer the buy/attach forms."""
     client, bid = _client(test_engine, monkeypatch)
     with Session(test_engine) as s:
-        b = s.get(Business, bid); b.inbound_number = "+17702881238"; s.add(b); s.commit()
+        b = s.get(Business, bid)
+        b.inbound_number = "+17702881238"
+        s.add(b)
+        s.commit()
 
     r = client.get(f"/clients/{bid}", headers=DASH_AUTH)
 
@@ -121,7 +143,8 @@ def test_retry_xai_registration_succeeds_without_rebuying_number(test_engine, mo
         b = s.get(Business, bid)
         b.inbound_number = "+16187473488"
         b.twilio_number_sid = "PN_real_sid"
-        s.add(b); s.commit()
+        s.add(b)
+        s.commit()
 
     def _boom_if_called(*args, **kwargs):
         raise AssertionError("must not re-purchase a number on retry")
@@ -132,13 +155,17 @@ def test_retry_xai_registration_succeeds_without_rebuying_number(test_engine, mo
     # (secret persisted before the retryable trunk step) rather than stubbing
     # the whole voice half out of the route.
     monkeypatch.setattr(
-        provisioning_module, "register_number_with_xai",
+        provisioning_module,
+        "register_number_with_xai",
         lambda phone_number: {"signing_secret": "whsec_retry123"},
     )
-    monkeypatch.setattr(provisioning_module, "attach_number_to_xai_trunk",
-                        lambda sid, phone_number: None)
+    monkeypatch.setattr(
+        provisioning_module, "attach_number_to_xai_trunk", lambda sid, phone_number: None
+    )
 
-    r = client.post(f"/clients/{bid}/retry-xai-registration", headers=DASH_AUTH, follow_redirects=False)
+    r = client.post(
+        f"/clients/{bid}/retry-xai-registration", headers=DASH_AUTH, follow_redirects=False
+    )
 
     assert r.status_code == 303
     with Session(test_engine) as s:
@@ -162,16 +189,21 @@ def test_retry_xai_registration_surfaces_error_without_crashing(test_engine, mon
         b = s.get(Business, bid)
         b.inbound_number = "+16187473488"
         b.twilio_number_sid = "PN_real_sid"
-        s.add(b); s.commit()
+        s.add(b)
+        s.commit()
 
     from provisioning import ProvisioningError
 
     def _fail(phone_number):
-        raise ProvisioningError("xAI registration returned no signing secret — webhook keys: ['url']")
+        raise ProvisioningError(
+            "xAI registration returned no signing secret — webhook keys: ['url']"
+        )
 
     monkeypatch.setattr(provisioning_module, "register_number_with_xai", _fail)
 
-    r = client.post(f"/clients/{bid}/retry-xai-registration", headers=DASH_AUTH, follow_redirects=False)
+    r = client.post(
+        f"/clients/{bid}/retry-xai-registration", headers=DASH_AUTH, follow_redirects=False
+    )
 
     assert r.status_code == 303
     assert "provision_error" in r.headers["location"]

@@ -22,7 +22,7 @@ def resolve_engine_config(environ) -> tuple:
     if db_url:
         # Heroku/Railway hand out postgres:// which SQLAlchemy 2.x rejects.
         if db_url.startswith("postgres://"):
-            db_url = "postgresql://" + db_url[len("postgres://"):]
+            db_url = "postgresql://" + db_url[len("postgres://") :]
         # pool_pre_ping: a recycled/underlying-dropped connection is detected
         # and replaced instead of failing the first webhook after idle.
         return db_url, {}, {"pool_pre_ping": True}
@@ -40,6 +40,7 @@ _url, _connect_args, _kwargs = resolve_engine_config(os.environ)
 engine = create_engine(_url, connect_args=_connect_args, **_kwargs)
 
 if engine.dialect.name == "sqlite":
+
     @event.listens_for(engine, "connect")
     def _enable_wal(dbapi_connection, _):
         # WAL lets readers and a writer proceed concurrently instead of locking
@@ -117,7 +118,11 @@ def _migrate_rename_client_to_business():
             except Exception:
                 conn.rollback()
         for tbl in ("job", "message", "recoverycampaign", "recoveryjob", "referrallead"):
-            cols = {c["name"] for c in inspect(engine).get_columns(tbl)} if tbl in inspect(engine).get_table_names() else set()
+            cols = (
+                {c["name"] for c in inspect(engine).get_columns(tbl)}
+                if tbl in inspect(engine).get_table_names()
+                else set()
+            )
             if "client_id" in cols and "business_id" not in cols:
                 try:
                     conn.execute(text(f"ALTER TABLE {tbl} RENAME COLUMN client_id TO business_id"))
@@ -221,12 +226,17 @@ def _backfill_customers(engine=None):
                 if not phone or r.customer_id is not None:
                     continue
                 existing = s.exec(
-                    select(Customer).where(Customer.business_id == r.business_id, Customer.phone == phone)
+                    select(Customer).where(
+                        Customer.business_id == r.business_id, Customer.phone == phone
+                    )
                 ).first()
                 if not existing:
                     existing = Customer(business_id=r.business_id, phone=phone)
-                    s.add(existing); s.commit(); s.refresh(existing)
-                r.customer_id = existing.id; s.add(r)
+                    s.add(existing)
+                    s.commit()
+                    s.refresh(existing)
+                r.customer_id = existing.id
+                s.add(r)
         s.commit()
 
 
@@ -238,10 +248,14 @@ def _backfill_employees(engine=None):
     from sqlmodel import Session, select
     from db_models import Business, Employee
     from roles import role_key_for
+
     eng = engine if engine is not None else globals()["engine"]
     with Session(eng) as s:
         for b in s.exec(select(Business)).all():
-            have = {e.role_key for e in s.exec(select(Employee).where(Employee.business_id == b.id)).all()}
+            have = {
+                e.role_key
+                for e in s.exec(select(Employee).where(Employee.business_id == b.id)).all()
+            }
             if b.frontdesk_live and "frontdesk" not in have:
                 s.add(Employee(business_id=b.id, role_key="frontdesk", display_name="Receptionist"))
                 have.add("frontdesk")
@@ -305,8 +319,10 @@ def _dedupe_employees(engine=None) -> list:
                 seen.add(key)
         if removed:
             s.commit()
-            print(f"[migration] removed {len(removed)} duplicate employee rows: {removed}",
-                  file=sys.stderr)
+            print(
+                f"[migration] removed {len(removed)} duplicate employee rows: {removed}",
+                file=sys.stderr,
+            )
     return removed
 
 

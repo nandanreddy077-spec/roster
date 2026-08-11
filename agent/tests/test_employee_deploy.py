@@ -1,5 +1,6 @@
 """Founder-admin 'deploy an employee' action (platform PRD §11a: Founder
 Admin is the only place an Employee gets deployed for a business)."""
+
 import json
 
 from fastapi.testclient import TestClient
@@ -54,6 +55,8 @@ def test_deploy_employee_requires_admin_auth(test_engine, monkeypatch):
     client_id = make_client(test_engine)
     test_client = TestClient(app_module.app)
 
-    response = test_client.post(f"/clients/{client_id}/employees/deploy", data={"role_key": "quote_chaser"})
+    response = test_client.post(
+        f"/clients/{client_id}/employees/deploy", data={"role_key": "quote_chaser"}
+    )
 
     assert response.status_code == 401

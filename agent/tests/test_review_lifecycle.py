@@ -15,6 +15,7 @@ against a single call.
 Delays are collapsed to zero via the env overrides review_engine reads, so a
 journey that spans days in production runs in one test.
 """
+
 import importlib
 from datetime import datetime, timedelta
 
@@ -35,6 +36,7 @@ def reviews(monkeypatch):
     monkeypatch.setenv("REVIEW_FOLLOWUP_DELAY_DAYS", "0")
     import review_engine
     import review_service
+
     importlib.reload(review_engine)
     importlib.reload(review_service)
     sent = []
@@ -54,9 +56,14 @@ def reviews(monkeypatch):
 
 def _business(session, **overrides):
     fields = dict(
-        business_name="Ridgeline HVAC", trade="hvac", services_json="[]", hours="9-5",
-        escalation_phone="+15125550149", inbound_number="+15125557777",
-        review_link="https://g.page/r/ridgeline/review", trial_cap_cents=100000,
+        business_name="Ridgeline HVAC",
+        trade="hvac",
+        services_json="[]",
+        hours="9-5",
+        escalation_phone="+15125550149",
+        inbound_number="+15125557777",
+        review_link="https://g.page/r/ridgeline/review",
+        trial_cap_cents=100000,
     )
     fields.update(overrides)
     b = Business(**fields)
@@ -69,8 +76,11 @@ def _business(session, **overrides):
 
 def _completed_job(session, business, phone=CUSTOMER, hours_ago=2):
     job = Job(
-        business_id=business.id, customer_phone=phone, customer_name="Dana Cruz",
-        service_type="AC compressor replacement", urgency="same_day",
+        business_id=business.id,
+        customer_phone=phone,
+        customer_name="Dana Cruz",
+        service_type="AC compressor replacement",
+        urgency="same_day",
         callback_number=phone,
         completed_at=datetime.utcnow() - timedelta(hours=hours_ago),
     )
@@ -82,10 +92,15 @@ def _completed_job(session, business, phone=CUSTOMER, hours_ago=2):
 
 def _reply(session, business, job, text, outcome):
     """A classified customer reply, as handle_review_reply would persist it."""
-    session.add(ReviewReply(
-        business_id=business.id, source_job_id=job.id,
-        customer_phone=job.callback_number, outcome=outcome, raw_reply_text=text,
-    ))
+    session.add(
+        ReviewReply(
+            business_id=business.id,
+            source_job_id=job.id,
+            customer_phone=job.callback_number,
+            outcome=outcome,
+            raw_reply_text=text,
+        )
+    )
     session.commit()
 
 
@@ -117,6 +132,7 @@ def _requests(reviews, phone=CUSTOMER):
 
 # ---- the initial request ---------------------------------------------------
 
+
 def test_a_completed_job_gets_exactly_one_review_request(test_engine, reviews):
     """Many ticks, one ask. The nudge is counted separately below — this pins
     that the REQUEST itself never repeats."""
@@ -133,8 +149,12 @@ def test_an_unhired_business_never_texts_at_all(test_engine, reviews):
     """review_link is configuration, not consent — the Employee row is."""
     with Session(test_engine) as session:
         business = Business(
-            business_name="Not Hired Co", trade="hvac", services_json="[]", hours="9-5",
-            email="unhired@test.io", review_link="https://g.page/r/x/review",
+            business_name="Not Hired Co",
+            trade="hvac",
+            services_json="[]",
+            hours="9-5",
+            email="unhired@test.io",
+            review_link="https://g.page/r/x/review",
             inbound_number="+15125557777",
         )
         session.add(business)
@@ -148,6 +168,7 @@ def test_an_unhired_business_never_texts_at_all(test_engine, reviews):
 
 
 # ---- the one follow-up, only for silence -----------------------------------
+
 
 def test_a_silent_customer_gets_one_nudge_and_never_a_second(test_engine, reviews):
     with Session(test_engine) as session:
@@ -175,12 +196,16 @@ def test_the_total_contact_count_is_capped_at_two_forever(test_engine, reviews):
 
 # ---- never contacted again after replying ----------------------------------
 
-@pytest.mark.parametrize("outcome,text", [
-    ("left_review", "just left you 5 stars!"),
-    ("positive", "yeah you guys were great"),
-    ("negative", "the tech was 3 hours late and it still doesn't work"),
-    ("declined", "no thanks"),
-])
+
+@pytest.mark.parametrize(
+    "outcome,text",
+    [
+        ("left_review", "just left you 5 stars!"),
+        ("positive", "yeah you guys were great"),
+        ("negative", "the tech was 3 hours late and it still doesn't work"),
+        ("declined", "no thanks"),
+    ],
+)
 def test_a_customer_who_replied_is_never_contacted_again(test_engine, reviews, outcome, text):
     """Happy or furious, answering ends the sequence. Re-nudging someone who
     just complained is the single worst thing this employee could do."""
@@ -198,7 +223,7 @@ def test_a_customer_who_replied_is_never_contacted_again(test_engine, reviews, o
 
 
 def test_an_unclear_reply_still_allows_the_one_scheduled_nudge(test_engine, reviews):
-    """"unclear" is the one outcome that told us nothing, so the already-
+    """ "unclear" is the one outcome that told us nothing, so the already-
     scheduled nudge still goes — but it is still only ever one."""
     with Session(test_engine) as session:
         business = _business(session, email="unclear@test.io")
@@ -227,6 +252,7 @@ def test_replying_after_the_nudge_stops_everything(test_engine, reviews):
 
 
 # ---- separate jobs are separate conversations ------------------------------
+
 
 def test_a_second_job_for_the_same_customer_earns_its_own_request(test_engine, reviews):
     """Two jobs months apart are two experiences worth asking about — the cap
@@ -264,13 +290,15 @@ def test_one_business_never_texts_another_businesses_customer(test_engine, revie
 
 # ---- the owner-facing escalation text --------------------------------------
 
+
 def test_a_negative_reply_escalation_has_no_double_period():
     """The reason already ends in a sentence; the template supplies its own.
     Rendered "...review request.. Call them back immediately." to the owner."""
     from notifications import build_escalation_message
 
     msg = build_escalation_message(
-        Business(business_name="Ridgeline HVAC"), "+15125550001",
+        Business(business_name="Ridgeline HVAC"),
+        "+15125550001",
         "Customer replied negatively to a review request.",
     )
     assert ".." not in msg
@@ -282,8 +310,12 @@ def test_a_model_authored_reason_is_normalized_too():
     controls that, which is why this is fixed in the builder."""
     from notifications import build_escalation_message
 
-    for reason in ("gas leak, kids in the home.", "gas leak, kids in the home",
-                   "gas leak, kids in the home...", "gas leak, kids in the home . "):
+    for reason in (
+        "gas leak, kids in the home.",
+        "gas leak, kids in the home",
+        "gas leak, kids in the home...",
+        "gas leak, kids in the home . ",
+    ):
         msg = build_escalation_message(Business(business_name="B"), "+1", reason)
         assert ".." not in msg
         assert "Reason: gas leak, kids in the home. Call them back" in msg

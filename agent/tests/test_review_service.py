@@ -4,6 +4,7 @@ path (2026-07-29/30 plan) onto the same tick-based, delayed mechanism
 referral_service.send_due_referral_asks already uses — safe to call more
 than once a day since review_requested_at gates re-sending.
 """
+
 from datetime import datetime, timedelta
 
 from sqlmodel import Session, select
@@ -19,9 +20,13 @@ def make_client(session: Session, review_link=None, deployed=True) -> Business:
     review_link — is what authorises Reviews to text anyone. `deployed=False`
     builds the un-hired case the gate exists to block."""
     client = Business(
-        business_name="Ridgeline Plumbing", trade="Plumbing", hours="9-5",
-        pricing_faq="n/a", escalation_phone="+15550000000",
-        inbound_number="+15559990000", review_link=review_link,
+        business_name="Ridgeline Plumbing",
+        trade="Plumbing",
+        hours="9-5",
+        pricing_faq="n/a",
+        escalation_phone="+15550000000",
+        inbound_number="+15559990000",
+        review_link=review_link,
     )
     session.add(client)
     session.commit()
@@ -51,7 +56,9 @@ def test_send_due_review_requests_sends_to_eligible_job(session, monkeypatch):
 
     client = make_client(session, review_link="https://g.page/r/test")
     job = Job(
-        business_id=client.id, service_type="AC repair", urgency="routine",
+        business_id=client.id,
+        service_type="AC repair",
+        urgency="routine",
         callback_number="+15551234567",
         completed_at=datetime.utcnow() - timedelta(days=2),
     )
@@ -74,8 +81,11 @@ def test_send_due_review_requests_skips_job_completed_too_recently(session, monk
 
     client = make_client(session, review_link="https://g.page/r/test")
     job = Job(
-        business_id=client.id, service_type="AC repair", urgency="routine",
-        callback_number="+15551234567", completed_at=datetime.utcnow(),
+        business_id=client.id,
+        service_type="AC repair",
+        urgency="routine",
+        callback_number="+15551234567",
+        completed_at=datetime.utcnow(),
     )
     session.add(job)
     session.commit()
@@ -94,7 +104,9 @@ def test_send_due_review_requests_skips_business_without_review_link(session, mo
 
     client = make_client(session, review_link=None)
     job = Job(
-        business_id=client.id, service_type="AC repair", urgency="routine",
+        business_id=client.id,
+        service_type="AC repair",
+        urgency="routine",
         callback_number="+15551234567",
         completed_at=datetime.utcnow() - timedelta(days=2),
     )
@@ -113,8 +125,11 @@ def test_send_due_review_requests_skips_job_without_callback_number(session, mon
 
     client = make_client(session, review_link="https://g.page/r/test")
     job = Job(
-        business_id=client.id, service_type="AC repair", urgency="routine",
-        callback_number=None, completed_at=datetime.utcnow() - timedelta(days=2),
+        business_id=client.id,
+        service_type="AC repair",
+        urgency="routine",
+        callback_number=None,
+        completed_at=datetime.utcnow() - timedelta(days=2),
     )
     session.add(job)
     session.commit()
@@ -132,7 +147,9 @@ def test_send_due_review_requests_is_idempotent_across_two_calls(session, monkey
 
     client = make_client(session, review_link="https://g.page/r/test")
     job = Job(
-        business_id=client.id, service_type="AC repair", urgency="routine",
+        business_id=client.id,
+        service_type="AC repair",
+        urgency="routine",
         callback_number="+15551234567",
         completed_at=datetime.utcnow() - timedelta(days=2),
     )
@@ -155,7 +172,9 @@ def test_send_due_review_requests_survives_a_send_failure(session, monkeypatch):
 
     client = make_client(session, review_link="https://g.page/r/test")
     job = Job(
-        business_id=client.id, service_type="AC repair", urgency="routine",
+        business_id=client.id,
+        service_type="AC repair",
+        urgency="routine",
         callback_number="+15551234567",
         completed_at=datetime.utcnow() - timedelta(days=2),
     )
@@ -177,13 +196,16 @@ def test_send_due_review_requests_survives_a_send_failure(session, monkeypatch):
 # as every other new-behavior boundary in this codebase that's been shipped
 # incrementally and documented as such rather than silently left incomplete.
 
+
 def test_send_due_review_followups_sends_to_an_unanswered_request(session, monkeypatch):
     fake_channel = FakeSMSChannel()
     monkeypatch.setattr(review_service, "sms_channel", fake_channel)
 
     client = make_client(session, review_link="https://g.page/r/test")
     job = Job(
-        business_id=client.id, service_type="AC repair", urgency="routine",
+        business_id=client.id,
+        service_type="AC repair",
+        urgency="routine",
         callback_number="+15551234567",
         completed_at=datetime.utcnow() - timedelta(days=10),
         review_requested_at=datetime.utcnow() - timedelta(days=5),
@@ -205,7 +227,9 @@ def test_send_due_review_followups_skips_a_request_too_recent_to_follow_up_on(se
 
     client = make_client(session, review_link="https://g.page/r/test")
     job = Job(
-        business_id=client.id, service_type="AC repair", urgency="routine",
+        business_id=client.id,
+        service_type="AC repair",
+        urgency="routine",
         callback_number="+15551234567",
         completed_at=datetime.utcnow() - timedelta(days=2),
         review_requested_at=datetime.utcnow() - timedelta(days=1),
@@ -229,7 +253,9 @@ def test_send_due_review_followups_never_sends_a_second_one(session, monkeypatch
 
     client = make_client(session, review_link="https://g.page/r/test")
     job = Job(
-        business_id=client.id, service_type="AC repair", urgency="routine",
+        business_id=client.id,
+        service_type="AC repair",
+        urgency="routine",
         callback_number="+15551234567",
         completed_at=datetime.utcnow() - timedelta(days=10),
         review_requested_at=datetime.utcnow() - timedelta(days=5),
@@ -253,7 +279,9 @@ def test_send_due_review_followups_skips_a_job_never_asked_in_the_first_place(se
 
     client = make_client(session, review_link="https://g.page/r/test")
     job = Job(
-        business_id=client.id, service_type="AC repair", urgency="routine",
+        business_id=client.id,
+        service_type="AC repair",
+        urgency="routine",
         callback_number="+15551234567",
         completed_at=datetime.utcnow() - timedelta(days=10),
     )
@@ -271,7 +299,9 @@ def test_send_due_review_followups_skips_business_without_review_link(session, m
 
     client = make_client(session, review_link=None)
     job = Job(
-        business_id=client.id, service_type="AC repair", urgency="routine",
+        business_id=client.id,
+        service_type="AC repair",
+        urgency="routine",
         callback_number="+15551234567",
         completed_at=datetime.utcnow() - timedelta(days=10),
         review_requested_at=datetime.utcnow() - timedelta(days=5),
@@ -289,7 +319,9 @@ def test_send_due_review_followups_survives_a_send_failure(session, monkeypatch)
 
     client = make_client(session, review_link="https://g.page/r/test")
     job = Job(
-        business_id=client.id, service_type="AC repair", urgency="routine",
+        business_id=client.id,
+        service_type="AC repair",
+        urgency="routine",
         callback_number="+15551234567",
         completed_at=datetime.utcnow() - timedelta(days=10),
         review_requested_at=datetime.utcnow() - timedelta(days=5),
@@ -310,9 +342,12 @@ def test_send_due_review_followups_survives_a_send_failure(session, monkeypatch)
 # continue (the plan's explicit behavior table) — every other outcome stops
 # it, the same way an "already resolved" ReferralLead stops re-routing.
 
+
 def _job_due_for_followup(session, client) -> Job:
     job = Job(
-        business_id=client.id, service_type="AC repair", urgency="routine",
+        business_id=client.id,
+        service_type="AC repair",
+        urgency="routine",
         callback_number="+15551234567",
         completed_at=datetime.utcnow() - timedelta(days=10),
         review_requested_at=datetime.utcnow() - timedelta(days=5),
@@ -328,9 +363,15 @@ def test_send_due_review_followups_fires_when_reply_outcome_is_unclear(session, 
     monkeypatch.setattr(review_service, "sms_channel", fake_channel)
     client = make_client(session, review_link="https://g.page/r/test")
     job = _job_due_for_followup(session, client)
-    session.add(ReviewReply(business_id=client.id, source_job_id=job.id,
-                           customer_phone="+15551234567", outcome="unclear",
-                           raw_reply_text="huh?"))
+    session.add(
+        ReviewReply(
+            business_id=client.id,
+            source_job_id=job.id,
+            customer_phone="+15551234567",
+            outcome="unclear",
+            raw_reply_text="huh?",
+        )
+    )
     session.commit()
 
     sent = review_service.send_due_review_followups(session)
@@ -345,9 +386,15 @@ def test_send_due_review_followups_is_suppressed_for_every_other_outcome(session
 
     for outcome in ("left_review", "positive", "neutral", "negative", "declined"):
         job = _job_due_for_followup(session, client)
-        session.add(ReviewReply(business_id=client.id, source_job_id=job.id,
-                                customer_phone="+15551234567", outcome=outcome,
-                                raw_reply_text="whatever they said"))
+        session.add(
+            ReviewReply(
+                business_id=client.id,
+                source_job_id=job.id,
+                customer_phone="+15551234567",
+                outcome=outcome,
+                raw_reply_text="whatever they said",
+            )
+        )
         session.commit()
 
     sent = review_service.send_due_review_followups(session)
@@ -357,11 +404,15 @@ def test_send_due_review_followups_is_suppressed_for_every_other_outcome(session
 
 # ---- find_active_review_ask: the reply-routing window -----------------------
 
+
 def test_find_active_review_ask_matches_within_window(session):
     client = make_client(session, review_link="https://g.page/r/test")
     job = Job(
-        business_id=client.id, service_type="AC repair", urgency="routine",
-        callback_number="+1", completed_at=datetime.utcnow() - timedelta(days=6),
+        business_id=client.id,
+        service_type="AC repair",
+        urgency="routine",
+        callback_number="+1",
+        completed_at=datetime.utcnow() - timedelta(days=6),
         review_requested_at=datetime.utcnow() - timedelta(days=1),
     )
     session.add(job)
@@ -376,8 +427,11 @@ def test_find_active_review_ask_matches_within_window(session):
 def test_find_active_review_ask_ignores_expired_window(session):
     client = make_client(session, review_link="https://g.page/r/test")
     job = Job(
-        business_id=client.id, service_type="AC repair", urgency="routine",
-        callback_number="+1", completed_at=datetime.utcnow() - timedelta(days=20),
+        business_id=client.id,
+        service_type="AC repair",
+        urgency="routine",
+        callback_number="+1",
+        completed_at=datetime.utcnow() - timedelta(days=20),
         review_requested_at=datetime.utcnow() - timedelta(days=15),  # outside the reply window
     )
     session.add(job)
@@ -393,15 +447,25 @@ def test_find_active_review_ask_ignores_already_replied(session):
     reply per ask, no re-classification attempts)."""
     client = make_client(session, review_link="https://g.page/r/test")
     job = Job(
-        business_id=client.id, service_type="AC repair", urgency="routine",
-        callback_number="+1", completed_at=datetime.utcnow() - timedelta(days=6),
+        business_id=client.id,
+        service_type="AC repair",
+        urgency="routine",
+        callback_number="+1",
+        completed_at=datetime.utcnow() - timedelta(days=6),
         review_requested_at=datetime.utcnow() - timedelta(days=1),
     )
     session.add(job)
     session.commit()
     session.refresh(job)
-    session.add(ReviewReply(business_id=client.id, source_job_id=job.id,
-                            customer_phone="+1", outcome="unclear", raw_reply_text="already replied"))
+    session.add(
+        ReviewReply(
+            business_id=client.id,
+            source_job_id=job.id,
+            customer_phone="+1",
+            outcome="unclear",
+            raw_reply_text="already replied",
+        )
+    )
     session.commit()
 
     assert review_service.find_active_review_ask(session, client.id, "+1") is None
@@ -409,19 +473,25 @@ def test_find_active_review_ask_ignores_already_replied(session):
 
 # ---- handle_review_reply: classification, one per outcome -------------------
 
+
 def _stub_reply_outcome(outcome: str, reply_text: str = "ok") -> StubAgent:
-    return StubAgent({
-        "reply": reply_text,
-        "jobs": [],
-        "new_messages": [],
-        "pending_tool_call": {"name": "record_review_reply", "input": {"outcome": outcome}},
-    })
+    return StubAgent(
+        {
+            "reply": reply_text,
+            "jobs": [],
+            "new_messages": [],
+            "pending_tool_call": {"name": "record_review_reply", "input": {"outcome": outcome}},
+        }
+    )
 
 
 def _job_awaiting_reply(session, client) -> Job:
     job = Job(
-        business_id=client.id, service_type="AC repair", urgency="routine",
-        customer_name="Mike", callback_number="+15551234567",
+        business_id=client.id,
+        service_type="AC repair",
+        urgency="routine",
+        customer_name="Mike",
+        callback_number="+15551234567",
         completed_at=datetime.utcnow() - timedelta(days=6),
         review_requested_at=datetime.utcnow() - timedelta(days=1),
     )
@@ -436,7 +506,9 @@ def test_handle_review_reply_left_review_records_and_stops_followups(session, mo
     job = _job_awaiting_reply(session, client)
     monkeypatch.setattr(review_service, "agent", _stub_reply_outcome("left_review"))
 
-    reply = review_service.handle_review_reply(session, client, job, "just left you a great review!")
+    reply = review_service.handle_review_reply(
+        session, client, job, "just left you a great review!"
+    )
 
     saved = session.exec(select(ReviewReply).where(ReviewReply.source_job_id == job.id)).first()
     assert saved is not None
@@ -497,8 +569,11 @@ def test_handle_review_reply_negative_records_and_notifies_the_owner(session, mo
     job = _job_awaiting_reply(session, client)
     monkeypatch.setattr(review_service, "agent", _stub_reply_outcome("negative"))
     calls = []
-    monkeypatch.setattr(review_service, "notify_owner_of_escalation",
-                        lambda business, caller, reason, **k: calls.append((caller, reason)) or True)
+    monkeypatch.setattr(
+        review_service,
+        "notify_owner_of_escalation",
+        lambda business, caller, reason, **k: calls.append((caller, reason)) or True,
+    )
 
     reply = review_service.handle_review_reply(
         session, client, job, "honestly the technician was late and rude"
@@ -525,8 +600,11 @@ def test_handle_review_reply_only_negative_triggers_an_owner_notification(sessio
     page the owner — only genuine dissatisfaction does."""
     client = make_client(session, review_link="https://g.page/r/test")
     calls = []
-    monkeypatch.setattr(review_service, "notify_owner_of_escalation",
-                        lambda business, caller, reason, **k: calls.append(1) or True)
+    monkeypatch.setattr(
+        review_service,
+        "notify_owner_of_escalation",
+        lambda business, caller, reason, **k: calls.append(1) or True,
+    )
 
     for outcome in ("left_review", "positive", "neutral", "declined", "unclear"):
         job = _job_awaiting_reply(session, client)
@@ -574,9 +652,15 @@ def test_handle_review_reply_skips_paid_call_past_trial_cap(session, monkeypatch
 
 def test_handle_review_reply_business_isolation(session, monkeypatch):
     client_a = make_client(session, review_link="https://g.page/r/a")
-    client_b = Business(business_name="Other Co", trade="HVAC", hours="9-5",
-                        pricing_faq="n/a", escalation_phone="+15550009999",
-                        inbound_number="+15559991111", review_link="https://g.page/r/b")
+    client_b = Business(
+        business_name="Other Co",
+        trade="HVAC",
+        hours="9-5",
+        pricing_faq="n/a",
+        escalation_phone="+15550009999",
+        inbound_number="+15559991111",
+        review_link="https://g.page/r/b",
+    )
     session.add(client_b)
     session.commit()
     session.refresh(client_b)
@@ -594,13 +678,16 @@ def test_handle_review_reply_business_isolation(session, monkeypatch):
 # quiet. review_link is configuration; the Employee row is the deployment
 # record (ARCHITECTURE.md invariant 8), and it is what these two guard.
 
+
 def test_no_review_request_when_reviews_is_not_deployed(session, monkeypatch):
     fake_channel = FakeSMSChannel()
     monkeypatch.setattr(review_service, "sms_channel", fake_channel)
 
     client = make_client(session, review_link="https://g.page/r/test", deployed=False)
     job = Job(
-        business_id=client.id, service_type="AC repair", urgency="routine",
+        business_id=client.id,
+        service_type="AC repair",
+        urgency="routine",
         callback_number="+15551234567",
         completed_at=datetime.utcnow() - timedelta(days=2),
     )
@@ -619,7 +706,9 @@ def test_no_review_followup_when_reviews_is_not_deployed(session, monkeypatch):
 
     client = make_client(session, review_link="https://g.page/r/test", deployed=False)
     job = Job(
-        business_id=client.id, service_type="AC repair", urgency="routine",
+        business_id=client.id,
+        service_type="AC repair",
+        urgency="routine",
         callback_number="+15551234567",
         completed_at=datetime.utcnow() - timedelta(days=10),
         review_requested_at=datetime.utcnow() - timedelta(days=9),

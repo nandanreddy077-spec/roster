@@ -2,6 +2,7 @@
 created Employee rows (db.py's backfill x2, portal.py's _hire_employee) and
 two more marked a business deployed without creating one at all
 (activation.activate_frontdesk, app.deploy_employee) — audit F1."""
+
 import pytest
 from sqlmodel import select
 
@@ -38,9 +39,7 @@ def test_deploying_the_same_role_twice_creates_one_row(session):
 
     assert first is not None
     assert second is None
-    assert len(session.exec(
-        select(Employee).where(Employee.business_id == b.id)
-    ).all()) == 1
+    assert len(session.exec(select(Employee).where(Employee.business_id == b.id)).all()) == 1
 
 
 def test_deploying_a_planned_employee_is_rejected(session):
@@ -94,9 +93,7 @@ def test_deploy_department_is_idempotent(session):
     second = deploy_department(session, b.id, "customer_service")
 
     assert second == []
-    assert len(session.exec(
-        select(Employee).where(Employee.business_id == b.id)
-    ).all()) == 2
+    assert len(session.exec(select(Employee).where(Employee.business_id == b.id)).all()) == 2
 
 
 def test_re_running_a_partial_deployment_completes_it(session):
@@ -109,9 +106,7 @@ def test_re_running_a_partial_deployment_completes_it(session):
     created = deploy_department(session, b.id, "customer_service")
 
     assert [e.role_key for e in created] == ["reviews"]
-    assert len(session.exec(
-        select(Employee).where(Employee.business_id == b.id)
-    ).all()) == 2
+    assert len(session.exec(select(Employee).where(Employee.business_id == b.id)).all()) == 2
 
 
 def test_deploy_department_rejects_a_department_with_nothing_deployable(session):

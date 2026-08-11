@@ -3,6 +3,7 @@ lapsed customers. Independent of the Frontdesk agent — Recovery owns its own
 intake, reply handling, and booking, so a client can run Recovery without ever
 enabling Frontdesk.
 """
+
 import json
 from datetime import datetime
 from typing import Any, Dict, List, Optional
@@ -14,8 +15,13 @@ from bookings import book_job
 from calendar_provider import get_calendar_provider
 from channels import STOP_KEYWORDS, get_channel
 from db_models import (
-    ORIGIN_QUOTE_RECOVERY, ORIGIN_REACTIVATION,
-    Business, Job, RecoveryCampaign, RecoveryJob, RecoveryMessageLog,
+    ORIGIN_QUOTE_RECOVERY,
+    ORIGIN_REACTIVATION,
+    Business,
+    Job,
+    RecoveryCampaign,
+    RecoveryJob,
+    RecoveryMessageLog,
 )
 from engine import AgentEngine
 from notifications import (
@@ -140,10 +146,15 @@ def enroll_completed_estimates(session: Session) -> List[RecoveryJob]:
             business_id=job.business_id,
             face="quote",
             name=f"Auto-detected: {job.service_type}",
-            customer_list_json=json.dumps([{
-                "phone": job.callback_number, "name": job.customer_name,
-                "service_type": job.service_type,
-            }]),
+            customer_list_json=json.dumps(
+                [
+                    {
+                        "phone": job.callback_number,
+                        "name": job.customer_name,
+                        "service_type": job.service_type,
+                    }
+                ]
+            ),
         )
         session.add(campaign)
         session.commit()
@@ -165,7 +176,9 @@ def enroll_completed_estimates(session: Session) -> List[RecoveryJob]:
     return enrolled
 
 
-def find_active_recovery_job(session: Session, client_id: int, customer_phone: str) -> Optional[RecoveryJob]:
+def find_active_recovery_job(
+    session: Session, client_id: int, customer_phone: str
+) -> Optional[RecoveryJob]:
     return session.exec(
         select(RecoveryJob).where(
             RecoveryJob.business_id == client_id,
@@ -234,7 +247,8 @@ def tick(session: Session) -> List[RecoveryJob]:
         # one claim succeeds — the customer can never be double-texted.
         prior_day = job.last_sent_day
         claim_condition = (
-            RecoveryJob.last_sent_day.is_(None) if prior_day is None
+            RecoveryJob.last_sent_day.is_(None)
+            if prior_day is None
             else RecoveryJob.last_sent_day == prior_day
         )
         claimed = session.execute(
@@ -249,7 +263,9 @@ def tick(session: Session) -> List[RecoveryJob]:
 
         try:
             client = session.get(Business, job.business_id)
-            template = campaign.template_overrides.get(str(due_day)) or TEMPLATES[campaign.face][due_day]
+            template = (
+                campaign.template_overrides.get(str(due_day)) or TEMPLATES[campaign.face][due_day]
+            )
             text = render_template(
                 template,
                 customer_name=job.customer_name or "there",
@@ -258,8 +274,12 @@ def tick(session: Session) -> List[RecoveryJob]:
                 days_since=job.days_since or "",
                 renewal_date=job.anchor_date or "",
             )
-            sms_channel.send(from_number=client.inbound_number or "", to_number=job.customer_phone, body=text)
-            session.add(RecoveryMessageLog(recovery_job_id=job.id, message_day=due_day, message_text=text))
+            sms_channel.send(
+                from_number=client.inbound_number or "", to_number=job.customer_phone, body=text
+            )
+            session.add(
+                RecoveryMessageLog(recovery_job_id=job.id, message_day=due_day, message_text=text)
+            )
             session.commit()
             sent.append(job)
         except Exception as e:
@@ -279,7 +299,9 @@ def tick(session: Session) -> List[RecoveryJob]:
     return sent
 
 
-ESCALATED_REPLY = "Thanks for letting us know — someone from our team will reach out to help with that."
+ESCALATED_REPLY = (
+    "Thanks for letting us know — someone from our team will reach out to help with that."
+)
 
 
 def _escalate(session: Session, client: Business, job: RecoveryJob, reason: str) -> str:
@@ -301,8 +323,12 @@ def _escalate(session: Session, client: Business, job: RecoveryJob, reason: str)
     alert in the app still fires instantly."""
     alerted = notify_owner_of_escalation(client, job.customer_phone, reason)
     record_owner_notification(
-        session, client.id, KIND_ESCALATION, SOURCE_RECOVERY_ESCALATION,
-        build_escalation_message(client, job.customer_phone, reason), alerted,
+        session,
+        client.id,
+        KIND_ESCALATION,
+        SOURCE_RECOVERY_ESCALATION,
+        build_escalation_message(client, job.customer_phone, reason),
+        alerted,
     )
     job.current_status = "escalated"
     job.escalation_reason = reason
@@ -314,11 +340,16 @@ def _origin_for_face(session: Session, job: RecoveryJob) -> str:
     reactivation and membership are both Retention Manager's, matching how
     metrics.py already groups them."""
     campaign = session.get(RecoveryCampaign, job.campaign_id)
-    return (ORIGIN_QUOTE_RECOVERY if campaign is not None and campaign.face == "quote"
-            else ORIGIN_REACTIVATION)
+    return (
+        ORIGIN_QUOTE_RECOVERY
+        if campaign is not None and campaign.face == "quote"
+        else ORIGIN_REACTIVATION
+    )
 
 
-def handle_recovery_reply(session: Session, client: Business, job: RecoveryJob, text: str) -> Optional[str]:
+def handle_recovery_reply(
+    session: Session, client: Business, job: RecoveryJob, text: str
+) -> Optional[str]:
     """Process an inbound reply to an active Recovery sequence. Returns the text
     to send back to the customer (caller sends it — TwiML for SMS)."""
     log = session.exec(
@@ -356,17 +387,25 @@ def handle_recovery_reply(session: Session, client: Business, job: RecoveryJob, 
             max_iters=2,
         )
         record_usage(session, client)
-        reply = result["reply"] or "Sorry, could you confirm which time works — the first, second, or third option?"
+        reply = (
+            result["reply"]
+            or "Sorry, could you confirm which time works — the first, second, or third option?"
+        )
         pending = result["pending_tool_call"]
         if pending and pending["name"] == "escalate_to_owner":
-            reason = pending["input"].get("reason") or "Needs help the automated follow-up can't provide."
+            reason = (
+                pending["input"].get("reason")
+                or "Needs help the automated follow-up can't provide."
+            )
             reply = _escalate(session, client, job, reason)
         elif pending and pending["name"] == "confirm_slot":
             idx = pending["input"]["slot_index"]
             slots = job.offered_slots
             if isinstance(idx, int) and 0 <= idx < len(slots):
                 chosen = slots[idx]
-                cust = get_or_create_customer(session, client.id, job.customer_phone, job.customer_name)
+                cust = get_or_create_customer(
+                    session, client.id, job.customer_phone, job.customer_name
+                )
                 new_job, _ = book_job(
                     session,
                     client,
@@ -394,8 +433,12 @@ def handle_recovery_reply(session: Session, client: Business, job: RecoveryJob, 
                 # (VULN-0003, declined).
                 delivered = notify_owner_of_booking(client, new_job, employee_name="Quote Chaser")
                 record_owner_notification(
-                    session, client.id, KIND_JOB_BOOKED, SOURCE_RECOVERY_BOOKING,
-                    build_owner_message(new_job, "Quote Chaser"), delivered,
+                    session,
+                    client.id,
+                    KIND_JOB_BOOKED,
+                    SOURCE_RECOVERY_BOOKING,
+                    build_owner_message(new_job, "Quote Chaser"),
+                    delivered,
                 )
         elif (
             pending
@@ -421,10 +464,14 @@ def handle_recovery_reply(session: Session, client: Business, job: RecoveryJob, 
     pending = result["pending_tool_call"]
 
     if pending and pending["name"] == "escalate_to_owner":
-        reason = pending["input"].get("reason") or "Needs help the automated follow-up can't provide."
+        reason = (
+            pending["input"].get("reason") or "Needs help the automated follow-up can't provide."
+        )
         reply = _escalate(session, client, job, reason)
     else:
-        intent = pending["input"]["intent"] if pending and pending["name"] == "record_response" else None
+        intent = (
+            pending["input"]["intent"] if pending and pending["name"] == "record_response" else None
+        )
         if intent == "interested":
             provider = get_calendar_provider(client)
             slots = provider.get_available_slots(client.hours)

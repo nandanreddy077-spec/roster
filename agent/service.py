@@ -4,6 +4,7 @@ One code path so a real customer text and a dashboard test message are handled
 identically: load this customer's thread, run the agent, persist the turn, and
 capture any booked jobs.
 """
+
 import json
 from datetime import datetime
 from typing import Any, Dict, List, Optional
@@ -49,7 +50,10 @@ def _load_history(session: Session, client_id: int, customer_phone: str) -> List
 
 
 def handle_customer_message(
-    session: Session, client: Business, customer_phone: str, text: str,
+    session: Session,
+    client: Business,
+    customer_phone: str,
+    text: str,
     external_id: str | None = None,
 ) -> Dict[str, Any]:
     """Run one customer turn through the agent. Persists messages and any jobs.
@@ -105,7 +109,8 @@ def handle_customer_message(
     # "I'm alerting our team" while the owner received an ordinary
     # "just booked a job" text, indistinguishable from a routine call.
     result = agent.respond(
-        client.to_config(), history,
+        client.to_config(),
+        history,
         tools=[LOG_JOB_TOOL, TRANSFER_CALL_TOOL],
         system_prompt=system,
     )
@@ -136,10 +141,14 @@ def handle_customer_message(
         # indistinguishable from a customer who simply texted in. Read off
         # the history already in hand; no extra query, no string matching on
         # the opener.
-        origin = (ORIGIN_MISSED_CALL if history and history[0].get("role") == "assistant"
-                  else ORIGIN_INBOUND)
-        job, created = book_job(session, client, customer_phone, customer_phone, ji,
-                                customer_id=cust.id, origin=origin)
+        origin = (
+            ORIGIN_MISSED_CALL
+            if history and history[0].get("role") == "assistant"
+            else ORIGIN_INBOUND
+        )
+        job, created = book_job(
+            session, client, customer_phone, customer_phone, ji, customer_id=cust.id, origin=origin
+        )
         captured.append(job)
         if created:
             newly_created.append(job)
@@ -156,8 +165,12 @@ def handle_customer_message(
         # owner's notifications feed, exactly as it doesn't get an SMS.
         if not is_test_thread(job.customer_phone):
             record_owner_notification(
-                session, client.id, KIND_JOB_BOOKED, SOURCE_SMS_BOOKING,
-                build_owner_message(job, "Frontdesk"), delivered,
+                session,
+                client.id,
+                KIND_JOB_BOOKED,
+                SOURCE_SMS_BOOKING,
+                build_owner_message(job, "Frontdesk"),
+                delivered,
             )
 
     # Strictly after the booking commit above, same rule the voice path follows:
@@ -172,8 +185,11 @@ def handle_customer_message(
 
 
 def _escalate(
-    session: Session, client: Business, customer_phone: str,
-    args: Dict[str, Any], reply: str,
+    session: Session,
+    client: Business,
+    customer_phone: str,
+    args: Dict[str, Any],
+    reply: str,
 ) -> str:
     """Execute an alert_owner tool call from the SMS path and return the reply
     the customer should actually receive.
@@ -188,7 +204,8 @@ def _escalate(
     reason = args.get("reason") or "customer needs the owner"
     customer = get_or_create_customer(session, client.id, customer_phone)
     job, should_notify = record_escalation(
-        session, client, customer_phone, customer_phone, reason, customer_id=customer.id)
+        session, client, customer_phone, customer_phone, reason, customer_id=customer.id
+    )
 
     # The owner's own dashboard test must never page them, exactly as it
     # never produces a booking text (notify_owner_of_booking's same check).
@@ -201,8 +218,12 @@ def _escalate(
 
     alerted = notify_owner_of_escalation(client, customer_phone, reason)
     record_owner_notification(
-        session, client.id, KIND_ESCALATION, SOURCE_ALERT_OWNER,
-        build_escalation_message(client, customer_phone, reason), alerted,
+        session,
+        client.id,
+        KIND_ESCALATION,
+        SOURCE_ALERT_OWNER,
+        build_escalation_message(client, customer_phone, reason),
+        alerted,
     )
     if alerted:
         job.owner_alerted_at = datetime.utcnow()

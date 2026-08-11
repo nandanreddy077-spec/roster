@@ -5,6 +5,7 @@ call. These tests pin that shut, because the open version was not merely
 redundant: /signup led into a wizard whose final POST called
 activate_frontdesk() -> buy_twilio_number(), so any stranger could make Roster
 buy a phone number for a business ops had never heard of."""
+
 from fastapi.testclient import TestClient
 from sqlmodel import Session, select
 

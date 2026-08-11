@@ -8,8 +8,11 @@ from lead_qualifier_rules import REASON_MEMBERSHIP_ELIGIBLE_NO_PLAN
 
 def make_client(session, **overrides) -> Business:
     defaults = dict(
-        business_name="Ridgeline Plumbing", trade="Plumbing", hours="9-5",
-        pricing_faq="n/a", escalation_phone="+15550000000",
+        business_name="Ridgeline Plumbing",
+        trade="Plumbing",
+        hours="9-5",
+        pricing_faq="n/a",
+        escalation_phone="+15550000000",
         inbound_number="+15559990000",
     )
     defaults.update(overrides)
@@ -22,7 +25,9 @@ def make_client(session, **overrides) -> Business:
 
 def _job(session, client, **overrides) -> Job:
     defaults = dict(
-        business_id=client.id, service_type="AC not cooling", urgency="routine",
+        business_id=client.id,
+        service_type="AC not cooling",
+        urgency="routine",
         callback_number="+15551234567",
     )
     defaults.update(overrides)
@@ -39,6 +44,7 @@ def _job(session, client, **overrides) -> Job:
 # below that expects real qualification to happen deploys the employee
 # first; the tests in this section prove the gate itself.
 
+
 def test_qualify_new_jobs_skips_a_job_for_an_undeployed_business(session):
     client = make_client(session)  # never deployed
     _job(session, client)
@@ -51,7 +57,9 @@ def test_qualify_new_jobs_skips_a_job_for_an_undeployed_business(session):
 
 def test_qualify_new_jobs_only_processes_deployed_businesses(session):
     deployed = make_client(session, business_name="Deployed Co", inbound_number="+15559990003")
-    not_deployed = make_client(session, business_name="Not Deployed Co", inbound_number="+15559990004")
+    not_deployed = make_client(
+        session, business_name="Not Deployed Co", inbound_number="+15559990004"
+    )
     deploy_role(session, deployed.id, "lead_qualifier")
     job_a = _job(session, deployed, callback_number="+1")
     _job(session, not_deployed, callback_number="+2")
@@ -64,6 +72,7 @@ def test_qualify_new_jobs_only_processes_deployed_businesses(session):
 
 
 # ---- classification behavior (deployment already established) --------------
+
 
 def test_qualify_new_jobs_creates_one_row_per_job(session):
     client = make_client(session)

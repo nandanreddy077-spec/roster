@@ -1,6 +1,7 @@
 """Setting a client up used to mean remembering which of five scattered panels
 still had work in it. These tests pin the checklist that replaced that, and the
 one rule it exists to enforce: nothing is green unless a real column says so."""
+
 import base64
 
 from fastapi.testclient import TestClient
@@ -93,8 +94,12 @@ def test_creating_a_client_stores_the_owner_email(monkeypatch, test_engine):
         "/clients/new",
         headers=_basic(),
         data={
-            "business_name": "Ridgeline", "trade": "Plumbing", "services": "Drains",
-            "hours": "Mon-Sat", "pricing_faq": "$99", "escalation_phone": "5125550100",
+            "business_name": "Ridgeline",
+            "trade": "Plumbing",
+            "services": "Drains",
+            "hours": "Mon-Sat",
+            "pricing_faq": "$99",
+            "escalation_phone": "5125550100",
             "owner_email": "Owner@Ridgeline.com",
         },
         follow_redirects=False,
@@ -115,8 +120,12 @@ def test_a_duplicate_owner_email_keeps_the_business_and_reports_it(monkeypatch, 
         "/clients/new",
         headers=_basic(),
         data={
-            "business_name": "Ridgeline", "trade": "Plumbing", "services": "Drains",
-            "hours": "Mon-Sat", "pricing_faq": "$99", "escalation_phone": "5125550100",
+            "business_name": "Ridgeline",
+            "trade": "Plumbing",
+            "services": "Drains",
+            "hours": "Mon-Sat",
+            "pricing_faq": "$99",
+            "escalation_phone": "5125550100",
             "owner_email": "taken@example.com",
         },
         follow_redirects=False,
@@ -124,7 +133,9 @@ def test_a_duplicate_owner_email_keeps_the_business_and_reports_it(monkeypatch, 
     assert response.status_code == 303
     assert "access_error" in response.headers["location"]
     with Session(test_engine) as session:
-        created = session.exec(select(Business).where(Business.business_name == "Ridgeline")).first()
+        created = session.exec(
+            select(Business).where(Business.business_name == "Ridgeline")
+        ).first()
         assert created is not None
         assert created.email is None
 
@@ -137,8 +148,10 @@ def test_the_founder_can_set_the_owner_email_later(monkeypatch, test_engine):
 
     client = TestClient(app_module.app)
     client.post(
-        "/clients/1/owner-email", headers=_basic(),
-        data={"owner_email": "owner@ridgeline.com"}, follow_redirects=False,
+        "/clients/1/owner-email",
+        headers=_basic(),
+        data={"owner_email": "owner@ridgeline.com"},
+        follow_redirects=False,
     )
     with Session(test_engine) as session:
         assert session.get(Business, 1).email == "owner@ridgeline.com"
@@ -153,8 +166,10 @@ def test_setting_an_email_already_on_another_business_is_refused(monkeypatch, te
 
     client = TestClient(app_module.app)
     response = client.post(
-        "/clients/2/owner-email", headers=_basic(),
-        data={"owner_email": "taken@example.com"}, follow_redirects=False,
+        "/clients/2/owner-email",
+        headers=_basic(),
+        data={"owner_email": "taken@example.com"},
+        follow_redirects=False,
     )
     assert "access_error" in response.headers["location"]
     with Session(test_engine) as session:

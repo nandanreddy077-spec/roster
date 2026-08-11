@@ -12,6 +12,7 @@ client. In production Railway sits behind a proxy, so the request scheme can
 read as http even though the public URL is https; set OAUTH_REDIRECT_BASE_URL
 (e.g. https://rosterhires.com) to pin it and avoid a redirect_uri_mismatch.
 """
+
 import os
 from typing import Optional
 

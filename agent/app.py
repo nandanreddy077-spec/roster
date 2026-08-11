@@ -41,14 +41,30 @@ import metrics
 from notifications import is_test_thread
 from locks import conversation_lock
 from db_models import (
-    BILLING_PAID, BILLING_TRIAL,
-    AccessRequest, Business, Customer, DepartmentInterest, Employee, Event, Job, Message,
-    OwnerNotification, RecoveryCampaign, RecoveryJob, RecoveryMessageLog, ReferralLead,
+    BILLING_PAID,
+    BILLING_TRIAL,
+    AccessRequest,
+    Business,
+    Customer,
+    DepartmentInterest,
+    Employee,
+    Event,
+    Job,
+    Message,
+    OwnerNotification,
+    RecoveryCampaign,
+    RecoveryJob,
+    RecoveryMessageLog,
+    ReferralLead,
     WebhookDelivery,
 )
 from portal import router as portal_router
 from provisioning import (
-    ProvisioningError, buy_twilio_number, provision_voice, public_base_url, verify_voice_wiring,
+    ProvisioningError,
+    buy_twilio_number,
+    provision_voice,
+    public_base_url,
+    verify_voice_wiring,
 )
 from recovery_engine import FACE_DISPLAY_NAMES
 from membership_service import find_active_membership_offer, handle_membership_reply
@@ -70,12 +86,12 @@ from xai_voice_adapter import (
 # crashing so a deliberate partial deploy (e.g. pre-KYC, no Twilio yet) still
 # boots — but never silently.
 _PRODUCTION_CRITICAL_ENV = (
-    "ANTHROPIC_API_KEY",   # no agent replies at all
-    "DATABASE_URL",        # falls back to local SQLite: single-writer + dies with the container
+    "ANTHROPIC_API_KEY",  # no agent replies at all
+    "DATABASE_URL",  # falls back to local SQLite: single-writer + dies with the container
     "TWILIO_ACCOUNT_SID",  # outbound SMS prints to console instead of sending
     "TWILIO_AUTH_TOKEN",
-    "XAI_API_KEY",         # live-voice calls die at connect
-    "PUBLIC_BASE_URL",     # webhooks register against the wrong host
+    "XAI_API_KEY",  # live-voice calls die at connect
+    "PUBLIC_BASE_URL",  # webhooks register against the wrong host
 )
 
 
@@ -187,8 +203,11 @@ app.include_router(portal_router)
 init_db()
 
 for _missing in warn_missing_production_env(os.environ):
-    print(f"[PRODUCTION WARNING] {_missing} is not set — see app.py:_PRODUCTION_CRITICAL_ENV "
-          "for what silently breaks without it.", file=sys.stderr)
+    print(
+        f"[PRODUCTION WARNING] {_missing} is not set — see app.py:_PRODUCTION_CRITICAL_ENV "
+        "for what silently breaks without it.",
+        file=sys.stderr,
+    )
 
 
 # ---- Background tick scheduler ----------------------------------------------
@@ -233,7 +252,7 @@ def _authorized(header: str | None, expected_password: str) -> bool:
     if not header or not header.startswith("Basic "):
         return False
     try:
-        decoded = base64.b64decode(header[len("Basic "):]).decode()
+        decoded = base64.b64decode(header[len("Basic ") :]).decode()
         _, _, password = decoded.partition(":")
     except Exception:
         return False
@@ -271,7 +290,10 @@ def twiml_reply(body: str) -> Response:
 
 
 def twiml_empty() -> Response:
-    return Response(content='<?xml version="1.0" encoding="UTF-8"?><Response></Response>', media_type="application/xml")
+    return Response(
+        content='<?xml version="1.0" encoding="UTF-8"?><Response></Response>',
+        media_type="application/xml",
+    )
 
 
 # ---- Public landing page ---------------------------------------------------
@@ -360,9 +382,7 @@ def _employees_by_business(session, business_ids: list) -> dict:
     """
     if not business_ids:
         return {}
-    rows = session.exec(
-        select(Employee).where(Employee.business_id.in_(business_ids))
-    ).all()
+    rows = session.exec(select(Employee).where(Employee.business_id.in_(business_ids))).all()
     grouped = {bid: [] for bid in business_ids}
     for e in rows:
         grouped.setdefault(e.business_id, []).append(e)
@@ -383,7 +403,7 @@ def _founder_department_rows(employees: list) -> list:
 
 
 def _setup_checklist(client: Business, department_rows: list, real_job_count: int) -> list:
-    """"Is this shop actually live?" answered in one place, in the order the
+    """ "Is this shop actually live?" answered in one place, in the order the
     founder does the work, so setup stops being a memory game across five
     scattered panels.
 
@@ -395,24 +415,36 @@ def _setup_checklist(client: Business, department_rows: list, real_job_count: in
     """
     staffed = [r for r in department_rows if r["status"].state in ("staffed", "partial")]
     return [
-        {"label": "Business details captured",
-         "done": bool(client.business_name and client.trade and client.hours),
-         "hint": "Name, trade, hours and pricing — what Frontdesk answers from."},
-        {"label": "AI phone number provisioned",
-         "done": bool(client.inbound_number),
-         "hint": "Buy & wire up a number below. Without one there is no SMS and no voice."},
-        {"label": "Live voice registered with xAI",
-         "done": bool(client.xai_phone_number),
-         "hint": "SMS works without this; answering an actual phone call does not."},
-        {"label": "A department staffed",
-         "done": bool(staffed),
-         "hint": "Deploy at least one department, or nothing runs for this business."},
-        {"label": "Owner can reach their dashboard",
-         "done": bool(client.email),
-         "hint": "Send the access link below. Setting their email adds Google sign-in as a backup."},
-        {"label": "Answered a real customer",
-         "done": real_job_count > 0,
-         "hint": "Not done until a real call or text books a job. Test bookings don't count."},
+        {
+            "label": "Business details captured",
+            "done": bool(client.business_name and client.trade and client.hours),
+            "hint": "Name, trade, hours and pricing — what Frontdesk answers from.",
+        },
+        {
+            "label": "AI phone number provisioned",
+            "done": bool(client.inbound_number),
+            "hint": "Buy & wire up a number below. Without one there is no SMS and no voice.",
+        },
+        {
+            "label": "Live voice registered with xAI",
+            "done": bool(client.xai_phone_number),
+            "hint": "SMS works without this; answering an actual phone call does not.",
+        },
+        {
+            "label": "A department staffed",
+            "done": bool(staffed),
+            "hint": "Deploy at least one department, or nothing runs for this business.",
+        },
+        {
+            "label": "Owner can reach their dashboard",
+            "done": bool(client.email),
+            "hint": "Send the access link below. Setting their email adds Google sign-in as a backup.",
+        },
+        {
+            "label": "Answered a real customer",
+            "done": real_job_count > 0,
+            "hint": "Not done until a real call or text books a job. Test bookings don't count.",
+        },
     ]
 
 
@@ -473,10 +505,14 @@ def request_access(
     business_name: str = Form(""),
 ):
     with Session(engine) as session:
-        session.add(AccessRequest(
-            name=name.strip(), phone=phone.strip(),
-            trade=trade.strip(), business_name=business_name.strip(),
-        ))
+        session.add(
+            AccessRequest(
+                name=name.strip(),
+                phone=phone.strip(),
+                trade=trade.strip(),
+                business_name=business_name.strip(),
+            )
+        )
         session.commit()
     return RedirectResponse("/thanks", status_code=303)
 
@@ -489,11 +525,15 @@ def request_access_thanks(request: Request):
 @app.get("/clients/new")
 def new_client_form(request: Request):
     return templates.TemplateResponse(
-        request, "new_client.html",
-        {"deployable_departments": [
-            d for d in departments.hireable_departments()
-            if departments.deployable_employees_for(d.key)
-        ]},
+        request,
+        "new_client.html",
+        {
+            "deployable_departments": [
+                d
+                for d in departments.hireable_departments()
+                if departments.deployable_employees_for(d.key)
+            ]
+        },
     )
 
 
@@ -581,8 +621,7 @@ def set_owner_email(client_id: int, owner_email: str = Form("")):
         if client is None:
             raise HTTPException(status_code=404, detail="No such client")
         taken = (
-            session.exec(select(Business).where(Business.email == email)).first()
-            if email else None
+            session.exec(select(Business).where(Business.email == email)).first() if email else None
         )
         if taken is not None and taken.id != client_id:
             access_error = f"{email} is already on another business."
@@ -684,7 +723,9 @@ def retry_xai_registration(client_id: int):
     with Session(engine) as session:
         client = session.get(Business, client_id)
         if not client.inbound_number or not client.twilio_number_sid:
-            raise HTTPException(status_code=400, detail="No purchased number to retry xAI registration for")
+            raise HTTPException(
+                status_code=400, detail="No purchased number to retry xAI registration for"
+            )
         # Idempotent: if registration already succeeded and only the trunk work
         # failed, this resumes from there instead of re-registering (which would
         # 409) — the whole reason the secret is now persisted separately.
@@ -796,16 +837,21 @@ def complete_job(client_id: int, job_id: int, value: str = Form("")):
             # than the record that it happened. Post-commit either way — the
             # completion above is already durable.
             try:
-                bus.publish(session, DomainEvent(
-                    type=JOB_COMPLETED,
-                    business_id=job.business_id,
-                    customer_id=job.customer_id,
-                    payload={"job_id": job.id, "service_type": job.service_type},
-                    dedup_key=f"job.completed:{job.id}",
-                ))
+                bus.publish(
+                    session,
+                    DomainEvent(
+                        type=JOB_COMPLETED,
+                        business_id=job.business_id,
+                        customer_id=job.customer_id,
+                        payload={"job_id": job.id, "service_type": job.service_type},
+                        dedup_key=f"job.completed:{job.id}",
+                    ),
+                )
             except Exception as e:
-                print(f"[events] failed to publish job.completed for job {job_id}: {e}",
-                      file=sys.stderr)
+                print(
+                    f"[events] failed to publish job.completed for job {job_id}: {e}",
+                    file=sys.stderr,
+                )
     return RedirectResponse(f"/clients/{client_id}", status_code=303)
 
 
@@ -971,7 +1017,11 @@ def delete_client(client_id: int, confirm_name: str = Form(...)):
             raise HTTPException(status_code=400, detail="Business name confirmation did not match")
 
         recovery_job_ids = select(RecoveryJob.id).where(RecoveryJob.business_id == client_id)
-        session.exec(delete(RecoveryMessageLog).where(RecoveryMessageLog.recovery_job_id.in_(recovery_job_ids)))
+        session.exec(
+            delete(RecoveryMessageLog).where(
+                RecoveryMessageLog.recovery_job_id.in_(recovery_job_ids)
+            )
+        )
         session.exec(delete(Event).where(Event.business_id == client_id))
         session.exec(delete(DepartmentInterest).where(DepartmentInterest.business_id == client_id))
         session.exec(delete(OwnerNotification).where(OwnerNotification.business_id == client_id))
@@ -1027,7 +1077,8 @@ def create_recovery_campaign(
                     datetime.strptime(parts[3], "%Y-%m-%d")
                 except ValueError:
                     raise HTTPException(
-                        400, detail=f"Row {i}: '{parts[3]}' is not a valid renewal date (use YYYY-MM-DD)"
+                        400,
+                        detail=f"Row {i}: '{parts[3]}' is not a valid renewal date (use YYYY-MM-DD)",
                     )
                 entry["anchor_date"] = parts[3]
             else:
@@ -1047,7 +1098,9 @@ def recovery_campaign_detail(request: Request, client_id: int, campaign_id: int)
         client = session.get(Business, client_id)
         campaign = session.get(RecoveryCampaign, campaign_id)
         jobs = session.exec(
-            select(RecoveryJob).where(RecoveryJob.campaign_id == campaign_id).order_by(RecoveryJob.id)
+            select(RecoveryJob)
+            .where(RecoveryJob.campaign_id == campaign_id)
+            .order_by(RecoveryJob.id)
         ).all()
     return templates.TemplateResponse(
         request,
@@ -1076,10 +1129,14 @@ def client_detail(request: Request, client_id: int):
             select(Job).where(Job.business_id == client_id).order_by(Job.created_at.desc())
         ).all()
         campaigns = session.exec(
-            select(RecoveryCampaign).where(RecoveryCampaign.business_id == client_id).order_by(RecoveryCampaign.created_at.desc())
+            select(RecoveryCampaign)
+            .where(RecoveryCampaign.business_id == client_id)
+            .order_by(RecoveryCampaign.created_at.desc())
         ).all()
         referral_leads = session.exec(
-            select(ReferralLead).where(ReferralLead.business_id == client_id).order_by(ReferralLead.created_at.desc())
+            select(ReferralLead)
+            .where(ReferralLead.business_id == client_id)
+            .order_by(ReferralLead.created_at.desc())
         ).all()
         department_rows = _founder_department_rows(
             session.exec(select(Employee).where(Employee.business_id == client_id)).all()
@@ -1097,8 +1154,7 @@ def client_detail(request: Request, client_id: int):
         access_link = _access_link(client)
 
     chat = [
-        {"role": m.role, "text": extract_display_text(json.loads(m.content_json))}
-        for m in messages
+        {"role": m.role, "text": extract_display_text(json.loads(m.content_json))} for m in messages
     ]
     chat = [c for c in chat if c["text"]]
 
@@ -1183,6 +1239,7 @@ def _webhook_timestamp_fresh(timestamp_header: str | None) -> bool:
     except ValueError:
         return False
     import time as _time
+
     return abs(_time.time() - ts) <= WEBHOOK_TIMESTAMP_TOLERANCE_SECONDS
 
 
@@ -1249,8 +1306,9 @@ async def inbound_sms(request: Request):
     return response
 
 
-def _process_inbound_sms(from_number: str, to_number: str, body: str,
-                         message_sid: str | None = None) -> str | None:
+def _process_inbound_sms(
+    from_number: str, to_number: str, body: str, message_sid: str | None = None
+) -> str | None:
     """The actual (blocking) work for an inbound SMS turn — runs in a worker
     thread so one slow Claude call doesn't stall every other concurrent call/text
     this process is handling (see run_in_threadpool call above)."""
@@ -1280,8 +1338,9 @@ def _process_inbound_sms(from_number: str, to_number: str, body: str,
             review_job = find_active_review_ask(session, client.id, from_number)
             if review_job is not None:
                 return handle_review_reply(session, client, review_job, body)
-            result = handle_customer_message(session, client, from_number, body,
-                                             external_id=message_sid)
+            result = handle_customer_message(
+                session, client, from_number, body, external_id=message_sid
+            )
             return result["reply"]
 
 
@@ -1311,7 +1370,11 @@ async def missed_call(request: Request):
         client = _find_client_by_inbound(session, To)
         if client is None:
             return Response(status_code=204)
-        session.add(WebhookDelivery(provider="twilio-voice-status", dedup_key=f"twilio-voice-status:{CallSid}"))
+        session.add(
+            WebhookDelivery(
+                provider="twilio-voice-status", dedup_key=f"twilio-voice-status:{CallSid}"
+            )
+        )
         try:
             session.commit()
         except IntegrityError:
@@ -1421,7 +1484,9 @@ async def xai_incoming_call(request: Request):
     # Must not block this webhook response on the call itself — the call
     # lives for minutes, xAI just wants a fast ack that we're handling it.
     task = asyncio.create_task(
-        run_xai_call(parsed["call_id"], client, parsed["from"], lambda: Session(engine), trace=trace)
+        run_xai_call(
+            parsed["call_id"], client, parsed["from"], lambda: Session(engine), trace=trace
+        )
     )
     supervise_call_task(task, parsed["call_id"])
     return Response(status_code=200)

@@ -3,6 +3,7 @@ the session-signing key, and founder-issued dashboard access links. Fully
 separate from the founder's HTTP-Basic admin auth in app.py — no shared
 credential path between the two.
 """
+
 from typing import Optional
 
 import bcrypt

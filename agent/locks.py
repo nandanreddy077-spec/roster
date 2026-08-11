@@ -12,6 +12,7 @@ so a process-local threading.Lock suffices. Postgres deployments may run many
 workers/hosts, so the lock is a pg_advisory_lock held on a dedicated
 connection for the duration of the turn.
 """
+
 import hashlib
 import threading
 from contextlib import contextmanager

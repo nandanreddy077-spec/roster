@@ -9,8 +9,9 @@ from conftest import login_as, provisioned_business
 def _live_client(client: TestClient, test_engine):
     """A shop the founder provisioned and activated. Built directly now that
     the self-serve wizard is retired — there is no flow to walk."""
-    business_id = provisioned_business(test_engine, frontdesk_live=True,
-                                       inbound_number="+15125550123")
+    business_id = provisioned_business(
+        test_engine, frontdesk_live=True, inbound_number="+15125550123"
+    )
     login_as(client, business_id)
     return business_id
 

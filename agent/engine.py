@@ -142,8 +142,7 @@ TRADE_TRIAGE_NOTES: Dict[str, str] = {
     ),
 }
 DEFAULT_TRIAGE_NOTE = (
-    "Ask enough questions to understand what's actually needed and how "
-    "urgent it is before booking."
+    "Ask enough questions to understand what's actually needed and how urgent it is before booking."
 )
 
 
@@ -203,8 +202,8 @@ _ESTIMATE_NOTE = (
 # same content) rather than stacked as their own blocks — the conversation-
 # flow cleanup this sprint also asked for.
 _MULTI_ISSUE_NOTE = (
-    'If the caller mentions more than one separate problem in the same '
-    'call — e.g. "my AC isn\'t cooling and I also have a leaking water '
+    "If the caller mentions more than one separate problem in the same "
+    "call — e.g. \"my AC isn't cooling and I also have a leaking water "
     'heater" — treat them as separate issues: ask enough about each one, '
     "and call log_job once per issue with its own service_type, rather "
     "than merging unrelated problems into a single booking."
@@ -375,7 +374,9 @@ to capture the lead before ending the call."""
 
 class AgentEngine:
     def __init__(self, api_key: Optional[str] = None, client: Optional[Any] = None):
-        self.client = client or anthropic.Anthropic(api_key=api_key or os.environ.get("ANTHROPIC_API_KEY"))
+        self.client = client or anthropic.Anthropic(
+            api_key=api_key or os.environ.get("ANTHROPIC_API_KEY")
+        )
 
     def respond(
         self,
@@ -445,15 +446,23 @@ class AgentEngine:
                 # bricked that customer's thread. Found by an end-to-end run
                 # against real Claude, 2026-08-10; every prior test stubbed the
                 # engine and therefore never replayed what it had written.
-                new_messages.append({"role": "user", "content": [
+                new_messages.append(
                     {
-                        "type": "tool_result",
-                        "tool_use_id": t.id,
-                        "content": ("Logged. The job is captured for the team."
-                                    if t.name == LOG_JOB_TOOL["name"] else "Acknowledged."),
+                        "role": "user",
+                        "content": [
+                            {
+                                "type": "tool_result",
+                                "tool_use_id": t.id,
+                                "content": (
+                                    "Logged. The job is captured for the team."
+                                    if t.name == LOG_JOB_TOOL["name"]
+                                    else "Acknowledged."
+                                ),
+                            }
+                            for t in all_tool_uses
+                        ],
                     }
-                    for t in all_tool_uses
-                ]})
+                )
                 if text_parts:
                     reply_text = " ".join(text_parts).strip()
                 break

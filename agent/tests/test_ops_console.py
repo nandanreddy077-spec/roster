@@ -4,6 +4,7 @@ Before Phase 4b the 'Agent roster' on this page was a fiction: Frontdesk was
 hardcoded active for every business, and the other tiles derived 'active' from
 unrelated config fields (a review link being set, a campaign existing). The
 founder has never had a real deployment view — see audit B1."""
+
 from sqlalchemy import event
 from sqlmodel import Session, select
 from starlette.testclient import TestClient
@@ -46,7 +47,9 @@ def test_a_deployed_department_is_shown_as_staffed(test_engine, monkeypatch):
     assert "Working: Frontdesk, Reviews" in body
 
 
-def test_a_partially_staffed_department_offers_completion_not_a_fresh_deploy(test_engine, monkeypatch):
+def test_a_partially_staffed_department_offers_completion_not_a_fresh_deploy(
+    test_engine, monkeypatch
+):
     """B9: the affordance must tell the truth about what the click will do."""
     monkeypatch.setattr(app_module, "engine", test_engine)
     with Session(test_engine) as s:
@@ -130,8 +133,9 @@ def test_deploying_a_department_creates_every_deployable_role(test_engine, monke
 
     assert r.status_code == 303
     with Session(test_engine) as s:
-        keys = {e.role_key for e in s.exec(
-            select(Employee).where(Employee.business_id == bid)).all()}
+        keys = {
+            e.role_key for e in s.exec(select(Employee).where(Employee.business_id == bid)).all()
+        }
         assert keys == {"frontdesk", "reviews"}
 
 
@@ -177,8 +181,9 @@ def test_the_legacy_role_key_form_still_works(test_engine, monkeypatch):
     _post_deploy(bid, role_key="quote_chaser")
 
     with Session(test_engine) as s:
-        assert [e.role_key for e in s.exec(
-            select(Employee).where(Employee.business_id == bid)).all()] == ["quote_chaser"]
+        assert [
+            e.role_key for e in s.exec(select(Employee).where(Employee.business_id == bid)).all()
+        ] == ["quote_chaser"]
 
 
 def test_deploying_a_department_then_following_the_redirect_shows_it_staffed(
@@ -325,8 +330,8 @@ def test_open_expansion_requests_are_shown_oldest_first(test_engine, monkeypatch
     monkeypatch.setattr(app_module, "engine", test_engine)
     with Session(test_engine) as s:
         bid = _business(s).id
-        record_interest(s, bid, "marketing")   # asked first
-        record_interest(s, bid, "finance")     # asked second
+        record_interest(s, bid, "marketing")  # asked first
+        record_interest(s, bid, "finance")  # asked second
 
     body = TestClient(app_module.app, headers=DASH_AUTH).get(f"/clients/{bid}").text
 
@@ -379,8 +384,7 @@ def test_actioning_the_same_request_twice_is_harmless(test_engine, monkeypatch):
     with Session(test_engine) as s:
         first_time = s.get(DepartmentInterest, interest_id).actioned_at
 
-    second = client.post(f"/clients/{bid}/interests/{interest_id}/actioned",
-                         follow_redirects=False)
+    second = client.post(f"/clients/{bid}/interests/{interest_id}/actioned", follow_redirects=False)
 
     assert second.status_code == 303
     with Session(test_engine) as s:
@@ -433,8 +437,7 @@ def test_clients_new_captures_every_field_the_retired_wizard_collected(test_engi
     )
 
     with Session(test_engine) as s:
-        b = s.exec(select(Business).where(
-            Business.business_name == "Ridgeline Plumbing")).first()
+        b = s.exec(select(Business).where(Business.business_name == "Ridgeline Plumbing")).first()
         assert b.trade == "Plumbing"
         assert b.services == ["Drain cleaning", "Water heaters"]
         assert b.hours == "Mon-Sat 7am-7pm"
@@ -456,10 +459,10 @@ def test_clients_new_can_deploy_the_recommended_department_at_creation(test_engi
     )
 
     with Session(test_engine) as s:
-        b = s.exec(select(Business).where(
-            Business.business_name == "Ridgeline Plumbing")).first()
-        keys = {e.role_key for e in s.exec(
-            select(Employee).where(Employee.business_id == b.id)).all()}
+        b = s.exec(select(Business).where(Business.business_name == "Ridgeline Plumbing")).first()
+        keys = {
+            e.role_key for e in s.exec(select(Employee).where(Employee.business_id == b.id)).all()
+        }
         assert keys == {"frontdesk", "reviews"}
 
 
@@ -471,8 +474,7 @@ def test_clients_new_without_a_department_deploys_nothing(test_engine, monkeypat
     )
 
     with Session(test_engine) as s:
-        b = s.exec(select(Business).where(
-            Business.business_name == "Ridgeline Plumbing")).first()
+        b = s.exec(select(Business).where(Business.business_name == "Ridgeline Plumbing")).first()
         assert s.exec(select(Employee).where(Employee.business_id == b.id)).all() == []
 
 
@@ -492,8 +494,7 @@ def test_a_bad_department_choice_does_not_lose_the_business(test_engine, monkeyp
 
     assert r.status_code == 303
     with Session(test_engine) as s:
-        b = s.exec(select(Business).where(
-            Business.business_name == "Ridgeline Plumbing")).first()
+        b = s.exec(select(Business).where(Business.business_name == "Ridgeline Plumbing")).first()
         assert b is not None
         assert s.exec(select(Employee).where(Employee.business_id == b.id)).all() == []
 
@@ -517,16 +518,19 @@ def test_provisioning_a_number_twice_does_not_buy_a_second_one(test_engine, monk
     # On `provisioning`: the route delegates the voice half to
     # provisioning.provision_voice (see test_voice_provisioning.py).
     import provisioning as provisioning_module
-    monkeypatch.setattr(provisioning_module, "register_number_with_xai",
-                        lambda n: {"signing_secret": "sec"})
+
+    monkeypatch.setattr(
+        provisioning_module, "register_number_with_xai", lambda n: {"signing_secret": "sec"}
+    )
     monkeypatch.setattr(provisioning_module, "attach_number_to_xai_trunk", lambda sid, n: None)
     with Session(test_engine) as s:
         bid = _business(s).id
     client = TestClient(app_module.app, headers=DASH_AUTH)
 
     client.post(f"/clients/{bid}/provision-number", data={"area_code": "512"})
-    second = client.post(f"/clients/{bid}/provision-number", data={"area_code": "512"},
-                         follow_redirects=False)
+    second = client.post(
+        f"/clients/{bid}/provision-number", data={"area_code": "512"}, follow_redirects=False
+    )
 
     assert len(purchases) == 1, f"bought {len(purchases)} numbers — each one costs money"
     assert second.status_code == 303
@@ -539,14 +543,14 @@ def test_provisioning_a_number_twice_does_not_buy_a_second_one(test_engine, monk
 # The console rendered "raise the cap or move this client to paid" next to a
 # control that did not exist anywhere in the app. This is that control.
 
+
 def test_the_founder_can_move_a_client_to_paid(test_engine, monkeypatch):
     monkeypatch.setattr(app_module, "engine", test_engine)
     with Session(test_engine) as s:
         bid = _business(s).id
 
     c = TestClient(app_module.app, headers=DASH_AUTH)
-    c.post(f"/clients/{bid}/billing-state", data={"billing_state": "paid"},
-           follow_redirects=False)
+    c.post(f"/clients/{bid}/billing-state", data={"billing_state": "paid"}, follow_redirects=False)
 
     with Session(test_engine) as s:
         assert s.get(Business, bid).billing_state == "paid"
@@ -561,8 +565,9 @@ def test_a_stale_tab_reposting_paid_cannot_flip_a_customer_back_to_trial(test_en
 
     c = TestClient(app_module.app, headers=DASH_AUTH)
     for _ in range(3):
-        c.post(f"/clients/{bid}/billing-state", data={"billing_state": "paid"},
-               follow_redirects=False)
+        c.post(
+            f"/clients/{bid}/billing-state", data={"billing_state": "paid"}, follow_redirects=False
+        )
 
     with Session(test_engine) as s:
         assert s.get(Business, bid).billing_state == "paid"
@@ -574,8 +579,11 @@ def test_an_unknown_billing_state_is_rejected(test_engine, monkeypatch):
         bid = _business(s).id
 
     c = TestClient(app_module.app, headers=DASH_AUTH)
-    r = c.post(f"/clients/{bid}/billing-state", data={"billing_state": "free-forever"},
-               follow_redirects=False)
+    r = c.post(
+        f"/clients/{bid}/billing-state",
+        data={"billing_state": "free-forever"},
+        follow_redirects=False,
+    )
 
     assert "billing_error" in r.headers["location"]
     with Session(test_engine) as s:

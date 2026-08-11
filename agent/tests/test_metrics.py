@@ -7,6 +7,7 @@ founder console counted nothing at all and showed test jobs as real work.
 
 Facts only, keyed by a stable metric key — each surface supplies its own
 wording, the same rule DepartmentStatus follows."""
+
 import metrics
 from db_models import Business, Job, RecoveryCampaign, RecoveryJob, ReferralLead
 from metrics import JOBS_BOOKED, QUOTES_CHASED, QUOTES_RECOVERED, booked_jobs, department_outcomes
@@ -21,9 +22,13 @@ def _business(session, email):
 
 
 def _job(session, business_id, phone="+15125550100", **kw):
-    j = Job(business_id=business_id, customer_phone=phone,
-            service_type=kw.pop("service_type", "AC repair"),
-            urgency=kw.pop("urgency", "routine"), **kw)
+    j = Job(
+        business_id=business_id,
+        customer_phone=phone,
+        service_type=kw.pop("service_type", "AC repair"),
+        urgency=kw.pop("urgency", "routine"),
+        **kw,
+    )
     session.add(j)
     session.commit()
     return j
@@ -80,21 +85,35 @@ def test_sales_outcomes_report_quotes_chased_and_recovered(session):
     """department_outcomes derives from the DEPLOYED employees (Task 5) — a
     department can never report a number for an employee it hasn't deployed."""
     b = _business(session, "m6@test.io")
-    camp = RecoveryCampaign(business_id=b.id, face="quote", name="June quotes",
-                            customer_list_json="[]")
+    camp = RecoveryCampaign(
+        business_id=b.id, face="quote", name="June quotes", customer_list_json="[]"
+    )
     session.add(camp)
     session.commit()
     session.refresh(camp)
-    session.add(RecoveryJob(campaign_id=camp.id, business_id=b.id,
-                            customer_phone="+1", service_type="AC install",
-                            current_status="booked"))
-    session.add(RecoveryJob(campaign_id=camp.id, business_id=b.id,
-                            customer_phone="+2", service_type="Furnace",
-                            current_status="no_response"))
+    session.add(
+        RecoveryJob(
+            campaign_id=camp.id,
+            business_id=b.id,
+            customer_phone="+1",
+            service_type="AC install",
+            current_status="booked",
+        )
+    )
+    session.add(
+        RecoveryJob(
+            campaign_id=camp.id,
+            business_id=b.id,
+            customer_phone="+2",
+            service_type="Furnace",
+            current_status="no_response",
+        )
+    )
     session.commit()
 
     assert department_outcomes(session, b.id, "sales", ["quote_chaser"]) == {
-        QUOTES_CHASED: 2, QUOTES_RECOVERED: 1,
+        QUOTES_CHASED: 2,
+        QUOTES_RECOVERED: 1,
     }
 
 

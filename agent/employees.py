@@ -17,6 +17,7 @@ keep half-finished). An entry still `internal` after a review with no
 graduation decision is a signal to force the call, not to leave it. See
 `ROADMAP.md` "Employee registry discipline."
 """
+
 from dataclasses import dataclass
 from typing import Literal
 
@@ -47,8 +48,13 @@ class EmployeeDefinition:
 
 REGISTRY: list[EmployeeDefinition] = [
     # Customer Service
-    EmployeeDefinition("frontdesk", "customer_service", "live", "Frontdesk",
-                       mission="Is Frontdesk answering customers?"),
+    EmployeeDefinition(
+        "frontdesk",
+        "customer_service",
+        "live",
+        "Frontdesk",
+        mission="Is Frontdesk answering customers?",
+    ),
     EmployeeDefinition("support", "customer_service", "planned", "Support"),
     # Reviews' capability ships today inside the same engine as Retention
     # Manager, but it belongs to the department that owns the outcome
@@ -61,8 +67,9 @@ REGISTRY: list[EmployeeDefinition] = [
     # bespoke work per business. review_service gates its sends on the
     # Employee row (runner.is_active), so hiring actually turns it on —
     # before that gate existed, "live" would have meant nothing.
-    EmployeeDefinition("reviews", "customer_service", "live", "Reviews",
-                       mission="Is Reviews requesting feedback?"),
+    EmployeeDefinition(
+        "reviews", "customer_service", "live", "Reviews", mission="Is Reviews requesting feedback?"
+    ),
     # Sales
     # Deterministic — no AgentEngine, no LLM call (2026-07-30 design review):
     # enriches every deployed business's new jobs with structured
@@ -75,8 +82,13 @@ REGISTRY: list[EmployeeDefinition] = [
     # jobs booked through bookings.book_job came back classified
     # repair/replacement with the expected priority and financing/membership
     # flags, and a second tick produced zero rows (idempotent).
-    EmployeeDefinition("lead_qualifier", "sales", "live", "Lead Qualifier",
-                       mission="Is Lead Qualifier enriching new jobs?"),
+    EmployeeDefinition(
+        "lead_qualifier",
+        "sales",
+        "live",
+        "Lead Qualifier",
+        mission="Is Lead Qualifier enriching new jobs?",
+    ),
     # Graduated internal -> live (founder, 2026-08-04) on the same two
     # conditions Reviews had to meet: the whole journey verified end to end
     # against real Claude — estimate marked done, auto-enrolled, chased, "yes",
@@ -85,8 +97,13 @@ REGISTRY: list[EmployeeDefinition] = [
     # Before that gate, `live` would have meant a business could be chased
     # without ever hiring anyone. Deploying is now a standing console action
     # with no bespoke work per business.
-    EmployeeDefinition("quote_chaser", "sales", "live", "Quote Chaser",
-                       mission="Is Quote Chaser recovering revenue?"),
+    EmployeeDefinition(
+        "quote_chaser",
+        "sales",
+        "live",
+        "Quote Chaser",
+        mission="Is Quote Chaser recovering revenue?",
+    ),
     # Graduated planned -> internal (2026-08-10). The engine, the two-touch
     # sequence, the reply classification, the owner notification and the
     # handoff to Retention Manager (writing Customer.plan_notes) are all
@@ -97,8 +114,13 @@ REGISTRY: list[EmployeeDefinition] = [
     # deployment, the same bar Reviews and Quote Chaser had to clear.
     # Consumes JobQualification.membership_candidate, which Lead Qualifier has
     # computed on every job since 2026-07-30 with no employee reading it.
-    EmployeeDefinition("membership_agent", "sales", "internal", "Membership Agent",
-                       mission="Is Membership Agent signing up plan members?"),
+    EmployeeDefinition(
+        "membership_agent",
+        "sales",
+        "internal",
+        "Membership Agent",
+        mission="Is Membership Agent signing up plan members?",
+    ),
     EmployeeDefinition("upsell_agent", "sales", "planned", "Upsell Agent"),
     # Operations
     # Deterministic, same reasoning as Lead Qualifier above — combines
@@ -110,8 +132,13 @@ REGISTRY: list[EmployeeDefinition] = [
     # immediate + requires_dispatch_review, replacement -> same_day/today via
     # the qualifier high bump, routine repair -> normal/tomorrow. Second tick
     # produced zero rows.
-    EmployeeDefinition("dispatcher", "operations", "live", "Dispatcher",
-                       mission="Is Dispatcher planning today's work?"),
+    EmployeeDefinition(
+        "dispatcher",
+        "operations",
+        "live",
+        "Dispatcher",
+        mission="Is Dispatcher planning today's work?",
+    ),
     EmployeeDefinition("route_optimizer", "operations", "planned", "Route Optimizer"),
     EmployeeDefinition("emergency_coordinator", "operations", "planned", "Emergency Coordinator"),
     # Finance
@@ -133,12 +160,22 @@ REGISTRY: list[EmployeeDefinition] = [
     # HONEST LIMIT: unlike the other two, no real rebooker/renewals campaign
     # has been run against a live customer — the send path is covered by tests
     # and shared with a verified employee, not exercised in production.
-    EmployeeDefinition("retention_manager", "customer_success", "live", "Retention Manager",
-                       mission="Is Retention Manager bringing customers back?"),
+    EmployeeDefinition(
+        "retention_manager",
+        "customer_success",
+        "live",
+        "Retention Manager",
+        mission="Is Retention Manager bringing customers back?",
+    ),
     # Marketing
     EmployeeDefinition("reactivation", "marketing", "planned", "Reactivation"),
-    EmployeeDefinition("referral", "marketing", "planned", "Referral",
-                       mission="Is Referral bringing in new business?"),
+    EmployeeDefinition(
+        "referral",
+        "marketing",
+        "planned",
+        "Referral",
+        mission="Is Referral bringing in new business?",
+    ),
     EmployeeDefinition("campaign_manager", "marketing", "planned", "Campaign Manager"),
     # Leadership
     EmployeeDefinition("business_analyst", "leadership", "planned", "Business Analyst"),

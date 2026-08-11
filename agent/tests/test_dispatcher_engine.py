@@ -2,6 +2,7 @@
 output is a lookup over Job.urgency and JobQualification's already-structured
 fields; nothing here reads free text.
 """
+
 from db_models import Job, JobQualification
 from dispatcher_engine import (
     classify_dispatch_priority,
@@ -28,8 +29,11 @@ from dispatcher_rules import (
 
 def _job(**overrides) -> Job:
     defaults = dict(
-        business_id=1, service_type="AC not cooling", urgency="routine",
-        callback_number="+15551234567", address="123 Main St",
+        business_id=1,
+        service_type="AC not cooling",
+        urgency="routine",
+        callback_number="+15551234567",
+        address="123 Main St",
     )
     defaults.update(overrides)
     return Job(**defaults)
@@ -37,15 +41,21 @@ def _job(**overrides) -> Job:
 
 def _qualification(**overrides) -> JobQualification:
     defaults = dict(
-        business_id=1, source_job_id=1, job_type="repair",
-        financing_candidate=False, membership_candidate=False,
-        priority="normal", possible_spam=False, reasoning="X",
+        business_id=1,
+        source_job_id=1,
+        job_type="repair",
+        financing_candidate=False,
+        membership_candidate=False,
+        priority="normal",
+        possible_spam=False,
+        reasoning="X",
     )
     defaults.update(overrides)
     return JobQualification(**defaults)
 
 
 # ---- dispatch_priority ------------------------------------------------------
+
 
 def test_dispatch_priority_emergency_urgency():
     job = _job(urgency="emergency")
@@ -76,6 +86,7 @@ def test_dispatch_priority_normal_with_no_signal():
 
 
 # ---- scheduling_window --------------------------------------------------
+
 
 def test_scheduling_window_immediate_for_emergency_priority():
     window, reason = classify_scheduling_window("repair", "emergency")
@@ -110,9 +121,12 @@ def test_scheduling_window_flexible_for_normal_priority_estimate_or_replacement(
 
 # ---- requires_dispatch_review -----------------------------------------------
 
+
 def test_requires_dispatch_review_true_for_possible_spam():
     job = _job()
-    flagged, reason = classify_requires_dispatch_review(job, _qualification(possible_spam=True), "normal")
+    flagged, reason = classify_requires_dispatch_review(
+        job, _qualification(possible_spam=True), "normal"
+    )
     assert flagged is True
     assert reason == REASON_REVIEW_POSSIBLE_SPAM
 
@@ -155,6 +169,7 @@ def test_requires_dispatch_review_false_for_a_clean_job():
 
 
 # ---- plan (the orchestrator) ------------------------------------------------
+
 
 def test_plan_combines_every_axis_and_joins_reasoning():
     job = _job(urgency="emergency", owner_alerted_at=None)

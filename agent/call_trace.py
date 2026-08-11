@@ -35,6 +35,7 @@ happens strictly BETWEEN writes: `capture_unverified` opens, writes ONE
 complete line, and closes the file every call (no long-lived handle), so a
 record can never straddle the rotation boundary.
 """
+
 import json
 import re
 import sys
@@ -112,10 +113,12 @@ class CallTrace:
     # and recorded customer audio sitting in plaintext logs. The TYPE is worth
     # knowing, the payload never is — nobody debugs base64 audio by eye — so
     # these are counted and summarised instead of stored.
-    NOISY_EVENT_TYPES = frozenset({
-        "input_audio_buffer.append",
-        "response.output_audio.delta",
-    })
+    NOISY_EVENT_TYPES = frozenset(
+        {
+            "input_audio_buffer.append",
+            "response.output_audio.delta",
+        }
+    )
 
     def event(self, event: Dict[str, Any]) -> None:
         etype = event.get("type")
@@ -125,7 +128,9 @@ class CallTrace:
         self._write({"kind": "event", "type": etype, "raw": event})
 
     def webhook(self, headers: Dict[str, Any], body: bytes) -> None:
-        body_text = body.decode("utf-8", "replace") if isinstance(body, (bytes, bytearray)) else str(body)
+        body_text = (
+            body.decode("utf-8", "replace") if isinstance(body, (bytes, bytearray)) else str(body)
+        )
         self._write({"kind": "webhook", "headers": dict(headers), "body": body_text})
 
     def enable_capture(self, capture_dir: Any) -> None:
@@ -156,8 +161,7 @@ class CallTrace:
         are the part of a noisy event worth keeping: "audio flowed both ways for
         the whole call" is answerable from them, without storing the audio."""
         if self.suppressed:
-            self._write({"kind": "stage", "stage": "audio_stream_summary",
-                         **self.suppressed})
+            self._write({"kind": "stage", "stage": "audio_stream_summary", **self.suppressed})
             self.suppressed = {}
         if self._fh is not None:
             self._fh.close()
@@ -174,9 +178,13 @@ class CallTrace:
         print(f"[call {self.call_id}] +{rec['t_ms']}ms {rec['kind']}: {label}", file=sys.stderr)
 
     @staticmethod
-    def capture_unverified(capture_dir: Optional[Any], headers: Dict[str, Any], body: bytes,
-                           max_bytes: int = MAX_INBOUND_LOG_BYTES,
-                           max_backups: int = MAX_INBOUND_LOG_BACKUPS) -> None:
+    def capture_unverified(
+        capture_dir: Optional[Any],
+        headers: Dict[str, Any],
+        body: bytes,
+        max_bytes: int = MAX_INBOUND_LOG_BYTES,
+        max_backups: int = MAX_INBOUND_LOG_BACKUPS,
+    ) -> None:
         """Append a raw inbound webhook to a single fixed quarantine file,
         BEFORE authentication. Uses a constant filename (never the caller's
         call_id), so an unauthenticated request cannot control the write path —
@@ -193,8 +201,14 @@ class CallTrace:
         capture_dir.mkdir(parents=True, exist_ok=True)
         path = capture_dir / "_inbound.jsonl"
         _rotate_if_needed(path, max_bytes, max_backups)
-        body_text = body.decode("utf-8", "replace") if isinstance(body, (bytes, bytearray)) else str(body)
-        rec = {"kind": "unverified_webhook", "ts": time.time(),
-               "headers": dict(headers), "body": body_text}
+        body_text = (
+            body.decode("utf-8", "replace") if isinstance(body, (bytes, bytearray)) else str(body)
+        )
+        rec = {
+            "kind": "unverified_webhook",
+            "ts": time.time(),
+            "headers": dict(headers),
+            "body": body_text,
+        }
         with open(path, "a") as f:
             f.write(json.dumps(rec, default=str) + "\n")

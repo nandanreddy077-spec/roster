@@ -13,9 +13,16 @@ def test_handle_customer_message_skips_agent_when_cap_exhausted(test_engine, mon
     )
     with Session(test_engine) as session:
         client = Business(
-            email="owner@example.com", password_hash="x", business_name="Ridgeline",
-            trade="Plumbing", services_json="[]", hours="9-5", escalation_phone="555",
-            trial_spend_cents=2200, trial_cap_cents=2000, trial_soft_buffer_cents=200,
+            email="owner@example.com",
+            password_hash="x",
+            business_name="Ridgeline",
+            trade="Plumbing",
+            services_json="[]",
+            hours="9-5",
+            escalation_phone="555",
+            trial_spend_cents=2200,
+            trial_cap_cents=2000,
+            trial_soft_buffer_cents=200,
         )
         session.add(client)
         session.commit()
@@ -28,7 +35,9 @@ def test_handle_customer_message_skips_agent_when_cap_exhausted(test_engine, mon
         assert client.trial_spend_cents == 2200  # unchanged — no call was made
 
 
-def test_handle_customer_message_runs_agent_and_records_usage_when_under_cap(test_engine, monkeypatch):
+def test_handle_customer_message_runs_agent_and_records_usage_when_under_cap(
+    test_engine, monkeypatch
+):
     monkeypatch.setattr(
         service,
         "agent",
@@ -36,8 +45,13 @@ def test_handle_customer_message_runs_agent_and_records_usage_when_under_cap(tes
     )
     with Session(test_engine) as session:
         client = Business(
-            email="owner@example.com", password_hash="x", business_name="Ridgeline",
-            trade="Plumbing", services_json="[]", hours="9-5", escalation_phone="555",
+            email="owner@example.com",
+            password_hash="x",
+            business_name="Ridgeline",
+            trade="Plumbing",
+            services_json="[]",
+            hours="9-5",
+            escalation_phone="555",
         )
         session.add(client)
         session.commit()

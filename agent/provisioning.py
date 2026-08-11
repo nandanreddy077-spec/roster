@@ -14,6 +14,7 @@ Two halves:
    against xAI's now-public SIP docs
    (docs.x.ai/developers/model-capabilities/audio/voice-agent/sip).
 """
+
 import os
 import sys
 from typing import Optional
@@ -179,8 +180,10 @@ def _record_voice_error(session, client: Business, error: Optional[str]) -> Opti
     session.add(client)
     session.commit()
     if error:
-        print(f"[provisioning] voice provisioning failed for business {client.id}: {error}",
-              file=sys.stderr)
+        print(
+            f"[provisioning] voice provisioning failed for business {client.id}: {error}",
+            file=sys.stderr,
+        )
     return error
 
 
@@ -200,8 +203,9 @@ def verify_voice_wiring(client: Business) -> dict:
 
     checks["signing_secret_stored"] = (
         bool(client.xai_signing_secret),
-        "stored" if client.xai_signing_secret else
-        "MISSING — webhooks cannot be verified; the number must be re-registered",
+        "stored"
+        if client.xai_signing_secret
+        else "MISSING — webhooks cannot be verified; the number must be re-registered",
     )
     checks["xai_number_stored"] = (
         bool(client.xai_phone_number),
@@ -227,16 +231,17 @@ def verify_voice_wiring(client: Business) -> dict:
             if any(n.phone_number == number for n in numbers):
                 attached = True
                 urls = twilio.trunking.v1.trunks(trunk.sid).origination_urls.list(limit=50)
-                origination = any(
-                    number in (u.sip_url or "") and u.enabled for u in urls
-                )
+                origination = any(number in (u.sip_url or "") and u.enabled for u in urls)
                 break
         checks["twilio_trunk_attached"] = (
-            attached, "attached" if attached else "NOT attached to any SIP trunk — calls reach nothing",
+            attached,
+            "attached" if attached else "NOT attached to any SIP trunk — calls reach nothing",
         )
         checks["trunk_origination_uri"] = (
-            origination, "points at xAI" if origination else
-            "no enabled origination URI for this number — calls cannot reach xAI",
+            origination,
+            "points at xAI"
+            if origination
+            else "no enabled origination URI for this number — calls cannot reach xAI",
         )
     except Exception as e:
         checks["twilio_trunk_attached"] = (False, f"could not check: {e}")

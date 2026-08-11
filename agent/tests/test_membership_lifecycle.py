@@ -14,6 +14,7 @@ The promise, stated as a number: a customer receives at most
     1 plan offer  +  1 nudge (only if they never replied)
 and nothing at all after they answer.
 """
+
 import importlib
 from datetime import datetime, timedelta
 
@@ -65,9 +66,15 @@ def membership(monkeypatch):
 
 def _seed(session):
     business = Business(
-        business_name="Ridgeline HVAC", trade="hvac", services_json="[]", hours="9-5",
-        escalation_phone="+15125550149", inbound_number=BUSINESS_LINE,
-        membership_plan=PLAN, trial_cap_cents=100000, email="lifecycle@test.io",
+        business_name="Ridgeline HVAC",
+        trade="hvac",
+        services_json="[]",
+        hours="9-5",
+        escalation_phone="+15125550149",
+        inbound_number=BUSINESS_LINE,
+        membership_plan=PLAN,
+        trial_cap_cents=100000,
+        email="lifecycle@test.io",
     )
     session.add(business)
     session.commit()
@@ -75,23 +82,35 @@ def _seed(session):
     deploy_role(session, business.id, "membership_agent")
 
     job = Job(
-        business_id=business.id, customer_phone=CUSTOMER, customer_name="Dana Cruz",
-        service_type="AC repair", urgency="routine", callback_number=CUSTOMER,
+        business_id=business.id,
+        customer_phone=CUSTOMER,
+        customer_name="Dana Cruz",
+        service_type="AC repair",
+        urgency="routine",
+        callback_number=CUSTOMER,
         completed_at=datetime.utcnow() - timedelta(days=1),
     )
     session.add(job)
     session.commit()
     session.refresh(job)
-    session.add(JobQualification(
-        business_id=business.id, source_job_id=job.id, job_type="repair",
-        financing_candidate=False, membership_candidate=True, priority="normal",
-        possible_spam=False, reasoning="test",
-    ))
+    session.add(
+        JobQualification(
+            business_id=business.id,
+            source_job_id=job.id,
+            job_type="repair",
+            financing_candidate=False,
+            membership_candidate=True,
+            priority="normal",
+            possible_spam=False,
+            reasoning="test",
+        )
+    )
     session.commit()
     return business, job
 
 
 # ---- the scheduler ---------------------------------------------------------
+
 
 def test_the_production_scheduler_drives_the_membership_offer(test_engine, membership, monkeypatch):
     """recovery_tick.run is what cron actually calls. If this employee isn't
@@ -147,26 +166,29 @@ def test_repeated_scheduler_runs_never_double_text(test_engine, membership, monk
 
 # ---- the webhook -----------------------------------------------------------
 
+
 def _sms_client(test_engine, monkeypatch, intent):
     monkeypatch.setattr(app_module, "engine", test_engine)
     monkeypatch.setattr(db_module, "engine", test_engine)
     monkeypatch.setattr(portal_module, "engine", test_engine)
-    membership_service.agent = StubAgent({
-        "reply": None,
-        "pending_tool_call": {"name": "record_membership_reply",
-                              "input": {"intent": intent}},
-    })
+    membership_service.agent = StubAgent(
+        {
+            "reply": None,
+            "pending_tool_call": {"name": "record_membership_reply", "input": {"intent": intent}},
+        }
+    )
 
     class FrontdeskShouldNotRun:
         def respond(self, *a, **k):
-            raise AssertionError(
-                "the reply reached Frontdesk instead of the membership classifier")
+            raise AssertionError("the reply reached Frontdesk instead of the membership classifier")
 
     monkeypatch.setattr(service_module, "agent", FrontdeskShouldNotRun())
     return TestClient(app_module.app)
 
 
-def test_a_reply_to_the_offer_reaches_the_membership_classifier(test_engine, membership, monkeypatch):
+def test_a_reply_to_the_offer_reaches_the_membership_classifier(
+    test_engine, membership, monkeypatch
+):
     """The routing assertion. Frontdesk explodes if it is reached, so this
     fails loudly rather than silently degrading to a generic chat reply."""
     with Session(test_engine) as session:
@@ -175,24 +197,31 @@ def test_a_reply_to_the_offer_reaches_the_membership_classifier(test_engine, mem
 
     client = _sms_client(test_engine, monkeypatch, "accepted")
     import notifications
+
     notifications._owner_channel = Spy()
 
-    r = client.post("/webhook/sms", data={
-        "From": CUSTOMER, "To": BUSINESS_LINE, "Body": "yes sign me up",
-        "MessageSid": "SMmember1",
-    })
+    r = client.post(
+        "/webhook/sms",
+        data={
+            "From": CUSTOMER,
+            "To": BUSINESS_LINE,
+            "Body": "yes sign me up",
+            "MessageSid": "SMmember1",
+        },
+    )
 
     assert r.status_code == 200
     assert "passed it to the office" in r.text
     with Session(test_engine) as session:
         offer = session.exec(select(MembershipOffer)).one()
         assert offer.outcome == "accepted"
-        customer = session.exec(
-            select(Customer).where(Customer.phone == CUSTOMER)).one()
+        customer = session.exec(select(Customer).where(Customer.phone == CUSTOMER)).one()
         assert customer.plan_notes
 
 
-def test_after_answering_the_customer_talks_to_frontdesk_again(test_engine, membership, monkeypatch):
+def test_after_answering_the_customer_talks_to_frontdesk_again(
+    test_engine, membership, monkeypatch
+):
     """A settled offer must stop hijacking the conversation — otherwise a
     customer who declined a plan can never book another job by text."""
     with Session(test_engine) as session:
@@ -200,25 +229,45 @@ def test_after_answering_the_customer_talks_to_frontdesk_again(test_engine, memb
         membership_service.send_due_membership_offers(session)
 
     client = _sms_client(test_engine, monkeypatch, "declined")
-    client.post("/webhook/sms", data={
-        "From": CUSTOMER, "To": BUSINESS_LINE, "Body": "no thanks",
-        "MessageSid": "SMmember2",
-    })
+    client.post(
+        "/webhook/sms",
+        data={
+            "From": CUSTOMER,
+            "To": BUSINESS_LINE,
+            "Body": "no thanks",
+            "MessageSid": "SMmember2",
+        },
+    )
 
     # Second text: Frontdesk must handle it, so we give it a real stub now.
-    monkeypatch.setattr(service_module, "agent", StubAgent({
-        "reply": "Sure — what's going on with the unit?",
-        "jobs": [], "new_messages": [], "pending_tool_call": None,
-    }))
-    r = client.post("/webhook/sms", data={
-        "From": CUSTOMER, "To": BUSINESS_LINE, "Body": "actually my AC is out again",
-        "MessageSid": "SMmember3",
-    })
+    monkeypatch.setattr(
+        service_module,
+        "agent",
+        StubAgent(
+            {
+                "reply": "Sure — what's going on with the unit?",
+                "jobs": [],
+                "new_messages": [],
+                "pending_tool_call": None,
+            }
+        ),
+    )
+    r = client.post(
+        "/webhook/sms",
+        data={
+            "From": CUSTOMER,
+            "To": BUSINESS_LINE,
+            "Body": "actually my AC is out again",
+            "MessageSid": "SMmember3",
+        },
+    )
 
     assert "what's going on with the unit" in r.text
 
 
-def test_stop_at_the_webhook_unsubscribes_and_ends_the_sequence(test_engine, membership, monkeypatch):
+def test_stop_at_the_webhook_unsubscribes_and_ends_the_sequence(
+    test_engine, membership, monkeypatch
+):
     """The full opt-out path, through the real endpoint: the nudge that would
     otherwise have gone out must not."""
     with Session(test_engine) as session:
@@ -226,10 +275,15 @@ def test_stop_at_the_webhook_unsubscribes_and_ends_the_sequence(test_engine, mem
         membership_service.send_due_membership_offers(session)
 
     client = _sms_client(test_engine, monkeypatch, "unsubscribe")
-    r = client.post("/webhook/sms", data={
-        "From": CUSTOMER, "To": BUSINESS_LINE, "Body": "STOP",
-        "MessageSid": "SMmember4",
-    })
+    r = client.post(
+        "/webhook/sms",
+        data={
+            "From": CUSTOMER,
+            "To": BUSINESS_LINE,
+            "Body": "STOP",
+            "MessageSid": "SMmember4",
+        },
+    )
 
     assert "unsubscribed" in r.text
     with Session(test_engine) as session:

@@ -4,6 +4,7 @@ consumes build_department_workspace and build_expansion_workspace rather than
 querying metrics/EMPLOYEE_RECORDS itself; the Briefing never calls
 expansion.record_interest — a growth nudge is a suggestion to read, not an
 action taken on the owner's behalf."""
+
 from datetime import datetime
 
 from sqlmodel import Session
@@ -23,7 +24,11 @@ def _business(session, email):
 
 def test_the_view_model_has_exactly_its_five_fields():
     assert set(BriefingWorkspace.__dataclass_fields__) == {
-        "generated_at", "summary", "highlights", "departments", "notifications",
+        "generated_at",
+        "summary",
+        "highlights",
+        "departments",
+        "notifications",
     }
 
 
@@ -68,8 +73,14 @@ def test_no_growth_nudge_for_a_department_with_nothing_ever_deployable(session):
 def test_an_active_department_appears_in_departments_with_its_headline(session):
     b = _business(session, "br4@test.io")
     deploy_role(session, b.id, "frontdesk")
-    session.add(Job(business_id=b.id, customer_phone="+15125550001",
-                     service_type="Drain cleaning", urgency="routine"))
+    session.add(
+        Job(
+            business_id=b.id,
+            customer_phone="+15125550001",
+            service_type="Drain cleaning",
+            urgency="routine",
+        )
+    )
     session.commit()
 
     ws = build_briefing_workspace(session, b.id)
@@ -106,8 +117,14 @@ def test_escalations_surface_as_an_attention_highlight(session):
     directly."""
     b = _business(session, "br7@test.io")
     deploy_role(session, b.id, "frontdesk")
-    session.add(OwnerNotification(business_id=b.id, kind="escalation", source="alert_owner",
-                                   message="URGENT — caller needs you"))
+    session.add(
+        OwnerNotification(
+            business_id=b.id,
+            kind="escalation",
+            source="alert_owner",
+            message="URGENT — caller needs you",
+        )
+    )
     session.commit()
 
     ws = build_briefing_workspace(session, b.id)
@@ -120,10 +137,22 @@ def test_escalations_surface_as_an_attention_highlight(session):
 def test_highlights_are_ordered_attention_then_working_well_then_growth(session):
     b = _business(session, "br8@test.io")
     deploy_role(session, b.id, "frontdesk")
-    session.add(Job(business_id=b.id, customer_phone="+15125550002",
-                     service_type="Drain cleaning", urgency="routine"))
-    session.add(OwnerNotification(business_id=b.id, kind="escalation", source="alert_owner",
-                                   message="URGENT — caller needs you"))
+    session.add(
+        Job(
+            business_id=b.id,
+            customer_phone="+15125550002",
+            service_type="Drain cleaning",
+            urgency="routine",
+        )
+    )
+    session.add(
+        OwnerNotification(
+            business_id=b.id,
+            kind="escalation",
+            source="alert_owner",
+            message="URGENT — caller needs you",
+        )
+    )
     session.commit()
 
     ws = build_briefing_workspace(session, b.id)
@@ -142,8 +171,14 @@ def test_highlights_are_capped_at_five(session):
 
 def test_notifications_are_read_straight_from_recent_notifications(session):
     b = _business(session, "br10@test.io")
-    session.add(OwnerNotification(business_id=b.id, kind="job_booked", source="sms_booking",
-                                   message="Frontdesk just booked a job"))
+    session.add(
+        OwnerNotification(
+            business_id=b.id,
+            kind="job_booked",
+            source="sms_booking",
+            message="Frontdesk just booked a job",
+        )
+    )
     session.commit()
 
     ws = build_briefing_workspace(session, b.id)
@@ -156,8 +191,11 @@ def test_workspace_never_crosses_businesses(session):
     a = _business(session, "br11a@test.io")
     b = _business(session, "br11b@test.io")
     deploy_role(session, a.id, "frontdesk")
-    session.add(OwnerNotification(business_id=a.id, kind="job_booked", source="sms_booking",
-                                   message="a's job"))
+    session.add(
+        OwnerNotification(
+            business_id=a.id, kind="job_booked", source="sms_booking", message="a's job"
+        )
+    )
     session.commit()
 
     ws = build_briefing_workspace(session, b.id)

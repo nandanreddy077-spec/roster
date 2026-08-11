@@ -7,14 +7,20 @@ one per emergency, because an alert_owner page writes a Job row.
 
 Everything here was found by the 2026-08-10 end-to-end walkthrough.
 """
+
 import json
 
 from sqlmodel import select
 
 from bookings import book_job, parse_money_cents, record_escalation
 from db_models import (
-    ORIGIN_ESCALATION, ORIGIN_INBOUND, ORIGIN_MISSED_CALL, ORIGIN_QUOTE_RECOVERY,
-    Business, Job, Message,
+    ORIGIN_ESCALATION,
+    ORIGIN_INBOUND,
+    ORIGIN_MISSED_CALL,
+    ORIGIN_QUOTE_RECOVERY,
+    Business,
+    Job,
+    Message,
 )
 from memory import build_customer_context
 from metrics import booked_jobs, employee_outcomes
@@ -28,15 +34,29 @@ class _FakeAgent:
     def respond(self, client_config, history, tools=None, system_prompt=None, max_iters=None):
         return {
             "reply": "Booked.",
-            "jobs": [{"id": "t1", "input": {"service_type": "drain clear", "urgency": "routine",
-                                            "callback_number": "+15552223333"}}],
-            "new_messages": [], "pending_tool_call": None,
+            "jobs": [
+                {
+                    "id": "t1",
+                    "input": {
+                        "service_type": "drain clear",
+                        "urgency": "routine",
+                        "callback_number": "+15552223333",
+                    },
+                }
+            ],
+            "new_messages": [],
+            "pending_tool_call": None,
         }
 
 
 def _business(session, **overrides):
-    fields = dict(business_name="Kestrel", trade="plumbing", email="o@test.io",
-                  frontdesk_live=True, trial_cap_cents=100000)
+    fields = dict(
+        business_name="Kestrel",
+        trade="plumbing",
+        email="o@test.io",
+        frontdesk_live=True,
+        trial_cap_cents=100000,
+    )
     fields.update(overrides)
     b = Business(**fields)
     session.add(b)
@@ -47,18 +67,24 @@ def _business(session, **overrides):
 
 # ---- origin: attribution ----------------------------------------------------
 
+
 def test_a_thread_we_opened_is_a_recovered_missed_call(session, monkeypatch):
     """Roster only ever speaks first on the missed-call text-back, so an
     assistant-first thread IS a recovered missed call. Without this the most
     valuable thing the product does was indistinguishable from a customer who
     happened to text in."""
     import service
+
     monkeypatch.setattr(service, "agent", _FakeAgent())
     b = _business(session)
-    session.add(Message(
-        business_id=b.id, customer_phone="+15552223333", role="assistant",
-        content_json=json.dumps([{"type": "text", "text": "Sorry we missed your call!"}]),
-    ))
+    session.add(
+        Message(
+            business_id=b.id,
+            customer_phone="+15552223333",
+            role="assistant",
+            content_json=json.dumps([{"type": "text", "text": "Sorry we missed your call!"}]),
+        )
+    )
     session.commit()
 
     handle_customer_message(session, b, "+15552223333", "my drain is blocked")
@@ -69,6 +95,7 @@ def test_a_thread_we_opened_is_a_recovered_missed_call(session, monkeypatch):
 
 def test_a_thread_the_customer_opened_is_ordinary_inbound(session, monkeypatch):
     import service
+
     monkeypatch.setattr(service, "agent", _FakeAgent())
     b = _business(session)
 
@@ -83,30 +110,45 @@ def test_a_detail_merge_never_relabels_who_earned_the_job(session):
     into the existing row without rewriting its attribution, or recovered
     revenue quietly becomes ordinary inbound work."""
     b = _business(session)
-    first, created = book_job(session, b, "+15550001111", "+15550001111",
-                              {"service_type": "repipe", "urgency": "routine"},
-                              origin=ORIGIN_QUOTE_RECOVERY)
+    first, created = book_job(
+        session,
+        b,
+        "+15550001111",
+        "+15550001111",
+        {"service_type": "repipe", "urgency": "routine"},
+        origin=ORIGIN_QUOTE_RECOVERY,
+    )
     assert created
 
-    again, created_again = book_job(session, b, "+15550001111", "+15550001111",
-                                    {"service_type": "repipe", "urgency": "routine",
-                                     "address": "88 Belvedere"},
-                                    origin=ORIGIN_INBOUND)
+    again, created_again = book_job(
+        session,
+        b,
+        "+15550001111",
+        "+15550001111",
+        {"service_type": "repipe", "urgency": "routine", "address": "88 Belvedere"},
+        origin=ORIGIN_INBOUND,
+    )
 
     assert created_again is False
     assert again.id == first.id
-    assert again.address == "88 Belvedere"      # details did merge
+    assert again.address == "88 Belvedere"  # details did merge
     assert again.origin == ORIGIN_QUOTE_RECOVERY  # attribution did not move
 
 
 # ---- origin: escalation rows are not work -----------------------------------
 
+
 def test_paging_the_owner_does_not_count_as_a_booked_job(session):
     """Every emergency added one to the owner's headline number, because
     record_escalation writes a Job row for idempotency."""
     b = _business(session)
-    book_job(session, b, "+15550001111", "+15550001111",
-             {"service_type": "drain clear", "urgency": "routine"})
+    book_job(
+        session,
+        b,
+        "+15550001111",
+        "+15550001111",
+        {"service_type": "drain clear", "urgency": "routine"},
+    )
     record_escalation(session, b, "+15552223333", "+15552223333", "gas smell")
 
     assert booked_jobs(session, b.id) == 1
@@ -134,8 +176,10 @@ def test_lead_qualifier_ignores_escalation_rows(session):
 
     lead_qualifier_service.qualify_jobs_for_business(session, b)
 
-    assert session.exec(select(JobQualification).where(
-        JobQualification.business_id == b.id)).all() == []
+    assert (
+        session.exec(select(JobQualification).where(JobQualification.business_id == b.id)).all()
+        == []
+    )
 
 
 def test_escalation_rows_are_labelled_at_the_source(session):
@@ -145,6 +189,7 @@ def test_escalation_rows_are_labelled_at_the_source(session):
 
 
 # ---- value: what the job was worth ------------------------------------------
+
 
 def test_owner_typed_amounts_become_cents():
     assert parse_money_cents("1240") == 124000
@@ -167,6 +212,7 @@ def test_an_absurd_amount_is_rejected_not_recorded():
 
 # ---- wording ----------------------------------------------------------------
 
+
 def test_the_chaser_does_not_say_estimate_twice():
     """Templates supply the noun themselves ("that {service_type} estimate"),
     and service_type is free text the model writes — it logs "whole-house
@@ -179,6 +225,7 @@ def test_the_chaser_does_not_say_estimate_twice():
 
 # ---- value: the route the owner actually clicks ------------------------------
 
+
 def _complete(test_engine, monkeypatch, value: str):
     """POST "Mark done" the way the console form does, return the saved Job."""
     from sqlmodel import Session as _Session
@@ -190,12 +237,18 @@ def _complete(test_engine, monkeypatch, value: str):
     monkeypatch.setattr(app_module, "engine", test_engine)
     with _Session(test_engine) as s:
         b = _business(s)
-        job, _ = book_job(s, b, "+15550001111", "+15550001111",
-                          {"service_type": "drain clear", "urgency": "routine"})
+        job, _ = book_job(
+            s,
+            b,
+            "+15550001111",
+            "+15550001111",
+            {"service_type": "drain clear", "urgency": "routine"},
+        )
         bid, jid = b.id, job.id
 
     TestClient(app_module.app, headers=DASH_AUTH).post(
-        f"/clients/{bid}/jobs/{jid}/complete", data={"value": value})
+        f"/clients/{bid}/jobs/{jid}/complete", data={"value": value}
+    )
 
     with _Session(test_engine) as s:
         return s.get(Job, jid)

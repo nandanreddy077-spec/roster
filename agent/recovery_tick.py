@@ -9,6 +9,7 @@ its own timestamp/link column (last_sent_day, referral_sent_at,
 review_requested_at, source_job_id) or, for Membership, by a unique index that
 makes a duplicate claim impossible rather than merely unlikely.
 """
+
 from sqlmodel import Session
 
 from channels import send_hours_ok
@@ -54,8 +55,10 @@ def run():
             membership_followup_sent = send_due_membership_followups(session)
             print(f"Membership follow-ups: sent {len(membership_followup_sent)} message(s).")
         else:
-            print("Outside send hours (9am-8pm local, every mainland US timezone) — "
-                  "skipping Recovery/Referral/Reviews/Membership sends this tick.")
+            print(
+                "Outside send hours (9am-8pm local, every mainland US timezone) — "
+                "skipping Recovery/Referral/Reviews/Membership sends this tick."
+            )
 
 
 if __name__ == "__main__":

@@ -79,7 +79,9 @@ def test_attach_number_reuses_existing_trunk(monkeypatch):
     monkeypatch.setenv("TWILIO_ACCOUNT_SID", "AC_test")
     monkeypatch.setenv("TWILIO_AUTH_TOKEN", "token_test")
 
-    existing_trunk = MagicMock(friendly_name=provisioning.XAI_TRUNK_FRIENDLY_NAME, sid="TK_existing")
+    existing_trunk = MagicMock(
+        friendly_name=provisioning.XAI_TRUNK_FRIENDLY_NAME, sid="TK_existing"
+    )
     fake_client = MagicMock()
     fake_client.trunking.v1.trunks.list.return_value = [existing_trunk]
     monkeypatch.setattr(provisioning, "_twilio_client", lambda: fake_client)
@@ -233,7 +235,10 @@ def test_register_number_with_xai_reads_camelcase_secret_nested_in_webhook(monke
         resp.raise_for_status.return_value = None
         resp.json.return_value = {
             "phoneNumber": "+14155550123",
-            "webhook": {"url": "https://roster.example/webhook/xai-incoming-call", "signingSecret": "whsec_camel123"},
+            "webhook": {
+                "url": "https://roster.example/webhook/xai-incoming-call",
+                "signingSecret": "whsec_camel123",
+            },
         }
         return resp
 

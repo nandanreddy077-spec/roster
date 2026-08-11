@@ -4,6 +4,7 @@ SQLite file on Railway's single-service volume instead of needing a second
 service with no access to the database. Pure loop logic — DB/Twilio/
 Anthropic calls happen inside the injected `tick` callable, not here.
 """
+
 import asyncio
 
 import pytest

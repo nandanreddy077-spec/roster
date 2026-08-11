@@ -10,18 +10,39 @@ without parsing prose.
 """
 
 REPLACEMENT_KEYWORDS = (
-    "replace", "replacement", "new unit", "new system", "install a new", "installation",
+    "replace",
+    "replacement",
+    "new unit",
+    "new system",
+    "install a new",
+    "installation",
 )
 MAINTENANCE_KEYWORDS = (
-    "tune-up", "tune up", "maintenance", "inspection", "seasonal", "flush",
-    "annual service", "check-up", "checkup",
+    "tune-up",
+    "tune up",
+    "maintenance",
+    "inspection",
+    "seasonal",
+    "flush",
+    "annual service",
+    "check-up",
+    "checkup",
 )
 FINANCING_KEYWORDS = (
-    "financ", "afford", "payment plan", "monthly payment", "pay over time", "budget",
+    "financ",
+    "afford",
+    "payment plan",
+    "monthly payment",
+    "pay over time",
+    "budget",
 )
 SPAM_KEYWORDS = (
-    "seo", "web design", "marketing services", "google ranking",
-    "increase your rankings", "link building",
+    "seo",
+    "web design",
+    "marketing services",
+    "google ranking",
+    "increase your rankings",
+    "link building",
 )
 
 REASON_JOB_TYPE_REPLACEMENT_KEYWORD = "JOB_TYPE_REPLACEMENT_KEYWORD"

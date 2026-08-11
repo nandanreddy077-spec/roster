@@ -10,6 +10,7 @@ requested_roster blob fails to make that distinction (runner.is_active treats
 Kept out of departments.py on purpose: that module is a pure registry with no
 database dependency, and its tests need no fixture. This one owns the writes.
 """
+
 from datetime import datetime
 from typing import List, Optional
 
@@ -80,14 +81,16 @@ def open_interests_for(session, business_id: int) -> List[DepartmentInterest]:
     one to handle next. Scoped to one business_id: business isolation is the
     security boundary everywhere in Roster (platform PRD §12).
     """
-    return list(session.exec(
-        select(DepartmentInterest)
-        .where(
-            DepartmentInterest.business_id == business_id,
-            DepartmentInterest.actioned_at.is_(None),
-        )
-        .order_by(DepartmentInterest.id)
-    ).all())
+    return list(
+        session.exec(
+            select(DepartmentInterest)
+            .where(
+                DepartmentInterest.business_id == business_id,
+                DepartmentInterest.actioned_at.is_(None),
+            )
+            .order_by(DepartmentInterest.id)
+        ).all()
+    )
 
 
 def mark_actioned(session, interest_id: int) -> Optional[DepartmentInterest]:

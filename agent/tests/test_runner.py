@@ -7,6 +7,7 @@ asked for this" and "this is running" (audit F6). Deployment state is now the
 Employee row, so every scenario below is preserved but driven through
 deployment.deploy_role instead.
 """
+
 import runner
 from db_models import Business, Employee, Job
 from deployment import deploy_role
@@ -73,7 +74,8 @@ def test_dispatch_job_completed_fires_a_registered_active_role(session, monkeypa
     without shipping a speculative one."""
     sent = []
     fake_role = RoleDefinition(
-        role_key="quote_chaser", trigger="job_completed",
+        role_key="quote_chaser",
+        trigger="job_completed",
         capability=lambda s, business, job: sent.append(business.id),
     )
     monkeypatch.setattr(runner, "JOB_COMPLETED_ROLES", [fake_role])
@@ -89,7 +91,8 @@ def test_dispatch_job_completed_fires_a_registered_active_role(session, monkeypa
 def test_dispatch_job_completed_skips_registered_but_inactive_role(session, monkeypatch):
     sent = []
     fake_role = RoleDefinition(
-        role_key="quote_chaser", trigger="job_completed",
+        role_key="quote_chaser",
+        trigger="job_completed",
         capability=lambda s, business, job: sent.append(business.id),
     )
     monkeypatch.setattr(runner, "JOB_COMPLETED_ROLES", [fake_role])
@@ -109,6 +112,7 @@ def test_dispatch_job_completed_skips_registered_but_inactive_role(session, monk
 # processing function never queries across businesses itself; it only ever
 # receives a Business the dispatcher has already confirmed is deployed for
 # that role, so there is no reachable path to an undeployed business's data.
+
 
 def test_deployed_businesses_returns_only_businesses_with_the_role_active(session):
     deployed = _business(session, "runner7a@test.io")

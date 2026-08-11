@@ -8,6 +8,7 @@ service_type) inside the dedup window. A re-book of the same service on the
 same thread MERGES new details into the existing job instead of inserting a
 second row; a different service, a completed job, or an old job books fresh.
 """
+
 import re
 import sys
 from datetime import datetime, timedelta
@@ -73,17 +74,20 @@ def _publish_job_booked(session: Session, job: Job, customer_id: Optional[int]) 
     subscribers. Move dispatch off-thread if one ever appears.
     """
     try:
-        bus.publish(session, DomainEvent(
-            type=JOB_BOOKED,
-            business_id=job.business_id,
-            customer_id=customer_id,
-            payload={
-                "job_id": job.id,
-                "service_type": job.service_type,
-                "urgency": job.urgency,
-            },
-            dedup_key=f"job.booked:{job.id}",
-        ))
+        bus.publish(
+            session,
+            DomainEvent(
+                type=JOB_BOOKED,
+                business_id=job.business_id,
+                customer_id=customer_id,
+                payload={
+                    "job_id": job.id,
+                    "service_type": job.service_type,
+                    "urgency": job.urgency,
+                },
+                dedup_key=f"job.booked:{job.id}",
+            ),
+        )
     except Exception as e:
         # Loud, like notifications.record_owner_notification: a booking that
         # never reached the event stream is invisible everywhere else.

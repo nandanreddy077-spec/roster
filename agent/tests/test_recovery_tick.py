@@ -18,7 +18,9 @@ def test_run_executes_without_error(monkeypatch, test_engine, capsys):
     assert "Dispatcher: planned 0 job(s)." in captured.out
 
 
-def test_run_skips_sends_but_still_qualifies_and_dispatches_outside_send_hours(monkeypatch, test_engine, capsys):
+def test_run_skips_sends_but_still_qualifies_and_dispatches_outside_send_hours(
+    monkeypatch, test_engine, capsys
+):
     monkeypatch.setattr(recovery_tick, "engine", test_engine)
     monkeypatch.setattr(recovery_tick, "send_hours_ok", lambda: False)
     recovery_tick.run()

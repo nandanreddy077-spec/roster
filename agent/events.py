@@ -15,6 +15,7 @@ REVIEW_REQUESTED = "review.requested"
 REFERRAL_RECEIVED = "referral.received"
 LLM_COMPLETED = "llm.completed"
 
+
 @dataclass
 class DomainEvent:
     type: str

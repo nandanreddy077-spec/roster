@@ -23,13 +23,18 @@ def test_login_sends_a_half_provisioned_shop_to_the_dashboard_anyway(monkeypatch
     monkeypatch.setattr(db_module, "engine", test_engine)
     monkeypatch.setattr(portal_module, "engine", test_engine)
     provisioned_business(
-        test_engine, email="owner@example.com", password_hash=hash_password("hunter22"),
-        business_name="", frontdesk_live=False,
+        test_engine,
+        email="owner@example.com",
+        password_hash=hash_password("hunter22"),
+        business_name="",
+        frontdesk_live=False,
     )
 
     client = TestClient(app_module.app)
     response = client.post(
-        "/login", data={"email": "owner@example.com", "password": "hunter22"}, follow_redirects=False
+        "/login",
+        data={"email": "owner@example.com", "password": "hunter22"},
+        follow_redirects=False,
     )
     assert response.status_code == 303
     assert response.headers["location"] == portal_module.DASHBOARD_HOME
@@ -51,8 +56,10 @@ def test_login_sends_a_founder_provisioned_shop_to_the_dashboard(monkeypatch, te
     monkeypatch.setattr(portal_module, "engine", test_engine)
     with Session(test_engine) as session:
         business = Business(
-            email="hired@example.com", password_hash=hash_password("hunter22"),
-            business_name="Ridgeline Plumbing", frontdesk_live=False,
+            email="hired@example.com",
+            password_hash=hash_password("hunter22"),
+            business_name="Ridgeline Plumbing",
+            frontdesk_live=False,
         )
         session.add(business)
         session.commit()
@@ -61,7 +68,9 @@ def test_login_sends_a_founder_provisioned_shop_to_the_dashboard(monkeypatch, te
 
     client = TestClient(app_module.app)
     response = client.post(
-        "/login", data={"email": "hired@example.com", "password": "hunter22"}, follow_redirects=False
+        "/login",
+        data={"email": "hired@example.com", "password": "hunter22"},
+        follow_redirects=False,
     )
     assert response.status_code == 303
     assert response.headers["location"] == portal_module.DASHBOARD_HOME
