@@ -11,6 +11,7 @@ from typing import Any, Dict, List, Optional
 
 from bookings import book_job, record_escalation
 from db_models import ORIGIN_INBOUND, ORIGIN_MISSED_CALL, Business, Job, Message
+from employee_outcome import CUSTOMER_FALLBACK_MESSAGE, report_if_failed
 from engine import (
     LOG_JOB_TOOL,
     TRANSFER_CALL_TOOL,
@@ -93,7 +94,10 @@ def handle_customer_message(
     history = _load_history(session, client.id, customer_phone)
 
     if not can_respond(client):
-        return {"reply": None, "jobs": []}
+        # Milestone B: an honest sentence, never silence. The cap stops us
+        # spending on a model call, not on answering — this reply rides the
+        # TwiML webhook response, so it costs nothing to send.
+        return {"reply": CUSTOMER_FALLBACK_MESSAGE, "jobs": []}
 
     # Real customer memory: a returning customer's name and recent jobs ride
     # into the prompt, so the agent recognizes them instead of re-asking.
@@ -114,6 +118,7 @@ def handle_customer_message(
         system_prompt=system,
     )
     record_usage(session, client)
+    report_if_failed(session, client, "frontdesk", result)
 
     # The engine produced the full turn (assistant tool_use, tool_result, final
     # reply); persist each so the next turn loads valid alternating history.

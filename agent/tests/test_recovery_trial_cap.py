@@ -1,6 +1,7 @@
 import recovery_service
 from conftest import StubAgent
 from db_models import Business, RecoveryCampaign, RecoveryJob
+from employee_outcome import CUSTOMER_FALLBACK_MESSAGE
 from sqlmodel import Session
 
 
@@ -66,7 +67,7 @@ def test_recovery_reply_skips_paid_call_when_capped(test_engine, monkeypatch):
 
         reply = recovery_service.handle_recovery_reply(session, client, job, "yes I'm interested")
 
-        assert reply is None
+        assert reply == CUSTOMER_FALLBACK_MESSAGE  # Milestone B: answered, not dropped
         assert client.trial_spend_cents == 2200  # unchanged — no paid call
 
 

@@ -373,6 +373,23 @@ def health():
 
     checks["backups"] = backup.status()
 
+    # Milestone B: the alarm channel's own alarm. OwnerNotification.delivered
+    # has existed since the table did and nothing has ever read it, so an
+    # owner alert that failed to send looked identical to one that arrived —
+    # the system could lose its only channel to the customer and not know.
+    # Soft, like scheduler/backups: restarting the container would not deliver
+    # a single missed text, so this reports without dropping the status.
+    try:
+        with Session(engine) as session:
+            undelivered = session.exec(
+                select(func.count(OwnerNotification.id)).where(
+                    OwnerNotification.delivered == False  # noqa: E712 — SQL expression
+                )
+            ).one()
+        checks["owner_alerts"] = {"ok": undelivered == 0, "undelivered": int(undelivered)}
+    except Exception as e:  # noqa: BLE001 — same reasoning as the checks above
+        checks["owner_alerts"] = {"ok": False, "error": f"{type(e).__name__}: {e}"}
+
     healthy = checks["database"]["ok"]
     return JSONResponse(
         {"status": "ok" if healthy else "down", "checks": checks},

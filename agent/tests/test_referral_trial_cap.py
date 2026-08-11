@@ -1,6 +1,7 @@
 import referral_service
 from conftest import StubAgent
 from db_models import Business, Job, ReferralLead
+from employee_outcome import CUSTOMER_FALLBACK_MESSAGE
 from sqlmodel import Session, select
 
 
@@ -39,7 +40,7 @@ def test_referral_reply_skips_paid_call_but_logs_raw_when_capped(test_engine, mo
             session, client, job, "my neighbor Bob, 555-9999"
         )
 
-        assert reply is None
+        assert reply == CUSTOMER_FALLBACK_MESSAGE  # Milestone B: answered, not dropped
         assert client.trial_spend_cents == 2200  # no paid call
         lead = session.exec(
             select(ReferralLead).where(ReferralLead.source_job_id == job.id)

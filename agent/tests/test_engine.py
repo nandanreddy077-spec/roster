@@ -604,3 +604,87 @@ def test_it_never_claims_to_be_human_but_stays_warm():
     assert "Never claim to be a human being." in prompt
     assert "AI assistant for" in prompt
     assert "carry straight on helping" in prompt
+
+
+# ---- Milestone B: a Claude API failure must never produce silence ---------
+
+
+class RaisingMessagesAPI:
+    def create(self, **kwargs):
+        raise RuntimeError("simulated Anthropic API failure")
+
+
+class RaisingAnthropicClient:
+    def __init__(self):
+        self.messages = RaisingMessagesAPI()
+
+
+def test_an_api_failure_yields_a_reply_instead_of_raising():
+    """The whole point of Milestone B's live-turn floor: a customer must
+    never receive nothing because the Claude call itself broke."""
+    agent = AgentEngine(client=RaisingAnthropicClient())
+
+    result = agent.respond(
+        make_client_config(),
+        [{"role": "user", "content": [{"type": "text", "text": "hello"}]}],
+        tools=[LOG_JOB_TOOL],
+    )
+
+    assert result["reply"]
+    assert result["reply"] != ""
+
+
+def test_an_api_failure_is_flagged_so_the_caller_can_alert_the_owner():
+    agent = AgentEngine(client=RaisingAnthropicClient())
+
+    result = agent.respond(
+        make_client_config(),
+        [{"role": "user", "content": [{"type": "text", "text": "hello"}]}],
+        tools=[LOG_JOB_TOOL],
+    )
+
+    assert result["failed"] is True
+    assert "simulated Anthropic API failure" in result["error"]
+
+
+def test_an_api_failure_captures_no_jobs_and_no_pending_tool_call():
+    agent = AgentEngine(client=RaisingAnthropicClient())
+
+    result = agent.respond(
+        make_client_config(),
+        [{"role": "user", "content": [{"type": "text", "text": "hello"}]}],
+        tools=[LOG_JOB_TOOL],
+    )
+
+    assert result["jobs"] == []
+    assert result["pending_tool_call"] is None
+
+
+def test_an_api_failure_still_produces_a_replayable_assistant_message():
+    """The fallback reply must be persisted like any other turn, so history
+    stays a clean assistant/user alternation for the NEXT real turn."""
+    agent = AgentEngine(client=RaisingAnthropicClient())
+
+    result = agent.respond(
+        make_client_config(),
+        [{"role": "user", "content": [{"type": "text", "text": "hello"}]}],
+        tools=[LOG_JOB_TOOL],
+    )
+
+    assert len(result["new_messages"]) == 1
+    assert result["new_messages"][0]["role"] == "assistant"
+
+
+def test_a_successful_call_has_failed_false():
+    """failed must be an explicit, always-present field — not something a
+    caller infers from its absence."""
+    responses = [FakeResponse([FakeBlock("text", text="Sure, happy to help!")])]
+    agent = AgentEngine(client=FakeAnthropicClient(responses))
+
+    result = agent.respond(
+        make_client_config(),
+        [{"role": "user", "content": [{"type": "text", "text": "hi"}]}],
+        tools=[LOG_JOB_TOOL],
+    )
+
+    assert result["failed"] is False

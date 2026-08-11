@@ -24,6 +24,7 @@ from typing import List, Optional
 
 from channels import STOP_KEYWORDS, get_channel
 from db_models import Business, Customer, Job, JobQualification, MembershipOffer
+from employee_outcome import CUSTOMER_FALLBACK_MESSAGE, report_employee_blocked, report_if_failed
 from engine import AgentEngine
 from membership_engine import (
     MEMBERSHIP_FOLLOWUP_DELAY_DAYS,
@@ -131,13 +132,26 @@ def send_due_membership_offers(session: Session) -> List[MembershipOffer]:
         if not job.callback_number:
             continue
         client = session.get(Business, job.business_id)
+        if client is None:
+            continue
         # membership_plan is configuration, not consent — the Employee row is
         # the deployment record (ARCHITECTURE.md invariant 8). Both are
         # required: without the plan text there is nothing honest to say, and
         # without the Employee row nobody asked us to say it.
-        if client is None or not client.membership_plan:
-            continue
+        #
+        # ORDER MATTERS (Milestone B): hired first, THEN the plan check. Not
+        # hired is not blocked, so a business that never asked for this
+        # employee is never nagged about a plan it has no reason to write.
         if not is_active(session, client, ROLE_KEY):
+            continue
+        if not client.membership_plan:
+            report_employee_blocked(
+                session,
+                client,
+                ROLE_KEY,
+                "missing_membership_plan",
+                "no maintenance-plan description is set, so the plan can't be offered",
+            )
             continue
 
         # Re-check the plan at SEND time, not just at qualification time.
@@ -359,7 +373,10 @@ def handle_membership_reply(
         # what they said — and it keeps them eligible for the nudge, so a
         # customer isn't silently dropped because of OUR billing limit.
         _settle(session, offer, "unclear", text)
-        return None
+        # Milestone B: an honest sentence, never silence. The cap stops us
+        # spending on a model call, not on answering — this reply rides the
+        # TwiML webhook response, so it costs nothing to send.
+        return CUSTOMER_FALLBACK_MESSAGE
 
     history = [{"role": "user", "content": [{"type": "text", "text": text}]}]
     result = agent.respond(
@@ -370,6 +387,7 @@ def handle_membership_reply(
         max_iters=2,
     )
     record_usage(session, client)
+    report_if_failed(session, client, "membership_agent", result)
 
     pending = result["pending_tool_call"]
     intent = "unclear"

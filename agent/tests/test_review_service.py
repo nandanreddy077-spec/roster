@@ -1,3 +1,5 @@
+from employee_outcome import CUSTOMER_FALLBACK_MESSAGE
+
 """Reviews: automatic review-request texts triggered off Job.completed_at,
 after waiting REVIEW_DELAY_DAYS. Moved off app.py's synchronous "Mark done"
 path (2026-07-29/30 plan) onto the same tick-based, delayed mechanism
@@ -642,7 +644,7 @@ def test_handle_review_reply_skips_paid_call_past_trial_cap(session, monkeypatch
 
     reply = review_service.handle_review_reply(session, client, job, "left a review!")
 
-    assert reply is None
+    assert reply == CUSTOMER_FALLBACK_MESSAGE  # Milestone B: answered, not dropped
     saved = session.exec(select(ReviewReply).where(ReviewReply.source_job_id == job.id)).first()
     assert saved is not None
     assert saved.outcome == "unclear"

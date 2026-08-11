@@ -1,3 +1,5 @@
+from employee_outcome import CUSTOMER_FALLBACK_MESSAGE
+
 """Membership Agent — the employee that consumes Lead Qualifier's
 membership_candidate flag.
 
@@ -553,7 +555,7 @@ def test_past_the_trial_cap_the_reply_is_kept_but_not_classified(session, spy):
     reply = handle_membership_reply(session, b, offer, "sure why not")
 
     session.refresh(offer)
-    assert reply is None
+    assert reply == CUSTOMER_FALLBACK_MESSAGE  # Milestone B: answered, not dropped
     assert offer.raw_reply_text == "sure why not"
     # Settled, so the scheduled nudge never reaches someone who did answer.
     assert offer.outcome == "unclear"
