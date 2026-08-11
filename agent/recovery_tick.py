@@ -112,8 +112,13 @@ def run():
 if __name__ == "__main__":
     # No-op when the in-process scheduler already called this via app.py's
     # import — only matters for a standalone `python recovery_tick.py` run
-    # (the crontab form this module's docstring still documents).
+    # (the crontab form this module's docstring still documents). A crontab
+    # tick crashing silently at 3am is exactly the case Sentry exists for.
+    import os
+
     from logging_config import configure_logging
+    from sentry_config import configure_sentry
 
     configure_logging()
+    configure_sentry(os.environ)
     run()

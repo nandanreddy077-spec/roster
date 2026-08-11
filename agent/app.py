@@ -22,6 +22,7 @@ import backup
 import departments
 import metrics
 from logging_config import configure_logging
+from sentry_config import configure_sentry
 
 # Before any import below that might log at import time (channels.get_channel's
 # credential warning, in particular) — a boot-time log line written before the
@@ -30,6 +31,12 @@ from logging_config import configure_logging
 # first after a deploy.
 configure_logging()
 logger = logging.getLogger(__name__)
+# After configure_logging(), not before: LoggingIntegration attaches to the
+# logging module's own machinery, and every logger.error() from here on —
+# including the missing-env-var and Twilio-credential warnings a few lines
+# below — should be capturable from the moment the process can fail.
+_sentry_enabled = configure_sentry(os.environ)
+logger.info("sentry configured" if _sentry_enabled else "sentry not configured (no SENTRY_DSN)")
 
 from auth import ACCESS_LINK_MAX_AGE_SECONDS, make_access_token, resolve_session_secret
 from bookings import parse_money_cents
