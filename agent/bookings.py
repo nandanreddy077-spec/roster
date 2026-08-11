@@ -15,7 +15,13 @@ from datetime import datetime, timedelta
 from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 from typing import Any, Dict, Optional, Tuple
 
-from db_models import ORIGIN_ESCALATION, ORIGIN_INBOUND, Business, Job
+from db_models import (
+    BOOKING_REQUESTED,
+    ORIGIN_ESCALATION,
+    ORIGIN_INBOUND,
+    Business,
+    Job,
+)
 from eventbus import bus
 from events import JOB_BOOKED, DomainEvent
 from sqlmodel import Session, select
@@ -107,6 +113,7 @@ def book_job(
     args: Dict[str, Any],
     customer_id: Optional[int] = None,
     origin: str = ORIGIN_INBOUND,
+    booking_status: str = BOOKING_REQUESTED,
 ) -> Tuple[Job, bool]:
     """Upsert a booking. Returns (job, created) — callers must only fire
     owner notifications when created is True, so a detail-merge never
@@ -115,7 +122,14 @@ def book_job(
     `origin` is set once, at insert, and never revised on a merge: the thing
     that first produced the job is what earned it, and letting a later
     detail-merge overwrite that would quietly relabel recovered revenue as
-    ordinary inbound work."""
+    ordinary inbound work.
+
+    `booking_status` (see db_models.py's BOOKING_* docstring) follows the
+    same discipline, for the same reason: a detail-merge must never quietly
+    upgrade a job from REQUESTED to PROPOSED just because a later log_job
+    call happened to pass a more specific field. Only the caller offering an
+    actual slot (recovery_service's confirm_slot) has any business setting
+    this to anything but the default."""
     service_type = (args.get("service_type") or "").strip()
     since = datetime.utcnow() - timedelta(hours=BOOKING_DEDUP_WINDOW_HOURS)
 
@@ -161,6 +175,7 @@ def book_job(
         preferred_window=args.get("preferred_window"),
         is_estimate=bool(args.get("is_estimate")),
         origin=origin,
+        booking_status=booking_status,
     )
     session.add(job)
     session.commit()

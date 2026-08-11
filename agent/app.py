@@ -46,6 +46,7 @@ from db import DATA_DIR, engine, init_db
 from db_models import (
     BILLING_PAID,
     BILLING_TRIAL,
+    BOOKING_CONFIRMED,
     AccessRequest,
     Business,
     Customer,
@@ -940,6 +941,32 @@ def complete_job(client_id: int, job_id: int, value: str = Form("")):
                     exc_info=e,
                     extra={"business_id": client_id, "job_id": job_id},
                 )
+    return RedirectResponse(f"/clients/{client_id}", status_code=303)
+
+
+@app.post("/clients/{client_id}/jobs/{job_id}/confirm")
+def confirm_job(client_id: int, job_id: int):
+    """The ONLY route in the codebase that may set booking_status to
+    BOOKING_CONFIRMED (Milestone 2, booking-honesty audit). Deliberately a
+    founder/owner action, not something any employee or automated path can
+    reach: there is no calendar integration, so nothing has actually checked
+    a real technician's or truck's availability except a human looking at
+    their own schedule. That human clicking this button IS the verification
+    — see db_models.py's BOOKING_CONFIRMED docstring and
+    booking_language.py's module docstring for the full reasoning.
+
+    Idempotent and silent on a job that's already confirmed (re-clicking
+    a stale page must not error), same posture as complete_job above."""
+    with Session(engine) as session:
+        client = session.get(Business, client_id)
+        job = session.get(Job, job_id)
+        if client is None or job is None or job.business_id != client_id:
+            raise HTTPException(status_code=404, detail="No such job")
+        if job.booking_status != BOOKING_CONFIRMED:
+            job.booking_status = BOOKING_CONFIRMED
+            job.confirmed_at = datetime.utcnow()
+            session.add(job)
+            session.commit()
     return RedirectResponse(f"/clients/{client_id}", status_code=303)
 
 

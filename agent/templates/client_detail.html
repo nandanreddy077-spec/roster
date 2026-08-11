@@ -291,6 +291,20 @@
       {% if j.address %}<div>{{ j.address }}</div>{% endif %}
       {% if j.callback_number %}<div>{{ j.callback_number }}</div>{% endif %}
       {% if j.notes %}<p class="job-notes">{{ j.notes }}</p>{% endif %}
+      {# Booking-status label (Milestone 2, booking-honesty audit): the ONLY
+         place "Confirmed" may ever appear next to a time is when
+         booking_status genuinely is confirmed — see db_models.py's
+         BOOKING_CONFIRMED docstring. Requested/Proposed read as exactly
+         that: a time in play, not a promise. #}
+      {% if j.preferred_window %}
+        {% if j.booking_status == "confirmed" %}
+        <p class="job-notes">✅ Confirmed for {{ j.preferred_window }}</p>
+        {% elif j.booking_status == "proposed" %}
+        <p class="job-notes">Proposed: {{ j.preferred_window }} (customer picked this slot — not yet confirmed)</p>
+        {% else %}
+        <p class="job-notes">Requested: {{ j.preferred_window }} (stated preference — not yet confirmed)</p>
+        {% endif %}
+      {% endif %}
       {% if j.completed_at %}
       <span class="agent-badge agent-badge-active">Completed</span>
       {% if j.value_cents %}<span class="agent-badge">${{ '%.2f'|format(j.value_cents / 100) }}</span>{% endif %}
@@ -302,6 +316,14 @@
                inputmode="decimal" style="width:150px;">
         <button class="btn btn-secondary btn-small" type="submit">Mark done</button>
       </form>
+      {% if j.booking_status != "confirmed" %}
+      <form method="post" action="/clients/{{ client.id }}/jobs/{{ j.id }}/confirm">
+        <button class="btn btn-secondary btn-small" type="submit"
+                title="Only click this once you've actually checked real availability for this time — this is the one action that lets the customer be told it's confirmed.">
+          I've confirmed this time
+        </button>
+      </form>
+      {% endif %}
       {% endif %}
     </div>
     {% endfor %}

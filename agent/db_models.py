@@ -23,6 +23,32 @@ ORIGIN_REACTIVATION = "reactivation"  # a dormant customer Retention brought bac
 # and lead_qualifier_service (which was qualifying and dispatching alerts).
 ORIGIN_ESCALATION = "escalation"
 
+# What a Job's appointment time actually is, honestly. Exists because a real
+# violation shipped without it: recovery_service told a customer "you're
+# booked for Wednesday 9am-12pm!" off a slot ManualCalendarProvider invented —
+# never checked against a real technician, truck, or calendar (Milestone 2,
+# booking-honesty audit, 2026-08-11).
+#
+# BOOKING_REQUESTED: a stated time preference only (log_job's
+#   preferred_window) — nobody has offered or picked a specific slot.
+# BOOKING_PROPOSED: a specific slot was offered (from whatever the calendar
+#   provider currently is — today that's ManualCalendarProvider's invented
+#   plausible-weekday slots, not a real calendar) and the customer picked
+#   one. Still not verified against real availability.
+# BOOKING_CONFIRMED: a human — the owner, today; a real calendar integration,
+#   later — has actually checked availability and locked the time in. This is
+#   the ONLY status confirmation language may ever be used for, and nothing
+#   in this codebase sets it automatically: there is no calendar integration,
+#   so nothing CAN honestly claim this without a human saying so. See
+#   app.py's /clients/{id}/jobs/{id}/confirm — the one route that sets it.
+#
+# Never "cancelled"/"declined" here — that's RecoveryJob.current_status's
+# concern (the outreach SEQUENCE's outcome), a different axis. This field is
+# only ever about the appointment TIME's own certainty.
+BOOKING_REQUESTED = "requested"
+BOOKING_PROPOSED = "proposed"
+BOOKING_CONFIRMED = "confirmed"
+
 # What a business is paying, which decides whether the trial spend cap applies.
 # This exists because the cap had no exit: every business carried a $20 hard
 # stop and there was no route, form, or console action anywhere in the codebase
@@ -236,6 +262,15 @@ class Job(SQLModel, table=True):
     # rather than $0 (ARCHITECTURE.md invariant 10) — a zero would quietly
     # drag down every total it lands in.
     value_cents: Optional[int] = None
+    # See BOOKING_* above. Defaults to REQUESTED — the honest default for
+    # every existing row and every new one, since nothing automated can
+    # honestly claim more than that.
+    booking_status: str = BOOKING_REQUESTED
+    # Set only by the one human-confirm action (app.py's /confirm route).
+    # Kept distinct from `updated_at`-style bookkeeping other tables use,
+    # because "when was this actually confirmed" is itself a fact the owner
+    # or a future support conversation may need — not just an audit trail.
+    confirmed_at: Optional[datetime] = None
 
 
 class RecoveryCampaign(SQLModel, table=True):

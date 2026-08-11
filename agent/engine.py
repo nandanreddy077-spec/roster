@@ -181,6 +181,27 @@ _PREFERRED_WINDOW_NOTE = (
     "booked appointment time, since nothing checks real availability yet."
 )
 
+# Milestone 2 booking-honesty audit (2026-08-11): general, not scoped to the
+# log_job moment the way _PREFERRED_WINDOW_NOTE is — this covers ad-hoc
+# drift too, e.g. a caller asking outright "so is my appointment confirmed?"
+# mid-conversation, which the narrower note never addressed. There is
+# nowhere in this product today that has actually checked a technician's,
+# truck's, or calendar's real availability — not this call, not Quote
+# Chaser's follow-up texts — so no employee may ever say a specific time is
+# locked in, booked, or confirmed. The honest sentence for "we have a time in
+# mind" always defers the actual lock-in to a human calling back.
+_CONFIRMATION_HONESTY_NOTE = (
+    'Never tell a caller their appointment or job is "confirmed," "booked '
+    'for" a specific time, or that you\'ll "see them at" a specific time — '
+    "nothing here has checked real technician or truck availability, so "
+    "saying that would be a promise you can't back up. If a time comes up — "
+    "whether they state a preference or ask you to confirm one — say it's "
+    "noted and that someone from the office will call to confirm the actual "
+    "time. If a caller asks directly whether their appointment is confirmed, "
+    "answer honestly: it's not yet, and say the same thing — the office will "
+    "call to lock in the actual time."
+)
+
 # Shared across both prompts (2026-07-29, Sprint 2): distinguishing a repair
 # from a replacement/estimate call. No new tool or field — "store estimate
 # intent using existing fields" means service_type/notes, exactly like every
@@ -276,6 +297,7 @@ A few call shapes need different handling: {_RESCHEDULE_NOTE} {_ESTIMATE_NOTE} \
 {_OBJECTION_NOTE} {_PRICING_GUIDANCE_NOTE}
 
 Keep replies short, warm, and text-message length (1-3 sentences). {_PREFERRED_WINDOW_NOTE}
+{_CONFIRMATION_HONESTY_NOTE}
 Once you have a service type and contact info, call log_job to capture the lead, then keep
 texting naturally."""
 
@@ -367,7 +389,8 @@ A few call shapes need different handling: {_RESCHEDULE_NOTE} {_ESTIMATE_NOTE} \
 
 {_OBJECTION_NOTE} {_PRICING_GUIDANCE_NOTE}
 
-{_PREFERRED_WINDOW_NOTE} Once you have a service type and contact info, call log_job \
+{_PREFERRED_WINDOW_NOTE} {_CONFIRMATION_HONESTY_NOTE}
+Once you have a service type and contact info, call log_job \
 to capture the lead before ending the call."""
 
 

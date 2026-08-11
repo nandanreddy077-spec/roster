@@ -9,10 +9,12 @@ import logging
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
+from booking_language import render_slot_language
 from bookings import book_job
 from calendar_provider import get_calendar_provider
 from channels import STOP_KEYWORDS, get_channel
 from db_models import (
+    BOOKING_PROPOSED,
     ORIGIN_QUOTE_RECOVERY,
     ORIGIN_REACTIVATION,
     Business,
@@ -420,17 +422,28 @@ def handle_recovery_reply(
                         "service_type": job.service_type,
                         "urgency": "routine",
                         "customer_name": job.customer_name,
-                        "notes": f"Booked via Revenue Recovery for {chosen}",
+                        "notes": "Booked via Revenue Recovery",
+                        # Same field Frontdesk's log_job uses for a stated
+                        # time preference — one place the founder console (or
+                        # any future surface) reads "the time in play",
+                        # regardless of which employee produced the job.
+                        "preferred_window": chosen,
                     },
                     customer_id=cust.id,
                     # The face that ran the sequence is the face that earned
                     # the job — this is the attribution behind every recovered
                     # dollar the owner is ever shown.
                     origin=_origin_for_face(session, job),
+                    # PROPOSED, never CONFIRMED: `chosen` came from
+                    # calendar_provider.get_available_slots(), which invents
+                    # plausible weekday windows — nothing here has checked a
+                    # real technician, truck, or calendar. See
+                    # booking_language.py for the honest wording this earns.
+                    booking_status=BOOKING_PROPOSED,
                 )
                 job.booked_job_id = new_job.id
                 job.current_status = "booked"
-                reply = f"Perfect, you're booked for {chosen}! We'll text you a reminder. Any questions, just reply here."
+                reply = render_slot_language(BOOKING_PROPOSED, chosen)
                 # Booking notification parity with every other booking path
                 # (service.py's SMS flow): the owner must hear about a real
                 # new job regardless of which employee booked it. Also not
