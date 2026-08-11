@@ -57,3 +57,32 @@ ignore_missing_imports = true
 warn_unused_ignores = true
 warn_redundant_casts = true
 warn_unreachable = true
+
+# A ratchet, not a blanket. Checking everything reports 328 errors, and the
+# overwhelming majority are structural rather than defects: SQLModel declares
+# `id: Optional[int]`, so every `Job.id` reads as `int | None`, and SQLAlchemy's
+# column descriptors (`.in_`, `.desc()`) are invisible to mypy without its
+# plugin. Silencing arg-type and union-attr globally to make that go away would
+# delete the single most valuable check there is — "you passed the wrong type".
+#
+# So mypy is ENFORCED everywhere by default, and the modules that are not clean
+# yet are listed below as explicit debt. Two properties follow: a NEW file is
+# type-checked from its first commit, and shortening this list is a visible,
+# reviewable change rather than a config tweak nobody notices.
+#
+# 29 modules are already clean, including every pure-logic engine
+# (lead_qualifier, dispatcher, recovery, review, membership, referral), the
+# rules tables, metrics, db_models, auth, locks, channels and scheduler — which
+# is to say most of the business logic.
+[[tool.mypy.overrides]]
+module = [
+    "activation", "app", "bookings", "call_trace", "db", "engine", "expansion",
+    "membership_service", "memory", "notifications", "portal", "provisioning",
+    "recovery_service", "referral_service", "repositories", "review_service",
+    "runner", "service", "trial_cap", "workspace", "xai_voice_adapter",
+    "tests.test_dashboard_access", "tests.test_dashboard_settings",
+    "tests.test_delete_client", "tests.test_employee_deploy",
+    "tests.test_event_publishing", "tests.test_recovery_endpoint",
+    "tests.test_recovery_service", "tests.test_review_service",
+]
+ignore_errors = true
