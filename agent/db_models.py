@@ -48,6 +48,16 @@ ORIGIN_ESCALATION = "escalation"
 BOOKING_REQUESTED = "requested"
 BOOKING_PROPOSED = "proposed"
 BOOKING_CONFIRMED = "confirmed"
+# BOOKING_CANCELLED: terminal. The appointment is not happening — the owner
+#   rejected the request, or the customer called it off. A customer who comes
+#   back gets a NEW Job rather than a resurrected one, so `completed_at` and
+#   every employee that reads it (Reviews, Referral, Membership, Quote Chaser)
+#   keep their existing meaning untouched.
+# BOOKING_RESCHEDULE_REQUESTED: a time exists and somebody wants a different
+#   one; nobody has agreed to the new one yet. Frontdesk already RECOGNIZES
+#   this (engine.py's _RESCHEDULE_NOTE) and until now had nowhere to put it.
+BOOKING_CANCELLED = "cancelled"
+BOOKING_RESCHEDULE_REQUESTED = "reschedule_requested"
 
 # What a business is paying, which decides whether the trial spend cap applies.
 # This exists because the cap had no exit: every business carried a $20 hard
@@ -271,6 +281,20 @@ class Job(SQLModel, table=True):
     # because "when was this actually confirmed" is itself a fact the owner
     # or a future support conversation may need — not just an audit trail.
     confirmed_at: Optional[datetime] = None
+    # Same reasoning as confirmed_at, for the terminal state: "when did this
+    # stop being a booking" is a fact, not bookkeeping.
+    cancelled_at: Optional[datetime] = None
+    # Set ONLY when the owner offers a window (booking_manager.propose), never
+    # when an employee books a slot the customer picked. That distinction is
+    # what lets an inbound text be routed to "the customer is answering the
+    # owner's offer" — both cases sit in BOOKING_PROPOSED, so the status alone
+    # cannot tell them apart.
+    owner_proposed_at: Optional[datetime] = None
+    # The owner's own words when they reject or move a booking ("crew is on a
+    # commercial job all Thursday"). Shown to the owner, never sent verbatim to
+    # the customer — it is an internal note, and forwarding it unread would
+    # publish whatever the owner typed.
+    booking_notes: Optional[str] = None
 
 
 class RecoveryCampaign(SQLModel, table=True):
