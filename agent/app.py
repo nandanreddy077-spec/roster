@@ -21,6 +21,15 @@ if _env_file.exists():
 import backup
 import departments
 import metrics
+from logging_config import configure_logging
+
+# Before any import below that might log at import time (channels.get_channel's
+# credential warning, in particular) — a boot-time log line written before the
+# JSON handler exists would print as plain text, not JSON, breaking the "every
+# line is one JSON object" guarantee for exactly the lines someone greps for
+# first after a deploy.
+configure_logging()
+
 from auth import ACCESS_LINK_MAX_AGE_SECONDS, make_access_token, resolve_session_secret
 from bookings import parse_money_cents
 from call_trace import CallTrace
