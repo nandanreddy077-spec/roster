@@ -1,6 +1,6 @@
 import recovery_service
 from conftest import StubAgent
-from db_models import Business, RecoveryJob
+from db_models import Business, RecoveryCampaign, RecoveryJob
 from sqlmodel import Session
 
 
@@ -21,6 +21,21 @@ def _capped_client(session):
     return client
 
 
+def _campaign(session, business_id: int) -> int:
+    """RecoveryJob.campaign_id is a foreign key, so a literal id with no
+    matching RecoveryCampaign row only ever worked on SQLite (no PRAGMA
+    foreign_keys=ON). Found running this suite against Postgres for the
+    first time, 2026-08-11."""
+    camp = RecoveryCampaign(
+        business_id=business_id, face="quote", name="test", customer_list_json="[]"
+    )
+    session.add(camp)
+    session.commit()
+    session.refresh(camp)
+    assert camp.id is not None
+    return camp.id
+
+
 def test_recovery_reply_skips_paid_call_when_capped(test_engine, monkeypatch):
     monkeypatch.setattr(
         recovery_service,
@@ -36,8 +51,9 @@ def test_recovery_reply_skips_paid_call_when_capped(test_engine, monkeypatch):
     )
     with Session(test_engine) as session:
         client = _capped_client(session)
+        campaign_id = _campaign(session, client.id)
         job = RecoveryJob(
-            campaign_id=1,
+            campaign_id=campaign_id,
             business_id=client.id,
             customer_phone="+15551112222",
             service_type="AC repair",
@@ -78,8 +94,9 @@ def test_recovery_reply_records_usage_when_under_cap(test_engine, monkeypatch):
         session.add(client)
         session.commit()
         session.refresh(client)
+        campaign_id = _campaign(session, client.id)
         job = RecoveryJob(
-            campaign_id=1,
+            campaign_id=campaign_id,
             business_id=client.id,
             customer_phone="+15551112222",
             service_type="AC repair",

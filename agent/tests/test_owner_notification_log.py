@@ -22,10 +22,25 @@ from notifications import (
 from sqlmodel import Session, select
 
 
+def _business(session, **overrides) -> int:
+    """business_id is a foreign key on OwnerNotification, so a literal id with
+    no matching row only ever worked on SQLite (no PRAGMA foreign_keys=ON).
+    Found running this suite against Postgres for the first time, 2026-08-11."""
+    fields = dict(business_name="Test Co", trade="hvac")
+    fields.update(overrides)
+    b = Business(**fields)
+    session.add(b)
+    session.commit()
+    session.refresh(b)
+    assert b.id is not None
+    return b.id
+
+
 def test_records_a_delivered_notification(session):
+    bid = _business(session)
     row = record_owner_notification(
         session,
-        business_id=1,
+        business_id=bid,
         kind=KIND_JOB_BOOKED,
         source=SOURCE_SMS_BOOKING,
         message="Frontdesk just booked a job",
@@ -34,7 +49,7 @@ def test_records_a_delivered_notification(session):
     assert row.id is not None
     stored = session.exec(select(OwnerNotification)).all()
     assert len(stored) == 1
-    assert stored[0].business_id == 1
+    assert stored[0].business_id == bid
     assert stored[0].kind == KIND_JOB_BOOKED
     assert stored[0].source == SOURCE_SMS_BOOKING
     assert stored[0].message == "Frontdesk just booked a job"
@@ -45,9 +60,10 @@ def test_records_an_undelivered_notification(session):
     """H5: a send that failed, or a business with no escalation phone set,
     still gets a row — marked undelivered. The dashboard is then the only
     place that alert exists, which is the entire point of the log."""
+    bid = _business(session)
     record_owner_notification(
         session,
-        business_id=1,
+        business_id=bid,
         kind=KIND_ESCALATION,
         source=SOURCE_ALERT_OWNER,
         message="URGENT — caller needs you",
@@ -60,9 +76,10 @@ def test_records_an_undelivered_notification(session):
 def test_a_new_notification_starts_unread(session):
     """read_at has no producer until the Notifications page ships (Phase 5).
     It defaults to None so that page has a real unread signal to read."""
+    bid = _business(session)
     row = record_owner_notification(
         session,
-        business_id=1,
+        business_id=bid,
         kind=KIND_JOB_BOOKED,
         source=SOURCE_SMS_BOOKING,
         message="m",
@@ -402,27 +419,31 @@ def _record(session, business_id, message):
 
 
 def test_recent_notifications_returns_newest_first(session):
+    bid = _business(session)
     for i in range(3):
-        _record(session, 1, f"job {i}")
+        _record(session, bid, f"job {i}")
 
-    assert [n.message for n in recent_notifications(session, 1)] == ["job 2", "job 1", "job 0"]
+    assert [n.message for n in recent_notifications(session, bid)] == ["job 2", "job 1", "job 0"]
 
 
 def test_recent_notifications_never_leaks_another_business(session):
     """Business-scoped isolation is the security boundary throughout Roster
     (platform PRD §12). One business must never see another's alerts."""
-    _record(session, 1, "mine")
-    _record(session, 2, "theirs")
+    bid1, bid2 = _business(session), _business(session)
+    _record(session, bid1, "mine")
+    _record(session, bid2, "theirs")
 
-    assert [n.message for n in recent_notifications(session, 1)] == ["mine"]
+    assert [n.message for n in recent_notifications(session, bid1)] == ["mine"]
 
 
 def test_recent_notifications_respects_the_limit(session):
+    bid = _business(session)
     for i in range(5):
-        _record(session, 1, f"job {i}")
+        _record(session, bid, f"job {i}")
 
-    assert len(recent_notifications(session, 1, limit=2)) == 2
+    assert len(recent_notifications(session, bid, limit=2)) == 2
 
 
 def test_recent_notifications_on_an_empty_log(session):
-    assert recent_notifications(session, 1) == []
+    bid = _business(session)
+    assert recent_notifications(session, bid) == []

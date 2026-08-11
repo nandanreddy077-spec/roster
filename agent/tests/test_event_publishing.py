@@ -8,7 +8,7 @@ import app as app_module
 import bookings
 from bookings import book_job
 from conftest import DASH_AUTH
-from db_models import Business, Event, Job
+from db_models import Business, Customer, Event, Job
 from events import JOB_BOOKED, JOB_COMPLETED
 from fastapi.testclient import TestClient
 from sqlmodel import Session, select
@@ -66,15 +66,23 @@ def test_event_carries_customer_id_when_known(test_engine):
     bid = _make_business(test_engine)
     with Session(test_engine) as s:
         business = s.get(Business, bid)
+        # Event.customer_id is a real foreign key, so a literal id with no
+        # matching Customer row only ever worked on SQLite (no PRAGMA
+        # foreign_keys=ON). Found running this suite against Postgres for the
+        # first time, 2026-08-11.
+        cust = Customer(business_id=bid, phone="+15551112222")
+        s.add(cust)
+        s.commit()
+        s.refresh(cust)
         book_job(
             s,
             business,
             "+15551112222",
             "+15551112222",
             {"service_type": "AC repair", "urgency": "routine"},
-            customer_id=4242,
+            customer_id=cust.id,
         )
-        assert _events(s, JOB_BOOKED)[0].customer_id == 4242
+        assert _events(s, JOB_BOOKED)[0].customer_id == cust.id
 
 
 def test_merge_rebook_publishes_nothing(test_engine):
