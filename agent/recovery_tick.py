@@ -10,6 +10,9 @@ review_requested_at, source_job_id) or, for Membership, by a unique index that
 makes a duplicate claim impossible rather than merely unlikely.
 """
 
+import sys
+
+import backup
 from channels import send_hours_ok
 from db import engine, init_db
 from dispatcher_service import recommend_dispatch
@@ -26,6 +29,15 @@ from sqlmodel import Session
 
 def run():
     init_db()
+    # First, and outside the session: a snapshot is only worth taking before
+    # anything else in this tick can change data. Best-effort by design — a
+    # failed backup must never stop customers being served, but it is printed
+    # loudly enough to notice, and the /health endpoint reports snapshot age.
+    try:
+        backup.run()
+    except Exception as e:  # noqa: BLE001 — a backup must never break the tick
+        print(f"[backup] FAILED: {e}", file=sys.stderr)
+
     with Session(engine) as session:
         qualified = qualify_new_jobs(session)
         print(f"Lead Qualifier: qualified {len(qualified)} job(s).")
