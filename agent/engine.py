@@ -8,6 +8,15 @@ from models import ClientConfig
 MODEL = "claude-sonnet-4-6"
 MAX_ITERS = 4  # safety cap: bound the Think->Act->Observe loop so a turn can't run away
 
+# What a customer gets if the Claude call itself fails (Milestone B). Honest
+# and reusable across every channel (SMS, voice, dashboard test-chat) — it
+# never claims a booking, never explains WHY (an outage is not the
+# customer's problem to parse), and gives them something to hold onto.
+FALLBACK_REPLY = (
+    "Sorry — I'm having trouble responding right now. Someone from the team "
+    "will follow up with you shortly."
+)
+
 LOG_JOB_TOOL = {
     "name": "log_job",
     "description": (
@@ -422,6 +431,13 @@ class AgentEngine:
                             turn, ready for the caller to store as history
           pending_tool_call {"name": str, "input": dict} if a non-log_job tool was
                             called, else None
+          failed            True if the Claude call itself raised (Milestone B,
+                            "no silent failures") — `reply` is still a real,
+                            honest sentence the caller can send as-is; this
+                            flag exists so the caller can ALSO alert the owner
+                            (see employee_outcome.report_llm_failure), not so
+                            it can decide whether to answer the customer.
+          error             str(exception), present only when failed is True
         """
         system = system_prompt or build_system_prompt(client_config)
         active_tools = tools or [LOG_JOB_TOOL]
@@ -433,13 +449,36 @@ class AgentEngine:
         pending_tool_call: Optional[Dict[str, Any]] = None
 
         for _ in range(iters):
-            resp = self.client.messages.create(
-                model=MODEL,
-                max_tokens=512,
-                system=system,
-                tools=active_tools,
-                messages=messages,
-            )
+            try:
+                resp = self.client.messages.create(
+                    model=MODEL,
+                    max_tokens=512,
+                    system=system,
+                    tools=active_tools,
+                    messages=messages,
+                )
+            except Exception as e:
+                # Milestone B, "no silent failures": every live caller of
+                # respond() (service.py, recovery/review/referral/membership
+                # _service.py) sends `reply` straight to the customer with no
+                # None-check of its own. Before this, an Anthropic timeout or
+                # 5xx propagated as an unhandled exception — an HTTP 500 to
+                # Twilio, and a customer who typed "yes I want to book" heard
+                # nothing back. One caught exception here fixes every caller
+                # at once, the same shape as the trial-cap fix beside it.
+                #
+                # A normal assistant text turn, not a special case: no tool_use
+                # blocks, so no dangling tool_result to reconcile, and history
+                # stays a clean user/assistant alternation for the next turn.
+                assistant_content = [{"type": "text", "text": FALLBACK_REPLY}]
+                return {
+                    "reply": FALLBACK_REPLY,
+                    "jobs": [],
+                    "new_messages": [{"role": "assistant", "content": assistant_content}],
+                    "pending_tool_call": None,
+                    "failed": True,
+                    "error": f"{type(e).__name__}: {e}",
+                }
 
             assistant_content = serialize_content(resp.content)
             messages.append({"role": "assistant", "content": assistant_content})
@@ -518,6 +557,7 @@ class AgentEngine:
             "jobs": captured_jobs,
             "new_messages": new_messages,
             "pending_tool_call": pending_tool_call,
+            "failed": False,
         }
 
 

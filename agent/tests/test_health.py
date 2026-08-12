@@ -107,3 +107,63 @@ def test_no_tick_ever_recorded_is_reported_but_stays_200(test_engine, monkeypatc
     assert r.status_code == 200
     assert body["checks"]["scheduler"]["ok"] is False
     assert "no tick" in body["checks"]["scheduler"]["detail"]
+
+
+# ---- Milestone B: the alarm channel must not fail silently ------------------
+
+
+def test_undelivered_owner_alerts_are_reported(test_engine, monkeypatch):
+    """OwnerNotification.delivered has existed since the notifications table
+    was created and NOTHING has ever read it. A business with no
+    escalation_phone, or an A2P-filtered number, produced alerts that were
+    recorded and never arrived — and the failure of the alarm channel was
+    itself unalarmed."""
+    monkeypatch.setattr(app_module, "engine", test_engine)
+    from db_models import OwnerNotification
+
+    with Session(test_engine) as session:
+        session.add(
+            OwnerNotification(
+                business_id=1, kind="escalation", source="alert_owner", message="m", delivered=False
+            )
+        )
+        session.commit()
+
+    body = TestClient(app_module.app).get("/health").json()
+
+    assert body["checks"]["owner_alerts"]["ok"] is False
+    assert body["checks"]["owner_alerts"]["undelivered"] == 1
+
+
+def test_delivered_owner_alerts_do_not_trip_the_check(test_engine, monkeypatch):
+    monkeypatch.setattr(app_module, "engine", test_engine)
+    from db_models import OwnerNotification
+
+    with Session(test_engine) as session:
+        session.add(
+            OwnerNotification(
+                business_id=1, kind="escalation", source="alert_owner", message="m", delivered=True
+            )
+        )
+        session.commit()
+
+    body = TestClient(app_module.app).get("/health").json()
+
+    assert body["checks"]["owner_alerts"]["ok"] is True
+
+
+def test_undelivered_alerts_do_not_take_the_service_down(test_engine, monkeypatch):
+    """A soft signal, like scheduler/backups: worth a human's attention, but
+    restarting the container would not deliver a single missed text."""
+    monkeypatch.setattr(app_module, "engine", test_engine)
+    from db_models import OwnerNotification
+
+    with Session(test_engine) as session:
+        session.add(
+            OwnerNotification(
+                business_id=1, kind="escalation", source="alert_owner", message="m", delivered=False
+            )
+        )
+        session.commit()
+
+    assert TestClient(app_module.app).get("/health").status_code == 200

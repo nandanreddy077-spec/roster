@@ -10,6 +10,7 @@ from typing import List, Optional
 
 from channels import get_channel
 from db_models import Business, Job, ReviewReply
+from employee_outcome import CUSTOMER_FALLBACK_MESSAGE, report_employee_blocked, report_if_failed
 from engine import AgentEngine
 from notifications import (
     KIND_ESCALATION,
@@ -55,14 +56,28 @@ def send_due_review_requests(session: Session) -> List[Job]:
 
     for job in jobs:
         client = session.get(Business, job.business_id)
-        if client is None or not client.review_link or not job.callback_number:
+        if client is None or not job.callback_number:
             continue
         # Reviews only works for a business that actually hired it. The
         # Employee row IS the deployment record (ARCHITECTURE.md invariant 8);
         # review_link alone is configuration, not consent to text customers.
         # ponytail: one Employee query per due job — fine at this volume,
         # hoist to a per-business set if the daily due list ever gets large.
+        #
+        # ORDER MATTERS (Milestone B): the hired check comes BEFORE the
+        # review_link check. Not hired is not blocked — a business that never
+        # asked for Reviews must not be nagged about a link it has no reason
+        # to set.
         if not is_active(session, client, "reviews"):
+            continue
+        if not client.review_link:
+            report_employee_blocked(
+                session,
+                client,
+                "reviews",
+                "missing_review_link",
+                "no review link is set, so review requests can't go out",
+            )
             continue
 
         try:
@@ -198,7 +213,10 @@ def handle_review_reply(session: Session, client: Business, job: Job, text: str)
             )
         )
         session.commit()
-        return None
+        # Milestone B: an honest sentence, never silence. The cap stops us
+        # spending on a model call, not on answering — this reply rides the
+        # TwiML webhook response, so it costs nothing to send.
+        return CUSTOMER_FALLBACK_MESSAGE
 
     history = [{"role": "user", "content": [{"type": "text", "text": text}]}]
     result = agent.respond(
@@ -209,6 +227,7 @@ def handle_review_reply(session: Session, client: Business, job: Job, text: str)
         max_iters=2,
     )
     record_usage(session, client)
+    report_if_failed(session, client, "reviews", result)
     pending = result["pending_tool_call"]
     outcome = "unclear"
     if pending and pending["name"] == "record_review_reply":

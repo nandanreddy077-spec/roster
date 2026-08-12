@@ -23,6 +23,11 @@ from db_models import (
     RecoveryJob,
     RecoveryMessageLog,
 )
+from employee_outcome import (
+    CUSTOMER_FALLBACK_MESSAGE,
+    report_if_failed,
+    report_lead_went_cold,
+)
 from engine import AgentEngine
 from notifications import (
     KIND_ESCALATION,
@@ -242,6 +247,22 @@ def tick(session: Session) -> List[RecoveryJob]:
                 job.updated_at = datetime.utcnow()
                 session.add(job)
                 session.commit()
+                # Milestone B (RC4): a terminal state must tell someone. This
+                # sequence has run its full course with no reply, so nothing
+                # automated will ever touch this lead again — and that is
+                # exactly the moment one phone call from the owner might still
+                # save the estimate. Recording it and moving on was the
+                # revenue-side instance of the silent-failure class.
+                client = session.get(Business, job.business_id)
+                if client is not None:
+                    report_lead_went_cold(
+                        session,
+                        client,
+                        customer_name=job.customer_name,
+                        customer_phone=job.customer_phone,
+                        service_type=job.service_type,
+                        recovery_job_id=job.id,
+                    )
             continue
 
         # CLAIM the day before sending: a conditional UPDATE that only wins if
@@ -381,7 +402,10 @@ def handle_recovery_reply(
     # empty TwiML). The customer's reply is already logged above, so nothing
     # is lost.
     if not can_respond(client):
-        return None
+        # Milestone B: an honest sentence, never silence. The cap stops us
+        # spending on a model call, not on answering — this reply rides the
+        # TwiML webhook response, so it costs nothing to send.
+        return CUSTOMER_FALLBACK_MESSAGE
 
     history = [{"role": "user", "content": [{"type": "text", "text": text}]}]
 
@@ -394,6 +418,7 @@ def handle_recovery_reply(
             max_iters=2,
         )
         record_usage(session, client)
+        report_if_failed(session, client, "quote_chaser", result)
         reply = (
             result["reply"]
             or "Sorry, could you confirm which time works — the first, second, or third option?"
@@ -479,6 +504,7 @@ def handle_recovery_reply(
         max_iters=2,
     )
     record_usage(session, client)
+    report_if_failed(session, client, "quote_chaser", result)
     pending = result["pending_tool_call"]
 
     if pending and pending["name"] == "escalate_to_owner":

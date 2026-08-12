@@ -1,6 +1,7 @@
 import service
 from conftest import StubAgent
 from db_models import Business
+from employee_outcome import CUSTOMER_FALLBACK_MESSAGE
 from sqlmodel import Session
 
 
@@ -29,7 +30,7 @@ def test_handle_customer_message_skips_agent_when_cap_exhausted(test_engine, mon
 
         result = service.handle_customer_message(session, client, "+15550001111", "hello")
 
-        assert result["reply"] is None
+        assert result["reply"] == CUSTOMER_FALLBACK_MESSAGE  # Milestone B: answered
         assert result["jobs"] == []
         assert client.trial_spend_cents == 2200  # unchanged — no call was made
 

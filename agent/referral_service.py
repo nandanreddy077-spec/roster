@@ -10,6 +10,7 @@ from typing import List, Optional
 
 from channels import get_channel
 from db_models import Business, Job, ReferralLead
+from employee_outcome import CUSTOMER_FALLBACK_MESSAGE, report_employee_blocked, report_if_failed
 from engine import AgentEngine
 from referral_engine import (
     RECORD_REFERRAL_TOOL,
@@ -45,7 +46,7 @@ def send_due_referral_asks(session: Session) -> List[Job]:
 
     for job in jobs:
         client = session.get(Business, job.business_id)
-        if client is None or not client.referral_incentive or not job.callback_number:
+        if client is None or not job.callback_number:
             continue
         # Same deployment invariant as Reviews and Recovery: the Employee row
         # IS the deployment record, and `referral_incentive` is configuration,
@@ -55,6 +56,20 @@ def send_due_referral_asks(session: Session) -> List[Job]:
         # contradicting each other. Graduating the registry entry is what
         # turns it back on, deliberately.
         if not is_active(session, client, "referral"):
+            continue
+        # ORDER MATTERS (Milestone B): hired first, then configuration. Dead
+        # code while Referral's registry status is `planned` (is_active can
+        # never be True), and deliberately written anyway — the day it
+        # graduates, it must not graduate into the silent-skip bug its three
+        # sibling employees just had removed.
+        if not client.referral_incentive:
+            report_employee_blocked(
+                session,
+                client,
+                "referral",
+                "missing_referral_incentive",
+                "no referral incentive is set, so referral asks can't go out",
+            )
             continue
 
         try:
@@ -132,7 +147,10 @@ def handle_referral_reply(session: Session, client: Business, job: Job, text: st
             )
         )
         session.commit()
-        return None
+        # Milestone B: an honest sentence, never silence. The cap stops us
+        # spending on a model call, not on answering — this reply rides the
+        # TwiML webhook response, so it costs nothing to send.
+        return CUSTOMER_FALLBACK_MESSAGE
 
     history = [{"role": "user", "content": [{"type": "text", "text": text}]}]
     result = agent.respond(
@@ -143,6 +161,7 @@ def handle_referral_reply(session: Session, client: Business, job: Job, text: st
         max_iters=2,
     )
     record_usage(session, client)
+    report_if_failed(session, client, "referral", result)
     pending = result["pending_tool_call"]
     referred_name = None
     referred_phone = None

@@ -1,3 +1,5 @@
+from employee_outcome import CUSTOMER_FALLBACK_MESSAGE
+
 """The deployed app has exactly two faces: a public one (landing, signup flow,
 webhooks) and a founder-only one (/clients dashboard, behind HTTP Basic).
 These tests pin that boundary — the dashboard must never serve without
@@ -160,7 +162,12 @@ def test_sms_webhook_is_public(monkeypatch, test_engine):
     assert "isn't set up" in response.text
 
 
-def test_sms_webhook_stays_silent_once_trial_cap_exhausted(monkeypatch, test_engine):
+def test_sms_webhook_still_answers_once_trial_cap_exhausted(monkeypatch, test_engine):
+    """Milestone B: this test previously asserted the webhook returned EMPTY
+    TwiML once the cap was blown -- it was encoding the silent-failure bug as
+    correct behaviour. A customer who texts in always gets an answer; the cap
+    only stops us spending on a model call, and this reply rides the webhook
+    response at no cost."""
     monkeypatch.setenv("ADMIN_PASSWORD", "hunter2")
     monkeypatch.setattr(app_module, "engine", test_engine)
     from db_models import Business
@@ -190,4 +197,5 @@ def test_sms_webhook_stays_silent_once_trial_cap_exhausted(monkeypatch, test_eng
         data={"From": "+15550001111", "To": "+15559998888", "Body": "hello"},
     )
     assert response.status_code == 200
-    assert "<Message>" not in response.text
+    assert "<Message>" in response.text
+    assert CUSTOMER_FALLBACK_MESSAGE in response.text
