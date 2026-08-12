@@ -36,6 +36,7 @@ from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 import websockets
+from booking_manager import record_request
 from bookings import book_job, record_escalation
 from call_trace import CallTrace
 from db_models import Business, Job, Message
@@ -281,6 +282,11 @@ async def _persist_job(
             build_owner_message(job, "Frontdesk"),
             delivered,
         )
+        # A voice booking gets the same timeline as an SMS one — otherwise the
+        # owner's booking history simply has no beginning for calls, which is
+        # the channel most bookings actually arrive on.
+        record_request(session, client, job, owner_notified=delivered)
+        session.refresh(job)  # record_request publishes, and a publish expires
     return job
 
 

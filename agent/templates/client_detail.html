@@ -316,14 +316,47 @@
                inputmode="decimal" style="width:150px;">
         <button class="btn btn-secondary btn-small" type="submit">Mark done</button>
       </form>
-      {% if j.booking_status != "confirmed" %}
+      {# Milestone A: every control below both changes the booking state AND
+         texts the customer — the two are one operation in booking_manager, so
+         a booking can never be settled without the customer being told.
+         Hidden once the booking is settled (confirmed or cancelled): a button
+         whose transition would be rejected is a dead control. #}
+      {% if j.booking_status not in ("confirmed", "cancelled") %}
       <form method="post" action="/clients/{{ client.id }}/jobs/{{ j.id }}/confirm">
         <button class="btn btn-secondary btn-small" type="submit"
                 title="Only click this once you've actually checked real availability for this time — this is the one action that lets the customer be told it's confirmed.">
           I've confirmed this time
         </button>
       </form>
+      <form method="post" action="/clients/{{ client.id }}/jobs/{{ j.id }}/propose">
+        <input type="text" name="window" placeholder="Suggest another window, e.g. Friday 8am-12pm"
+               style="width:280px;" required>
+        <button class="btn btn-secondary btn-small" type="submit">Suggest this time instead</button>
+      </form>
+      <form method="post" action="/clients/{{ client.id }}/jobs/{{ j.id }}/reject">
+        <input type="text" name="reason" placeholder="Why? (kept private — never sent to the customer)"
+               style="width:280px;">
+        <button class="btn btn-secondary btn-small" type="submit">Can't take this booking</button>
+      </form>
       {% endif %}
+      {% endif %}
+      {% if j.booking_status == "cancelled" %}
+      <span class="agent-badge agent-badge-off">Declined</span>
+      {% if j.booking_notes %}<p class="job-notes">Your note: {{ j.booking_notes }}</p>{% endif %}
+      {% endif %}
+      {# The booking's own history, straight from the append-only event
+         stream. Answers "what actually happened, and did the customer ever
+         hear back?" without reading five separate timestamp columns. #}
+      {% set steps = booking_timelines.get(j.id) %}
+      {% if steps %}
+      <details class="booking-timeline">
+        <summary>Booking history ({{ steps | length }})</summary>
+        <ol>
+          {% for step in steps %}
+          <li><strong>{{ step.at.strftime('%H:%M') }}</strong> {{ step.label }}</li>
+          {% endfor %}
+        </ol>
+      </details>
       {% endif %}
     </div>
     {% endfor %}

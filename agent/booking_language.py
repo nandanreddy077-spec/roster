@@ -98,7 +98,53 @@ def render_slot_language(status: str, slot_text: str) -> str:
     raise BookingLanguageError(
         f"render_slot_language() has no honest confirmation-claiming sentence to "
         f"give you, on purpose — status={status!r} is not something this function "
-        "generates language for. If the booking is genuinely confirmed, that fact "
-        "belongs in a message a human wrote for that specific appointment, not a "
-        "template."
+        "generates language for. A genuinely confirmed appointment goes through "
+        "render_confirmed_language(), which booking_manager alone calls, after a "
+        "real human has actually verified the time."
     )
+
+
+# ---- the one door confirmation language may come through --------------------
+#
+# Milestone A gave BOOKING_CONFIRMED its first legitimate customer-facing
+# message: the owner has now actually confirmed, and the customer — who was
+# told "the office will confirm and text you back" — has to hear about it, or
+# the booking loop still never ends.
+#
+# This is deliberately a SEPARATE function rather than a fourth branch in
+# render_slot_language(). That function keeps raising for BOOKING_CONFIRMED,
+# so the accidental-caller guard it has always provided is unchanged: a caller
+# that wanders in with a status variable still cannot produce confirmation
+# language by accident. Reaching this text requires naming this function, and
+# the name makes misuse obvious in review.
+#
+# These sentences contain phrases from CONFIRMATION_PHRASES on purpose — that
+# is what makes them confirmation language. This module is the one file the
+# static audit excludes, for exactly this reason.
+
+
+def render_confirmed_language(slot_text: str) -> str:
+    """The message a customer gets when the owner has genuinely confirmed.
+    Callers must have already moved the booking to BOOKING_CONFIRMED — this
+    function trusts its caller, which is why booking_manager is the only one."""
+    return (
+        f"Good news — you're confirmed for {slot_text}. "
+        "See you then! Reply here if anything changes."
+    )
+
+
+def render_cancelled_language(slot_text: str) -> str:
+    """The booking is off. Says so plainly and leaves the door open, without
+    inventing a reason (the owner's note is internal) and without promising a
+    replacement time nobody has agreed to yet."""
+    when = f" for {slot_text}" if slot_text else ""
+    return (
+        f"Sorry — we're not able to make it work{when} after all. "
+        "Someone from the office will be in touch if you'd like to find another time."
+    )
+
+
+def render_owner_proposed_language(slot_text: str) -> str:
+    """The owner offered a different window. Asks rather than tells: nobody has
+    agreed to this yet, so it must not read as a booking."""
+    return f"Update from the office — the closest we can do is {slot_text}. Does that work for you?"

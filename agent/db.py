@@ -178,6 +178,9 @@ def _migrate_add_columns():
         "ALTER TABLE business ADD COLUMN billing_state VARCHAR DEFAULT 'trial'",
         "ALTER TABLE job ADD COLUMN booking_status VARCHAR DEFAULT 'requested'",
         "ALTER TABLE job ADD COLUMN confirmed_at DATETIME",
+        "ALTER TABLE job ADD COLUMN cancelled_at DATETIME",
+        "ALTER TABLE job ADD COLUMN owner_proposed_at DATETIME",
+        "ALTER TABLE job ADD COLUMN booking_notes VARCHAR",
     )
     with engine.connect() as conn:
         for ddl in statements:

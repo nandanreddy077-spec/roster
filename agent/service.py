@@ -9,6 +9,7 @@ import json
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
+from booking_manager import record_request
 from bookings import book_job, record_escalation
 from db_models import ORIGIN_INBOUND, ORIGIN_MISSED_CALL, Business, Job, Message
 from employee_outcome import CUSTOMER_FALLBACK_MESSAGE, report_if_failed
@@ -176,6 +177,11 @@ def handle_customer_message(
                 build_owner_message(job, "Frontdesk"),
                 delivered,
             )
+        # Start the booking's timeline at the booking, not at the first owner
+        # action — otherwise the owner opens a history that begins in the
+        # middle. Last in the loop body: this publishes, and a publish commits
+        # (expiring `job`), so nothing may read `job` after it.
+        record_request(session, client, job, owner_notified=delivered)
 
     # Strictly after the booking commit above, same rule the voice path follows:
     # the lead is already durable, so a failed page can never cost us the job.
