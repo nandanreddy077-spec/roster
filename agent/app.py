@@ -38,7 +38,13 @@ logger = logging.getLogger(__name__)
 _sentry_enabled = configure_sentry(os.environ)
 logger.info("sentry configured" if _sentry_enabled else "sentry not configured (no SENTRY_DSN)")
 
+import booking_manager
 from auth import ACCESS_LINK_MAX_AGE_SECONDS, make_access_token, resolve_session_secret
+from booking_manager import (
+    find_active_owner_proposal,
+    handle_customer_proposal_reply,
+    handle_owner_sms,
+)
 from bookings import parse_money_cents
 from call_trace import CallTrace
 from channels import get_channel, normalize_phone
@@ -46,7 +52,6 @@ from db import DATA_DIR, engine, init_db
 from db_models import (
     BILLING_PAID,
     BILLING_TRIAL,
-    BOOKING_CONFIRMED,
     AccessRequest,
     Business,
     Customer,
@@ -956,17 +961,54 @@ def confirm_job(client_id: int, job_id: int):
     booking_language.py's module docstring for the full reasoning.
 
     Idempotent and silent on a job that's already confirmed (re-clicking
-    a stale page must not error), same posture as complete_job above."""
+    a stale page must not error), same posture as complete_job above.
+
+    Milestone A moved the state change itself into booking_manager, which is
+    now the single writer — and, critically, TEXTS THE CUSTOMER. Before that
+    this route set a column and redirected, so a customer who had been told
+    "the office will confirm and text you back" never heard from Roster
+    again."""
     with Session(engine) as session:
-        client = session.get(Business, client_id)
-        job = session.get(Job, job_id)
-        if client is None or job is None or job.business_id != client_id:
-            raise HTTPException(status_code=404, detail="No such job")
-        if job.booking_status != BOOKING_CONFIRMED:
-            job.booking_status = BOOKING_CONFIRMED
-            job.confirmed_at = datetime.utcnow()
-            session.add(job)
-            session.commit()
+        client, job = _booking_target(session, client_id, job_id)
+        booking_manager.confirm(session, client, job)
+    return RedirectResponse(f"/clients/{client_id}", status_code=303)
+
+
+def _booking_target(session, client_id: int, job_id: int):
+    """Load the (business, job) pair for a booking action, or 404.
+
+    The job must belong to the business in the URL — business isolation is the
+    security boundary everywhere in Roster, and these routes take two ids that
+    a caller could otherwise mix and match."""
+    client = session.get(Business, client_id)
+    job = session.get(Job, job_id)
+    if client is None or job is None or job.business_id != client_id:
+        raise HTTPException(status_code=404, detail="No such job")
+    return client, job
+
+
+@app.post("/clients/{client_id}/jobs/{job_id}/reject")
+def reject_job(client_id: int, job_id: int, reason: str = Form("")):
+    """The owner can't take this booking. Cancels it and tells the customer.
+
+    `reason` is the owner's own words, stored for the owner and never
+    forwarded — see booking_manager.reject."""
+    with Session(engine) as session:
+        client, job = _booking_target(session, client_id, job_id)
+        booking_manager.reject(session, client, job, reason.strip() or None)
+    return RedirectResponse(f"/clients/{client_id}", status_code=303)
+
+
+@app.post("/clients/{client_id}/jobs/{job_id}/propose")
+def propose_job_time(client_id: int, job_id: int, window: str = Form(...)):
+    """The owner offers a different arrival window. The customer is ASKED, not
+    told — a proposal is not an agreement, so this can never produce
+    confirmation language."""
+    with Session(engine) as session:
+        client, job = _booking_target(session, client_id, job_id)
+        cleaned = window.strip()
+        if cleaned:
+            booking_manager.propose(session, client, job, cleaned)
     return RedirectResponse(f"/clients/{client_id}", status_code=303)
 
 
@@ -1279,6 +1321,12 @@ def client_detail(request: Request, client_id: int):
             client, department_rows, metrics.booked_jobs(session, client_id)
         )
         access_link = _access_link(client)
+        # One timeline per job: what actually happened to this booking, in
+        # order, built from the append-only event stream rather than inferred
+        # from timestamps scattered across the row.
+        booking_timelines = {
+            job.id: booking_manager.timeline(session, client_id, job.id) for job in jobs
+        }
 
     chat = [
         {"role": m.role, "text": extract_display_text(json.loads(m.content_json))} for m in messages
@@ -1303,6 +1351,7 @@ def client_detail(request: Request, client_id: int):
             "open_interests": open_interests,
             "pipeline_stages": PIPELINE_STAGES,
             "checklist": checklist,
+            "booking_timelines": booking_timelines,
             "access_link": access_link,
             "access_link_days": ACCESS_LINK_MAX_AGE_SECONDS // 86400,
             "provision_error": request.query_params.get("provision_error"),
@@ -1433,6 +1482,19 @@ async def inbound_sms(request: Request):
     return response
 
 
+def _is_owner(client: Business, from_number: str) -> bool:
+    """Is this text from the business's own owner rather than a customer?
+
+    Both sides are normalized because escalation_phone is whatever the founder
+    typed into /clients/new while Twilio always delivers E.164 — comparing raw
+    strings meant "(512) 555-0149" never matched "+15125550149", which is
+    exactly the silent-mismatch class channels.normalize_phone exists for.
+    """
+    if not client.escalation_phone:
+        return False
+    return normalize_phone(from_number) == normalize_phone(client.escalation_phone)
+
+
 def _process_inbound_sms(
     from_number: str, to_number: str, body: str, message_sid: str | None = None
 ) -> str | None:
@@ -1443,9 +1505,26 @@ def _process_inbound_sms(
         client = _find_client_by_inbound(session, to_number)
         if client is None:
             return "Sorry, this number isn't set up to receive messages."
+        # THE OWNER IS NOT A CUSTOMER. Before this check, an owner replying to
+        # any Roster alert fell through the entire cascade below into
+        # Frontdesk, which treated them as a caller and tried to book THEM a
+        # job. Deliberately per-business and ahead of the conversation lock:
+        # the same handset is an owner at their own shop and an ordinary
+        # customer at any other, and this is not a customer conversation.
+        if _is_owner(client, from_number):
+            return handle_owner_sms(session, client, body)
         # Serialize per conversation: a rapid double-text from one customer
         # must not run two interleaved agent turns (corrupts history ordering).
         with conversation_lock(client.id, from_number):
+            # FIRST in the cascade, by the same recency rule the rest of it
+            # follows: if the owner has just offered this customer a window,
+            # that is the most recent thing anyone said to them, and their
+            # next text is the answer to it. Scoped to owner-proposed windows
+            # only — a slot the customer themselves picked is not a pending
+            # question (see find_active_owner_proposal).
+            proposal = find_active_owner_proposal(session, client.id, from_number)
+            if proposal is not None:
+                return handle_customer_proposal_reply(session, client, proposal, body)
             recovery_job = find_active_recovery_job(session, client.id, from_number)
             if recovery_job is not None:
                 return handle_recovery_reply(session, client, recovery_job, body)

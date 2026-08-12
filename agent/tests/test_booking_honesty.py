@@ -89,14 +89,28 @@ def test_confirmed_status_has_no_template_at_all():
 
 
 def test_every_defined_status_is_handled_or_explicitly_refused():
-    """If db_models.py ever grows a fourth BOOKING_* status, this function
-    must be updated to handle it -- not silently fall through. Guards that
-    coupling structurally rather than by convention."""
-    for status in (BOOKING_REQUESTED, BOOKING_PROPOSED, BOOKING_CONFIRMED):
+    """If db_models.py grows another BOOKING_* status, this function must
+    handle it or refuse it -- never silently fall through.
+
+    Discovers the statuses from db_models rather than listing them, which is
+    what makes this structural. The hardcoded three-tuple it replaced did NOT
+    guard anything: Milestone A added BOOKING_CANCELLED and
+    BOOKING_RESCHEDULE_REQUESTED and this test passed unchanged, which is the
+    exact silent fall-through its own docstring promised to catch.
+    """
+    import db_models
+
+    statuses = [
+        value
+        for name, value in vars(db_models).items()
+        if name.startswith("BOOKING_") and isinstance(value, str)
+    ]
+    assert len(statuses) >= 5, "expected every BOOKING_* constant to be discovered"
+    for status in statuses:
         try:
             render_slot_language(status, "some time")
         except BookingLanguageError:
-            pass  # confirmed's explicit refusal is expected and correct
+            pass  # an explicit refusal is a handled outcome, and correct
 
 
 # ---- static audit: no confirmation phrase anywhere in production source ----

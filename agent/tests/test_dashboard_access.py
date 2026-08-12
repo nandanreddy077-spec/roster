@@ -48,10 +48,36 @@ def test_a_token_signed_with_another_secret_is_rejected():
     assert read_access_token(minted, {"SESSION_SECRET_KEY": "real-secret"}) is None
 
 
-def test_a_tampered_token_is_rejected():
+def test_a_tampered_payload_is_rejected():
+    """The real attack: edit the business id in the link to reach someone
+    else's dashboard. The payload is the first dot-separated segment, so this
+    rewrites exactly what an attacker would."""
+    env = {"SESSION_SECRET_KEY": "test-secret"}
+    payload, _, rest = make_access_token(42, env).partition(".")
+    forged = make_access_token(99, env).partition(".")[0]
+    assert payload != forged
+
+    assert read_access_token(f"{forged}.{rest}", env) is None
+
+
+def test_a_tampered_signature_is_rejected():
+    """Truncating the signature, NOT flipping its last character.
+
+    The flip was flaky and failed roughly 1 CI run in 16 with "assert 42 is
+    None" -- it was not tampering at all. itsdangerous base64url-encodes a
+    20-byte HMAC into 27 characters: 162 bits of encoding for 160 bits of
+    signature, so the final character's low 2 bits are always zero and only
+    16 of the 64 base64 characters can ever appear there. When that character
+    was 'A', the test's 'A'->'B' substitution changed only an unused bit, the
+    signature decoded to identical bytes, and the "tampered" token stayed
+    perfectly valid. Measured: 123 no-ops in 2000 tokens, 6.2%.
+
+    Dropping a character changes the decoded bytes every time.
+    """
     env = {"SESSION_SECRET_KEY": "test-secret"}
     token = make_access_token(42, env)
-    assert read_access_token(token[:-1] + ("A" if token[-1] != "A" else "B"), env) is None
+
+    assert read_access_token(token[:-1], env) is None
 
 
 def test_an_expired_token_is_rejected(monkeypatch):
