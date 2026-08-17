@@ -6,7 +6,7 @@ enabling Frontdesk.
 
 import json
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional
 
 from booking_language import render_slot_language
@@ -14,6 +14,7 @@ from bookings import book_job
 from calendar_provider import get_calendar_provider
 from channels import STOP_KEYWORDS, get_channel
 from db_models import (
+    BOOKING_CANCELLED,
     BOOKING_PROPOSED,
     ORIGIN_QUOTE_RECOVERY,
     ORIGIN_REACTIVATION,
@@ -44,6 +45,7 @@ from recovery_engine import (
     CONFIRM_SLOT_TOOL,
     ESCALATE_TOOL,
     MEMBERSHIP_OFFSETS,
+    REBOOK_DAYS,
     RECORD_RESPONSE_TOOL,
     SEQUENCE_DAYS,
     TEMPLATES,
@@ -54,6 +56,7 @@ from recovery_engine import (
 from repositories import get_or_create_customer
 from runner import is_active
 from sqlalchemy import update as sa_update
+from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, select
 from trial_cap import can_respond, record_usage
 
@@ -62,6 +65,13 @@ sms_channel = get_channel()
 logger = logging.getLogger(__name__)
 
 ACTIVE_STATUSES = ("pending", "awaiting_slot")
+
+# How long a cancellation sits before automation touches it. The owner gets
+# first refusal: most same-day cancellations are rescheduled by a human within
+# hours, and a sequence that fires into that conversation is worse than one
+# that fires late. 24h is long enough to clear that window and short enough
+# that the customer still remembers cancelling.
+REBOOK_ENROLL_AFTER_HOURS = 24
 
 
 def create_campaign(
@@ -184,6 +194,125 @@ def enroll_completed_estimates(session: Session) -> List[RecoveryJob]:
     return enrolled
 
 
+def enroll_cancelled_jobs(session: Session) -> List[RecoveryJob]:
+    """Auto-enroll a cancelled job with no successor booking into a "rebook"
+    sequence — Retention Manager's third face, reusing the whole RecoveryJob
+    machinery rather than adding a second recovery system.
+
+    A cancellation is terminal by design (`db_models.BOOKING_CANCELLED`: "a
+    customer who comes back gets a NEW Job rather than a resurrected one"), so
+    this never mutates the cancelled row. It creates outreach *about* it, and a
+    successful reply books a brand-new Job through the same human-gated path
+    every other face uses.
+
+    Four gates, each of which exists because failing it texts a real person
+    about a job they have already dealt with:
+
+      1. `booking_status == BOOKING_CANCELLED` only. A requested, proposed or
+         confirmed job is still in play, and RESCHEDULE_REQUESTED is an active
+         negotiation — hijacking any of them with an automated sequence is
+         worse than staying quiet.
+      2. `cancelled_at` older than REBOOK_ENROLL_AFTER_HOURS, so the owner gets
+         first refusal on a same-day reschedule before automation joins in.
+      3. No job for the same (business, phone) created after the cancellation.
+         Texting "want to rebook?" to somebody already holding a new
+         appointment is the single worst outcome this feature can produce.
+      4. `is_active(..., "retention_manager")` — the Employee row is the
+         consent record, same gate as every other auto-enrollment.
+
+    Idempotent by `source_job_id`, which now carries a unique index: one
+    cancellation enrolls once, ever, even if two ticks overlap.
+    """
+    enrolled: List[RecoveryJob] = []
+    cutoff = datetime.utcnow() - timedelta(hours=REBOOK_ENROLL_AFTER_HOURS)
+    jobs = session.exec(
+        select(Job).where(
+            Job.booking_status == BOOKING_CANCELLED,
+            Job.cancelled_at.is_not(None),
+            Job.cancelled_at <= cutoff,
+        )
+    ).all()
+
+    for job in jobs:
+        if not job.callback_number:
+            continue
+        client = session.get(Business, job.business_id)
+        if client is None or not is_active(session, client, "retention_manager"):
+            continue
+        already_enrolled = session.exec(
+            select(RecoveryJob).where(RecoveryJob.source_job_id == job.id)
+        ).first()
+        if already_enrolled is not None:
+            continue
+        if _has_successor_job(session, job):
+            continue
+
+        campaign = RecoveryCampaign(
+            business_id=job.business_id,
+            face="rebook",
+            name=f"Cancelled: {job.service_type}",
+            customer_list_json=json.dumps(
+                [
+                    {
+                        "phone": job.callback_number,
+                        "name": job.customer_name,
+                        "service_type": job.service_type,
+                    }
+                ]
+            ),
+        )
+        session.add(campaign)
+        session.commit()
+        session.refresh(campaign)
+
+        recovery_job = RecoveryJob(
+            campaign_id=campaign.id,
+            business_id=job.business_id,
+            source_job_id=job.id,
+            customer_phone=job.callback_number,
+            customer_name=job.customer_name,
+            service_type=clean_service_type(job.service_type),
+        )
+        session.add(recovery_job)
+        try:
+            session.commit()
+        except IntegrityError:
+            # The unique index caught a concurrent enrollment. A skipped
+            # enrollment is recoverable; a duplicate sequence texts a customer
+            # twice about one cancellation and cannot be taken back.
+            session.rollback()
+            continue
+        session.refresh(recovery_job)
+        enrolled.append(recovery_job)
+
+    return enrolled
+
+
+def _has_successor_job(session: Session, cancelled: Job) -> bool:
+    """Has this customer got any newer job with this business?
+
+    Deliberately counts ANY later job regardless of its booking status: a
+    merely-requested successor still means the customer is already in a live
+    conversation about new work, and a rebook sequence would talk over it.
+    Compares against `cancelled_at` rather than the cancelled row's own
+    `created_at`, since what matters is what happened after they called it off.
+    """
+    since = cancelled.cancelled_at
+    if since is None:
+        return False
+    return (
+        session.exec(
+            select(Job).where(
+                Job.business_id == cancelled.business_id,
+                Job.customer_phone == cancelled.customer_phone,
+                Job.id != cancelled.id,
+                Job.created_at > since,
+            )
+        ).first()
+        is not None
+    )
+
+
 def find_active_recovery_job(
     session: Session, client_id: int, customer_phone: str
 ) -> Optional[RecoveryJob]:
@@ -237,7 +366,9 @@ def tick(session: Session) -> List[RecoveryJob]:
             day_list = MEMBERSHIP_OFFSETS
         else:
             elapsed = (datetime.utcnow() - campaign.started_at).days
-            day_list = SEQUENCE_DAYS
+            # Rebook stops after a week; quote and reactivation run the full 28
+            # days. Same machinery, different appetite — see REBOOK_DAYS.
+            day_list = REBOOK_DAYS if campaign.face == "rebook" else SEQUENCE_DAYS
 
         due_day = _next_due_day(job, elapsed, day_list)
 
@@ -365,8 +496,9 @@ def _escalate(session: Session, client: Business, job: RecoveryJob, reason: str)
 
 def _origin_for_face(session: Session, job: RecoveryJob) -> str:
     """Which employee to credit a booking to. The quote face is Quote Chaser;
-    reactivation and membership are both Retention Manager's, matching how
-    metrics.py already groups them."""
+    reactivation, membership and rebook are all Retention Manager's, matching
+    how metrics.py already groups them — rebook is that employee's third face,
+    not a fourth employee."""
     campaign = session.get(RecoveryCampaign, job.campaign_id)
     return (
         ORIGIN_QUOTE_RECOVERY

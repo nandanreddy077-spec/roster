@@ -23,7 +23,7 @@ from membership_service import (
     send_due_membership_followups,
     send_due_membership_offers,
 )
-from recovery_service import enroll_completed_estimates, tick
+from recovery_service import enroll_cancelled_jobs, enroll_completed_estimates, tick
 from referral_service import send_due_referral_asks
 from review_service import send_due_review_followups, send_due_review_requests
 from sqlmodel import Session
@@ -69,6 +69,11 @@ def run():
             logger.info("Dispatcher tick", extra={"planned": len(planned)})
             enrolled = enroll_completed_estimates(session)
             logger.info("Quote Chaser tick", extra={"enrolled": len(enrolled)})
+            # Rebook rides the same machinery as Quote Chaser's enrollment and
+            # is equally contact-free: it only creates rows. The actual texting
+            # happens in tick() below, which IS send_hours_ok-gated.
+            rebooked = enroll_cancelled_jobs(session)
+            logger.info("Rebook tick", extra={"enrolled": len(rebooked)})
             # Enrollment/qualification/dispatch never contact a customer directly,
             # so only the calls below — the ones that actually send a text — are
             # gated on send_hours_ok. A skipped send is picked up next tick.

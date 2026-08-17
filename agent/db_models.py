@@ -318,6 +318,18 @@ class RecoveryCampaign(SQLModel, table=True):
 
 
 class RecoveryJob(SQLModel, table=True):
+    # One source Job can produce at most ONE recovery sequence, ever, in any
+    # face. Until Rebook this was enforced only by a read-then-write check in
+    # enroll_completed_estimates, which two overlapping ticks can both pass —
+    # production runs --workers 1 so it was never reachable, but the guarantee
+    # was a deployment detail rather than a property of the data.
+    #
+    # NULL is not constrained (SQL treats NULLs as distinct), so the
+    # founder-pasted CSV campaigns, which carry no source_job_id, are
+    # unaffected. Same discipline as MembershipOffer above: a skipped retry is
+    # recoverable, a duplicate text to a real customer is not.
+    __table_args__ = (Index("uq_recovery_job_source_job", "source_job_id", unique=True),)
+
     id: Optional[int] = Field(default=None, primary_key=True)
     campaign_id: int = Field(foreign_key="recoverycampaign.id")
     business_id: int = Field(foreign_key="business.id")

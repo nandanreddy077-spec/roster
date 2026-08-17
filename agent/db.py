@@ -355,6 +355,13 @@ def _migrate_add_indexes(engine=None):
         # processes can both pass for two different jobs of the same customer.
         "CREATE UNIQUE INDEX IF NOT EXISTS uq_membership_offer_business_customer "
         "ON membershipoffer (business_id, customer_phone)",
+        # One source Job -> at most one recovery sequence, in any face. Added
+        # with Rebook (2026-08-18): before it, enroll_completed_estimates'
+        # idempotency was a read-then-write that two overlapping ticks can both
+        # pass. NULL source_job_id (founder-pasted CSV campaigns) is unaffected
+        # — SQL treats NULLs as distinct, so those rows never collide.
+        "CREATE UNIQUE INDEX IF NOT EXISTS uq_recovery_job_source_job "
+        "ON recoveryjob (source_job_id)",
     )
     with eng.connect() as conn:
         for ddl in statements:

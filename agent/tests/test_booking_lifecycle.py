@@ -7,6 +7,7 @@ back" was never contacted again by Roster. These tests assert the loop closes
 """
 
 import json
+import re
 from pathlib import Path
 from uuid import uuid4
 
@@ -232,11 +233,48 @@ def test_booking_manager_is_the_only_module_that_transitions_booking_status():
                 continue
             # An assignment to the attribute is a transition; passing it as a
             # keyword to book_job() is creation and stays allowed.
-            if ".booking_status =" in stripped:
+            #
+            # `=` NOT followed by `=`: the substring check this replaced also
+            # matched `Job.booking_status == BOOKING_CANCELLED`, a query filter
+            # that READS the column. Reading a status is not transitioning it,
+            # and a guard that blocks reads pushes callers into looser
+            # alternatives — the opposite of what it is defending. Assignments
+            # are still caught; test_the_transition_guard_still_catches_a_real
+            # _assignment below proves it.
+            if re.search(r"\.booking_status\s*=(?!=)", stripped):
                 violations.append(f"{path.name}:{lineno}: {stripped}")
     assert violations == [], "booking_status transitioned outside booking_manager:\n" + "\n".join(
         violations
     )
+
+
+def test_the_transition_guard_still_catches_a_real_assignment():
+    """Proof-of-catch for the guard above.
+
+    That guard was loosened to stop flagging `==` comparisons (reading a status
+    is not transitioning it). A loosened guard is worthless unless it still
+    bites, and this repo has already shipped one silently-vacuous structural
+    test — test_tick_deployment_gate's regex stopped matching the call shape it
+    checked and passed for weeks. So the pattern is exercised directly here
+    against both forms.
+    """
+    pattern = r"\.booking_status\s*=(?!=)"
+
+    # Real transitions — must be caught, whatever the spacing.
+    for line in (
+        "job.booking_status = BOOKING_CONFIRMED",
+        "job.booking_status=BOOKING_CANCELLED",
+        "match.booking_status  =  BOOKING_PROPOSED",
+    ):
+        assert re.search(pattern, line), f"guard missed a real transition: {line}"
+
+    # Reads and creation — must NOT be caught.
+    for line in (
+        "Job.booking_status == BOOKING_CANCELLED,",
+        "if job.booking_status == BOOKING_CONFIRMED:",
+        "book_job(session, client, t, n, args, booking_status=BOOKING_PROPOSED)",
+    ):
+        assert not re.search(pattern, line), f"guard flagged a non-transition: {line}"
 
 
 # ---- the timeline the owner sees -------------------------------------------

@@ -35,6 +35,7 @@ TICK_FUNCTIONS = (
     ("lead_qualifier_service", "qualify_new_jobs"),
     ("dispatcher_service", "recommend_dispatch"),
     ("recovery_service", "enroll_completed_estimates"),
+    ("recovery_service", "enroll_cancelled_jobs"),
     ("recovery_service", "tick"),
     ("referral_service", "send_due_referral_asks"),
     ("review_service", "send_due_review_requests"),

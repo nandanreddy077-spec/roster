@@ -12,6 +12,14 @@ SEQUENCE_DAYS = [1, 3, 7, 14, 21, 28]
 # (before the renewal date) and is anchored per-customer, not per-campaign.
 MEMBERSHIP_OFFSETS = [-30, -14, -7, 0, 7]
 
+# Rebook runs THREE touches over a week, not the quote face's six over 28 days.
+# A cancelled booking is a warmer and much faster-decaying signal than a cold
+# estimate: the customer wanted the work recently enough to schedule it, so the
+# useful window is short — and unlike a quote, they have already told us "not
+# this time" once. Six escalating chases after a cancellation reads as
+# hounding, which costs the relationship the sequence exists to save.
+REBOOK_DAYS = [1, 3, 7]
+
 
 def clean_service_type(service_type: str) -> str:
     """Strip a trailing "estimate"/"quote" from a service description.
@@ -35,6 +43,11 @@ FACE_DISPLAY_NAMES = {
     "quote": "Chaser",
     "reactivation": "Rebooker",
     "membership": "Renewals",
+    # Rebook is Retention Manager's third face, NOT a new employee. It shares
+    # the Rebooker display name because that is what the customer-facing roster
+    # already calls this work — winning a customer back. Adding a fourth name
+    # would grow the workforce list without growing what the product does.
+    "rebook": "Rebooker",
 }
 
 TEMPLATES = {
@@ -60,6 +73,17 @@ TEMPLATES = {
         -7: "One week left before your {service_type} plan renews on {renewal_date} — lock in your visit now?",
         0: "Today's the day — your {service_type} plan renews. Book your visit now to keep your member pricing and priority scheduling.",
         7: "{customer_name}, your {service_type} plan lapsed last week. Still want to keep your member pricing? Reply YES to renew.",
+    },
+    # Rebook: the customer had this booked and it fell through. The copy
+    # acknowledges that plainly rather than opening as if nothing happened —
+    # pretending the cancellation didn't occur is the fastest way to sound like
+    # a machine to the one person who already knows it did. It never asserts a
+    # time; offering one is the reply path's job, and only from real
+    # availability (calendar_provider).
+    "rebook": {
+        1: "Hi {customer_name}, sorry your {service_type} appointment didn't work out. Want to get it back on the books?",
+        3: "{customer_name}, still happy to sort that {service_type} out whenever suits you — just say the word.",
+        7: "Last one from me: if you'd still like that {service_type} done, reply and we'll find a time. Otherwise no worries at all.",
     },
 }
 

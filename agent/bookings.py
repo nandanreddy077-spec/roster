@@ -16,6 +16,7 @@ from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 from typing import Any, Dict, Optional, Tuple
 
 from db_models import (
+    BOOKING_CANCELLED,
     BOOKING_REQUESTED,
     ORIGIN_ESCALATION,
     ORIGIN_INBOUND,
@@ -139,6 +140,20 @@ def book_job(
             Job.customer_phone == thread,
             Job.completed_at.is_(None),
             Job.created_at >= since,
+            # A cancelled job is NOT open. It has no completed_at either, so it
+            # satisfied every other clause here and quietly absorbed the next
+            # booking for the same service — and since booking_status is
+            # deliberately never revised on a merge (see the docstring), the
+            # customer was told they were booked while the only matching row
+            # stayed cancelled. db_models is explicit that this must not
+            # happen: cancellation is terminal, and "a customer who comes back
+            # gets a NEW Job rather than a resurrected one".
+            #
+            # Filtered here, in the one function every booking path routes
+            # through, rather than in Rebook where it was found — Frontdesk has
+            # the same bug the moment a customer cancels and calls back within
+            # BOOKING_DEDUP_WINDOW_HOURS.
+            Job.booking_status != BOOKING_CANCELLED,
         )
     ).all()
     match = next(
