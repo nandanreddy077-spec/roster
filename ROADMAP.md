@@ -152,13 +152,46 @@ The foundation supports it; we do not build it now.
 
 | Item | Phase | Why it waits |
 |---|---|---|
-| CRM/calendar integrations (Jobber, Housecall Pro, ServiceTitan, Google Cal) | D | Build the first only when a paying pilot names their tool. |
+| CRM integrations (Jobber, Housecall Pro, ServiceTitan) | D | Build the first only when a paying pilot names their tool. |
+| ~~Google Calendar (read-only availability)~~ | ~~D~~ | **BUILT EARLY 2026-08-18 — founder override, see below.** |
 | Real scheduling / capacity awareness | D | "Someone will come" + a callback covers it until owners ask. |
 | Web chat widget | C/D | Live voice is the wedge, not website chat. |
 | Coach / call QA / scoring | E | Enterprise-tail — the ICP has no CSRs to coach. |
 | Deep analytics / marketing ROAS / multi-location | E | Enterprise-tail. Employee cards (M3) give owners the only numbers they think in. |
 | SOC 2 / security certs | E | Enterprise trust, earned over time. |
 | Email / WhatsApp channels | D | SMS + voice is enough for the wedge. |
+
+### Override — Google Calendar read-only availability, 2026-08-18
+
+Built ahead of Phase D by explicit founder decision, with the conflict named
+before any code was written. Recording it here so the deviation is auditable
+rather than silent.
+
+**What the rules said.** This table gated calendar integrations on "a paying
+pilot names their tool", and `ROSTER.md`'s "What we deliberately do NOT do now"
+list names calendar/CRM integrations outright. At the time of the decision
+production had one business — the founder's own trial account, zero paying
+customers — so the Phase D precondition was definitively unmet.
+
+**Why it was overridden anyway.** The trigger was not integration demand, it was
+an honesty defect. `ManualCalendarProvider` invented appointment windows from the
+clock alone and Quote Chaser offered them to customers as real availability.
+Quote Chaser is the designated proof workflow for the first customers, so the one
+employee shown off most was also the one generating information it had never
+verified — directly against the positioning the product is being sold on.
+
+**What was deliberately NOT taken with it.** Read-only free/busy only. No
+two-way sync, no event creation, no technician scheduling, no route
+optimization, and no Jobber/Housecall Pro/ServiceTitan adapters — those remain
+Phase D on the original terms. The `CalendarProvider` protocol is unchanged, so
+the next adapter is still a new class, not a rewrite.
+
+**The cheaper alternative that was rejected.** Quote Chaser could have simply
+stopped proposing times and asked the customer for their preference — no
+integration, no schema, no rule conflict. That path is now the *fallback*
+behaviour when no calendar is connected, so the honest outcome exists either
+way; the override bought verified availability on top of it.
+
 | EventBus producer/subscriber wiring + Runner | — | Platform. The seam is built; wire it only when one event needs *multiple* subscribers. |
 | `message`→`interaction` rename (+ channel/direction) | — | Platform cleanup; only when those fields are used. |
 | Auto-research onboarding pre-fill | B/D | Nice "it already knows my business" moment; not required to get paid. |

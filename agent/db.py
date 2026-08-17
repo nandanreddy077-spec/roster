@@ -181,6 +181,11 @@ def _migrate_add_columns():
         "ALTER TABLE job ADD COLUMN cancelled_at DATETIME",
         "ALTER TABLE job ADD COLUMN owner_proposed_at DATETIME",
         "ALTER TABLE job ADD COLUMN booking_notes VARCHAR",
+        # Phase 1: read-only calendar availability.
+        "ALTER TABLE business ADD COLUMN timezone VARCHAR DEFAULT ''",
+        "ALTER TABLE business ADD COLUMN google_refresh_token VARCHAR",
+        "ALTER TABLE business ADD COLUMN google_calendar_id VARCHAR DEFAULT 'primary'",
+        "ALTER TABLE business ADD COLUMN google_calendar_connected_at DATETIME",
     )
     with engine.connect() as conn:
         for ddl in statements:

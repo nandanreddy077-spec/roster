@@ -253,7 +253,40 @@ def test_handle_recovery_reply_awaiting_slot_can_decline(session, monkeypatch):
     assert job.booked_job_id is None
 
 
+class StubCalendar:
+    """A connected calendar with real free windows.
+
+    Phase 1: slots are only offered when a connected calendar reports them
+    free, so any test whose subject is "interested -> slots offered" has to
+    supply one. Without it the honest path (escalate, ask the customer for a
+    preferred time) is correct behaviour, not a regression.
+    """
+
+    connected = True
+
+    def __init__(self, slots=None):
+        self._slots = (
+            slots
+            if slots is not None
+            else [
+                "Tuesday 09/02 morning (9am-12pm)",
+                "Wednesday 09/03 afternoon (1pm-4pm)",
+                "Thursday 09/04 morning (9am-12pm)",
+            ]
+        )
+
+    def get_available_slots(self, business_hours="", days_ahead=7, count=3):
+        return list(self._slots[:count])
+
+
+def _connect_calendar(monkeypatch, slots=None):
+    monkeypatch.setattr(
+        recovery_service, "get_calendar_provider", lambda client: StubCalendar(slots)
+    )
+
+
 def test_handle_recovery_reply_interested_offers_slots(session, monkeypatch):
+    _connect_calendar(monkeypatch)
     client = make_client(session)
     recovery_service.create_campaign(
         session,
@@ -968,6 +1001,7 @@ def test_find_active_recovery_job_excludes_escalated_jobs(session, monkeypatch):
 
 
 def test_handle_recovery_reply_normal_interest_does_not_escalate(session, monkeypatch):
+    _connect_calendar(monkeypatch)
     """Regression: an ordinary 'yes, book me' reply must never page the
     owner."""
     client = make_client(session)

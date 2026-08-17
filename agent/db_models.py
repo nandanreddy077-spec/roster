@@ -96,6 +96,19 @@ class Business(SQLModel, table=True):
     xai_signing_secret: Optional[str] = (
         None  # webhook signing secret returned when xai_phone_number was registered (per-number, not account-wide — see provisioning.py)
     )
+    # --- Read-only calendar availability (Phase 1, 2026-08-18) ---------------
+    # IANA zone ("America/New_York"). Required to place an availability window
+    # on the clock at all; calendar_provider falls back to Eastern and logs when
+    # unset. Also the upgrade path named by channels.py's send-window ponytail.
+    timezone: str = ""
+    # Google OAuth refresh token, calendar.readonly scope. Stored the same way
+    # xai_signing_secret is — a plain column. Availability lookups exchange it
+    # for a short-lived access token; it never grants write access.
+    google_refresh_token: Optional[str] = None
+    # Which calendar to read. "primary" for almost everyone; named here so a
+    # business that keeps its jobs on a separate calendar can point at it.
+    google_calendar_id: str = "primary"
+    google_calendar_connected_at: Optional[datetime] = None
     # Why the failure needs to be a ROW, not a log line: voice provisioning is
     # multi-step and partially retryable, and the self-serve activation path has
     # no request to redirect an error onto. Printing to stderr is what let a

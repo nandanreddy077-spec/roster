@@ -34,6 +34,37 @@
 {# Read-only on purpose. An owner can't repoint their own number or restaff a
    department, and a field that silently does nothing is worse than no field
    (ARCHITECTURE.md invariant 9 — no dead controls). #}
+{# Calendar is a third thing the owner genuinely owns, so it belongs alongside
+   the review link and referral offer rather than under "Your setup" (which is
+   read-only proof of what Roster provisioned). No fabricated state: the copy
+   says exactly what is and isn't connected, and what that means for customers.
+   Invariant 9 (no dead controls): the connect button only renders when Google
+   OAuth is actually configured. #}
+<section class="portal-card portal-card-wide">
+  <h2>Your calendar</h2>
+  {% if business.google_refresh_token %}
+    <p class="portal-lede">Connected. Roster reads your free/busy times — read-only, it never adds, moves or deletes anything — and only offers customers windows your calendar says are genuinely free.</p>
+    <ul class="portal-timeline">
+      <li><span class="portal-timeline-when">Calendar</span>{{ business.google_calendar_id or "primary" }}</li>
+      {% if business.google_calendar_connected_at %}
+      <li><span class="portal-timeline-when">Connected</span>{{ business.google_calendar_connected_at.strftime("%b %d, %Y") }}</li>
+      {% endif %}
+      <li><span class="portal-timeline-when">Time zone</span>{{ business.timezone or "Not set — times assume US Eastern" }}</li>
+    </ul>
+    <form method="post" action="/v2/dashboard/settings/calendar/disconnect" class="settings-form">
+      <button class="btn btn-secondary" type="submit">Disconnect</button>
+    </form>
+  {% else %}
+    <p class="portal-lede">Not connected. Until it is, Roster will never guess a time — when a customer wants to book, it asks them what suits and tells you, instead of offering a slot it hasn't checked.</p>
+    {% if google_enabled %}
+    <a class="btn btn-secondary" href="/v2/dashboard/settings/calendar/connect">Connect Google Calendar</a>
+    {% else %}
+    <p class="portal-lede">Calendar connection isn't available yet — tell us and we'll switch it on for you.</p>
+    {% endif %}
+  {% endif %}
+  {% if calendar_notice %}<p class="portal-saved">{{ calendar_notice }}</p>{% endif %}
+</section>
+
 <section class="portal-card portal-card-wide">
   <h2>Your setup</h2>
   <p class="portal-lede">Roster manages this for you. Anything wrong here, tell us and we'll change it.</p>

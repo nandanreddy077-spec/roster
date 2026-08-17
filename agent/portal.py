@@ -5,6 +5,7 @@ in app.py), one client per logged-in session.
 """
 
 import json
+import logging
 import os
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -21,7 +22,8 @@ from expansion import record_interest
 from fastapi import APIRouter, Form, HTTPException, Request
 from fastapi.responses import RedirectResponse
 from fastapi.templating import Jinja2Templates
-from google_auth import callback_url, get_oauth, google_enabled
+from google_auth import calendar_callback_url, callback_url, get_oauth, google_enabled
+from google_calendar import CALENDAR_SCOPE
 from locks import conversation_lock
 from notifications import is_test_thread, recent_notifications
 from roles import (
@@ -104,6 +106,22 @@ from workspace import (  # noqa: E402
 
 templates.env.globals["metric_labels"] = METRIC_LABELS
 templates.env.globals["notification_kind_labels"] = NOTIFICATION_KIND_LABELS
+
+logger = logging.getLogger(__name__)
+
+# What the owner is told after a calendar connect attempt. Every outcome says
+# what actually happened — a failed connect must never look like a quiet no-op,
+# because the owner would then wait for availability that is never coming.
+CALENDAR_NOTICES = {
+    "connected": "Calendar connected. Roster will only offer times it can see are free.",
+    "disconnected": "Calendar disconnected. Roster will ask customers for a preferred time instead.",
+    "failed": "Google didn't complete the connection. Nothing was changed — try again.",
+    "no_refresh_token": (
+        "Google didn't grant ongoing access, so the calendar was not connected. "
+        "Try again and choose your account at the consent screen."
+    ),
+    "unavailable": "Calendar connection isn't switched on for this account yet.",
+}
 
 router = APIRouter()
 
@@ -674,6 +692,74 @@ def v2_notifications(request: Request):
         )
 
 
+@router.get("/v2/dashboard/settings/calendar/connect")
+async def calendar_connect(request: Request):
+    """Start the read-only Google Calendar connection.
+
+    Separate from /auth/google/login, which is sign-in: that flow asks for
+    `openid email profile` and does not need offline access. This one asks for
+    `calendar.readonly` plus a refresh token, because availability is read on a
+    schedule long after the owner closed the tab. Read-only by construction —
+    the scope cannot create or move an event.
+    """
+    with Session(engine) as session:
+        if _current_client(request, session) is None:
+            return RedirectResponse("/login", status_code=303)
+    if not google_enabled():
+        return RedirectResponse(f"{SETTINGS_HOME}?calendar=unavailable", status_code=303)
+    return await get_oauth().google.authorize_redirect(
+        request,
+        calendar_callback_url(request),
+        scope=f"openid email {CALENDAR_SCOPE}",
+        access_type="offline",
+        prompt="consent",  # force a refresh token even on reconnect
+    )
+
+
+@router.get("/v2/dashboard/settings/calendar/callback", name="calendar_callback")
+async def calendar_callback(request: Request):
+    """Store the refresh token, or say plainly that nothing was connected."""
+    with Session(engine) as session:
+        business = _current_client(request, session)
+        if business is None:
+            return RedirectResponse("/login", status_code=303)
+        if not google_enabled():
+            return RedirectResponse(f"{SETTINGS_HOME}?calendar=unavailable", status_code=303)
+        try:
+            token = await get_oauth().google.authorize_access_token(request)
+        except Exception:
+            logger.warning("calendar OAuth callback failed for business %s", business.id)
+            return RedirectResponse(f"{SETTINGS_HOME}?calendar=failed", status_code=303)
+
+        refresh = (token or {}).get("refresh_token")
+        if not refresh:
+            # Google only returns a refresh token when it feels like it. Storing
+            # an access token here would produce a calendar that works for an
+            # hour and then silently stops — exactly the failure this milestone
+            # exists to prevent, so refuse the connection instead.
+            return RedirectResponse(f"{SETTINGS_HOME}?calendar=no_refresh_token", status_code=303)
+
+        business.google_refresh_token = refresh
+        business.google_calendar_id = business.google_calendar_id or "primary"
+        business.google_calendar_connected_at = datetime.utcnow()
+        session.add(business)
+        session.commit()
+        return RedirectResponse(f"{SETTINGS_HOME}?calendar=connected", status_code=303)
+
+
+@router.post("/v2/dashboard/settings/calendar/disconnect")
+def calendar_disconnect(request: Request):
+    with Session(engine) as session:
+        business = _current_client(request, session)
+        if business is None:
+            return RedirectResponse("/login", status_code=303)
+        business.google_refresh_token = None
+        business.google_calendar_connected_at = None
+        session.add(business)
+        session.commit()
+        return RedirectResponse(f"{SETTINGS_HOME}?calendar=disconnected", status_code=303)
+
+
 @router.get("/v2/dashboard/settings")
 def v2_settings(request: Request):
     """The only page in the dashboard an owner CHANGES something from —
@@ -699,6 +785,8 @@ def v2_settings(request: Request):
                 "business": business,
                 "active_nav": "settings",
                 "saved": "saved" in request.query_params,
+                "google_enabled": google_enabled(),
+                "calendar_notice": CALENDAR_NOTICES.get(request.query_params.get("calendar")),
             },
         )
 

@@ -102,6 +102,29 @@ def _run_whole_sequence(session, business_id, extra_days=10):
             recovery_service.tick(session)
 
 
+class StubCalendar:
+    """A connected calendar with real free windows.
+
+    Phase 1: a slot is only offered when a connected calendar reports it free.
+    This journey test is about the money path end to end, so it needs one — the
+    no-calendar case has its own coverage in test_calendar_availability.py and
+    test_quote_chaser_no_fabrication.py.
+    """
+
+    connected = True
+
+    def get_available_slots(self, business_hours="", days_ahead=7, count=3):
+        return [
+            "Tuesday 09/02 morning (9am-12pm)",
+            "Wednesday 09/03 afternoon (1pm-4pm)",
+            "Thursday 09/04 morning (9am-12pm)",
+        ][:count]
+
+
+def _connect_calendar(monkeypatch):
+    monkeypatch.setattr(recovery_service, "get_calendar_provider", lambda client: StubCalendar())
+
+
 def _stub(monkeypatch, tool_name, tool_input, reply=""):
     monkeypatch.setattr(
         recovery_service,
@@ -123,6 +146,7 @@ def _stub(monkeypatch, tool_name, tool_input, reply=""):
 def test_a_cold_estimate_is_recovered_into_a_booked_job(test_engine, chaser, monkeypatch):
     """The whole money path in one test: marked done -> enrolled -> chased ->
     interested -> slot offered -> slot chosen -> job booked -> owner told."""
+    _connect_calendar(monkeypatch)
     customer, owner = chaser
     with Session(test_engine) as session:
         business = _business(session, email="journey@test.io")

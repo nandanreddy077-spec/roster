@@ -51,3 +51,21 @@ def callback_url(request) -> str:
     if base:
         return base.rstrip("/") + "/auth/google/callback"
     return str(request.url_for("google_callback"))
+
+
+CALENDAR_CALLBACK_PATH = "/v2/dashboard/settings/calendar/callback"
+
+
+def calendar_callback_url(request) -> str:
+    """Where Google returns after the read-only Calendar consent screen.
+
+    A DIFFERENT redirect URI from callback_url above, and it must be registered
+    separately in the Google Cloud Console OAuth client, or the consent screen
+    fails with redirect_uri_mismatch. Kept distinct because the two flows mean
+    different things: one signs a person in, this one grants Roster ongoing
+    read access to a business's calendar.
+    """
+    base = os.environ.get("OAUTH_REDIRECT_BASE_URL")
+    if base:
+        return base.rstrip("/") + CALENDAR_CALLBACK_PATH
+    return str(request.url_for("calendar_callback"))

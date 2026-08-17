@@ -11,7 +11,7 @@ from typing import Any, Dict, List, Optional
 
 from booking_language import render_slot_language
 from bookings import book_job
-from calendar_provider import get_calendar_provider
+from calendar_provider import CalendarUnavailable, get_calendar_provider
 from channels import STOP_KEYWORDS, get_channel
 from db_models import (
     BOOKING_PROPOSED,
@@ -25,6 +25,7 @@ from db_models import (
 )
 from employee_outcome import (
     CUSTOMER_FALLBACK_MESSAGE,
+    report_employee_blocked,
     report_if_failed,
     report_lead_went_cold,
 )
@@ -363,6 +364,80 @@ def _escalate(session: Session, client: Business, job: RecoveryJob, reason: str)
     return ESCALATED_REPLY
 
 
+def _offer_availability(session: Session, client: Business, job: RecoveryJob) -> str:
+    """Offer real, checked time windows — or admit we don't have any.
+
+    Before Phase 1 this asked ManualCalendarProvider for slots, which invented
+    plausible weekday windows from the clock and handed them to the customer as
+    if the business had agreed to them. Now a slot only exists if a connected
+    calendar said that window is free, which leaves three real outcomes:
+
+      1. Windows are free -> offer them, exactly as before.
+      2. The calendar is readable but nothing is free (or none is connected) ->
+         ask the customer when suits THEM and page the owner. Capturing a
+         stated preference is what Frontdesk's log_job already does; it is not
+         availability, and nothing downstream treats it as confirmed.
+      3. The calendar could not be read -> same customer-facing message, but
+         the owner is told the calendar is broken rather than that the week is
+         full. Collapsing this into case 2 would hide a broken integration
+         behind a plausible business explanation.
+
+    The customer-facing wording never claims a time in cases 2 and 3, and the
+    booking that eventually results is still BOOKING_PROPOSED, never CONFIRMED.
+    """
+    try:
+        slots = get_calendar_provider(client).get_available_slots(client.hours)
+        unreadable = None
+    except CalendarUnavailable as e:
+        slots, unreadable = [], str(e)
+
+    if slots:
+        job.offered_slots_json = json.dumps(slots)
+        job.current_status = "awaiting_slot"
+        slot_text = "; ".join(f"{i + 1}) {s}" for i, s in enumerate(slots))
+        return f"Great! Which works best: {slot_text}?"
+
+    # No verified availability. Two owner-facing signals, deliberately both:
+    #
+    #   report_employee_blocked is DEDUPED per (business, role, cause), so a
+    #   systemic problem — no calendar connected, calendar broken — pages the
+    #   owner once rather than once per interested customer. Alert fatigue is
+    #   silent failure with extra steps (employee_outcome.py's own words).
+    #
+    #   _escalate is PER CUSTOMER, because this specific person said yes and now
+    #   needs a human to give them a time. It also moves the job out of
+    #   ACTIVE_STATUSES, which stops the automated sequence and lets their next
+    #   text fall through to Frontdesk — the employee that already knows how to
+    #   capture a stated preference via log_job's preferred_window.
+    job.offered_slots_json = json.dumps([])
+    if unreadable:
+        cause, detail = (
+            "calendar_unreadable",
+            f"the connected calendar could not be read ({unreadable}) — reconnect "
+            "it in Settings; customers are being asked for a preferred time instead",
+        )
+    elif getattr(client, "google_refresh_token", None):
+        cause, detail = (
+            "calendar_fully_booked",
+            "no free windows in the next week, so interested customers are being "
+            "asked for a preferred time instead of being offered one",
+        )
+    else:
+        cause, detail = (
+            "no_calendar_connected",
+            "no calendar is connected, so real availability can't be offered — "
+            "connect one in Settings to let Quote Chaser propose times",
+        )
+    report_employee_blocked(session, client, "quote_chaser", cause, detail)
+    _escalate(session, client, job, f"wants to book but {detail}")
+    # _escalate's generic reply is for a complaint; this customer just said yes,
+    # so ask the one question a human can act on. Still promises nothing.
+    return (
+        "Great! What day and time usually work best for you? "
+        "We'll confirm the exact time with you shortly."
+    )
+
+
 def _origin_for_face(session: Session, job: RecoveryJob) -> str:
     """Which employee to credit a booking to. The quote face is Quote Chaser;
     reactivation and membership are both Retention Manager's, matching how
@@ -517,12 +592,7 @@ def handle_recovery_reply(
             pending["input"]["intent"] if pending and pending["name"] == "record_response" else None
         )
         if intent == "interested":
-            provider = get_calendar_provider(client)
-            slots = provider.get_available_slots(client.hours)
-            job.offered_slots_json = json.dumps(slots)
-            job.current_status = "awaiting_slot"
-            slot_text = "; ".join(f"{i + 1}) {s}" for i, s in enumerate(slots))
-            reply = f"Great! Which works best: {slot_text}?"
+            reply = _offer_availability(session, client, job)
         elif intent in ("not_interested", "unsubscribe"):
             job.current_status = "declined"
             reply = "No problem, thanks for letting us know! We won't follow up further."

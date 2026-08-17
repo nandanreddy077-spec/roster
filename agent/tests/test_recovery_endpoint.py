@@ -71,7 +71,32 @@ def test_recovery_campaign_detail_renders(monkeypatch, test_engine):
     assert "Sue" in response.text
 
 
+class _StubCalendar:
+    """A connected calendar with free windows.
+
+    These tests assert on the "1) ... 2) ..." slot list because that is what
+    proves Recovery handled the reply rather than Frontdesk. Phase 1 only emits
+    that list when a real calendar reports free time, so the routing assertion
+    needs one connected — the no-calendar path has its own coverage in
+    test_quote_chaser_no_fabrication.py.
+    """
+
+    connected = True
+
+    def get_available_slots(self, business_hours="", days_ahead=7, count=3):
+        return [
+            "Tuesday 09/02 morning (9am-12pm)",
+            "Wednesday 09/03 afternoon (1pm-4pm)",
+            "Thursday 09/04 morning (9am-12pm)",
+        ][:count]
+
+
+def _connect_calendar(monkeypatch):
+    monkeypatch.setattr(recovery_service, "get_calendar_provider", lambda client: _StubCalendar())
+
+
 def test_inbound_sms_routes_active_recovery_reply_to_recovery(monkeypatch, test_engine):
+    _connect_calendar(monkeypatch)
     monkeypatch.setattr(app_module, "engine", test_engine)
     client_id = make_client(test_engine)
     test_client = TestClient(app_module.app, headers=DASH_AUTH)
@@ -362,6 +387,7 @@ def test_inbound_sms_routes_active_referral_reply(monkeypatch, test_engine):
 
 
 def test_inbound_sms_prioritizes_active_recovery_over_referral(monkeypatch, test_engine):
+    _connect_calendar(monkeypatch)
     monkeypatch.setattr(app_module, "engine", test_engine)
     client_id = make_client(test_engine)
     test_client = TestClient(app_module.app, headers=DASH_AUTH)

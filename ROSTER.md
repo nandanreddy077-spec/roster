@@ -109,7 +109,13 @@ team can serve hundreds of businesses. But **not zero people**:
 - Build all 5–6 roles at once (fragments engineering, muddies the pitch).
 - Chase enterprise logos like Sierra/Decagon's customers (wrong segment, wrong sales motion).
 - Expand to dental/real estate yet (same trap, one level up).
-- Guess integrations (calendar/CRM) — build only from what real customers tell us.
+- Guess integrations (CRM) — build only from what real customers tell us.
+  *(Calendar carved out 2026-08-18 by founder override: Google Calendar
+  read-only availability was built ahead of demand, because Quote Chaser was
+  inventing appointment times rather than because a customer asked for Google
+  Calendar. Read-only free/busy only — no sync, no writes, no other adapters.
+  Full reasoning in ROADMAP.md "Override — Google Calendar read-only
+  availability". The rule still stands for every CRM/FSM integration.)*
 - Build an elaborate autonomous loop before there are real conversations to engineer against.
 
 ## Where it stands today
