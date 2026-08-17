@@ -9,7 +9,7 @@ from datetime import datetime, timedelta
 from typing import List, Optional
 
 from channels import get_channel
-from db_models import Business, Job, ReviewReply
+from db_models import ORIGIN_ESCALATION, Business, Job, ReviewReply
 from employee_outcome import CUSTOMER_FALLBACK_MESSAGE, report_employee_blocked, report_if_failed
 from engine import AgentEngine
 from notifications import (
@@ -43,7 +43,24 @@ def send_due_review_requests(session: Session) -> List[Job]:
     """Find every completed job old enough, not yet asked, whose client has
     a review_link set, and send the review-request text. Meant to be called
     once a day (see recovery_tick.py) — safe to call more often since
-    review_requested_at gates re-sending."""
+    review_requested_at gates re-sending.
+
+    Two kinds of completed job are deliberately excluded, because "completed"
+    does not mean "we did work this customer would want to review":
+
+      - An ESTIMATE. recovery_service auto-enrols these in Quote Chaser the
+        moment they complete. Asking "how did we do?" about a quote asks the
+        customer to review a job that never happened, and for the next 28 days
+        their reply routes to Quote Chaser first — so a negative review reply
+        never reaches the owner.
+      - An ESCALATION. That row is a customer the AI handed to a human, often
+        mid-complaint. Marking it done is how the owner clears it; texting that
+        person a review request is the worst possible moment to ask.
+
+    Both are filtered here, in the one query every review send routes through,
+    rather than in each producer — a guard per caller would leave whichever
+    caller gets added next still broken.
+    """
     sent: List[Job] = []
     cutoff = datetime.utcnow() - timedelta(days=REVIEW_DELAY_DAYS)
     jobs = session.exec(
@@ -51,6 +68,8 @@ def send_due_review_requests(session: Session) -> List[Job]:
             Job.completed_at.is_not(None),
             Job.completed_at <= cutoff,
             Job.review_requested_at.is_(None),
+            Job.is_estimate == False,  # noqa: E712 — SQL needs ==, not `not`
+            Job.origin != ORIGIN_ESCALATION,
         )
     ).all()
 

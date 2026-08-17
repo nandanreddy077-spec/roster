@@ -59,6 +59,7 @@ from notifications import (
 )
 from repositories import get_or_create_customer
 from sqlmodel import Session, select
+from trial_cap import can_respond
 
 REALTIME_URL = "wss://api.x.ai/v1/realtime"
 VOICE_THREAD_PREFIX = "xai-voice:"
@@ -144,6 +145,20 @@ MAX_CALL_DURATION_SECONDS = 600
 # conversation. Overridable per call via run_call's own `max_call_tokens`
 # param, same injectable pattern as `max_duration_seconds`.
 MAX_CALL_TOKEN_BUDGET = 20_000
+
+# What a call costs once the business is past its trial cap. Voice was the one
+# live employee that never consulted trial_cap.can_respond — every other one
+# does (service.py, review_service.py, recovery_service.py, referral_service.py,
+# membership_service.py) — so a capped account's texts went silent while its
+# phone line kept answering and kept spending.
+#
+# A capped call is SHORTENED, never refused. trial_cap.py's contract is that a
+# caller is "never silently dropped mid-conversation", and hanging up on a real
+# customer to save a few cents is a worse failure than the spend. 90 seconds and
+# 800 tokens is enough to greet, take the problem and the callback number, and
+# hand off to the owner — the same outcome the escalation path already produces.
+CAPPED_CALL_MAX_DURATION_SECONDS = 90
+CAPPED_CALL_MAX_TOKEN_BUDGET = 800
 
 # call_id is attacker-supplied (it rides in on the unverified webhook body) and
 # then flows into a capture *filename*, a DB dedup key, and the voice thread id.
@@ -566,6 +581,33 @@ def _default_connect(call_id: str):
     return websockets.connect(url, additional_headers={"Authorization": f"Bearer {api_key}"})
 
 
+def call_budget_for(
+    client: Business,
+    max_duration_seconds: Optional[float] = None,
+    max_call_tokens: Optional[int] = None,
+) -> tuple:
+    """The effective (duration, token) budget for one call.
+
+    An explicit override always wins and is never raised — tests pass tiny
+    budgets, and the cap must not hand a capped account MORE than it asked for.
+    Otherwise a business past its trial cap gets the shortened budget, and
+    everyone else gets the normal ceilings.
+
+    Pure and side-effect free: it reads Business fields only, so it can be
+    called on the caller's already-loaded row without a session.
+    """
+    duration = MAX_CALL_DURATION_SECONDS if max_duration_seconds is None else max_duration_seconds
+    tokens = MAX_CALL_TOKEN_BUDGET if max_call_tokens is None else max_call_tokens
+
+    if not can_respond(client):
+        if max_duration_seconds is None:
+            duration = CAPPED_CALL_MAX_DURATION_SECONDS
+        if max_call_tokens is None:
+            tokens = CAPPED_CALL_MAX_TOKEN_BUDGET
+
+    return duration, tokens
+
+
 async def run_call(
     call_id: str,
     client: Business,
@@ -605,10 +647,13 @@ async def run_call(
 
         trace = CallTrace(call_id, capture_dir=DATA_DIR / "call_captures")
     thread = _thread_id(call_id, is_test_call)
-    max_duration = (
-        MAX_CALL_DURATION_SECONDS if max_duration_seconds is None else max_duration_seconds
-    )
-    max_tokens = MAX_CALL_TOKEN_BUDGET if max_call_tokens is None else max_call_tokens
+    max_duration, max_tokens = call_budget_for(client, max_duration_seconds, max_call_tokens)
+    if max_duration == CAPPED_CALL_MAX_DURATION_SECONDS and max_duration_seconds is None:
+        trace.stage(
+            "trial_cap_reached",
+            max_duration_seconds=max_duration,
+            max_call_tokens=max_tokens,
+        )
 
     try:
         await asyncio.wait_for(

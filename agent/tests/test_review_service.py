@@ -11,7 +11,7 @@ from datetime import datetime, timedelta
 
 import review_service
 from conftest import StubAgent
-from db_models import Business, Job, OwnerNotification, ReviewReply
+from db_models import ORIGIN_ESCALATION, Business, Job, OwnerNotification, ReviewReply
 from deployment import deploy_role
 from sqlmodel import Session, select
 
@@ -719,3 +719,65 @@ def test_no_review_followup_when_reviews_is_not_deployed(session, monkeypatch):
 
     assert review_service.send_due_review_followups(session) == []
     assert fake_channel.sent == []
+
+
+# --- The two ONBOARDING-RUNBOOK blocking defects -------------------------
+# Both are the same shape: a Job row reaches completed_at, but asking that
+# customer "how did we do?" is wrong. The guard lives in the review query
+# rather than in each producer, because every send routes through here.
+
+
+def test_an_estimate_never_gets_a_review_request(session, monkeypatch):
+    """A completed estimate already enrols in Quote Chaser (recovery_service
+    auto-enrols on is_estimate + completed_at). Texting the same customer
+    "how did we do?" asks them to review a job that never happened — and for
+    the next 28 days their reply routes to Quote Chaser first, so a negative
+    reply never reaches the owner. Runbook blocking defect #1."""
+    fake_channel = FakeSMSChannel()
+    monkeypatch.setattr(review_service, "sms_channel", fake_channel)
+
+    client = make_client(session, review_link="https://g.page/r/test")
+    job = Job(
+        business_id=client.id,
+        service_type="AC replacement quote",
+        urgency="routine",
+        callback_number="+15551234567",
+        completed_at=datetime.utcnow() - timedelta(days=2),
+        is_estimate=True,
+    )
+    session.add(job)
+    session.commit()
+
+    sent = review_service.send_due_review_requests(session)
+
+    assert sent == []
+    assert fake_channel.sent == []
+    session.refresh(job)
+    assert job.review_requested_at is None
+
+
+def test_an_escalation_never_gets_a_review_request(session, monkeypatch):
+    """An escalation row is a customer the AI handed to a human — often
+    upset, often mid-complaint. Marking it done is how the owner clears it,
+    which must not text that person a review request. Runbook defect #2."""
+    fake_channel = FakeSMSChannel()
+    monkeypatch.setattr(review_service, "sms_channel", fake_channel)
+
+    client = make_client(session, review_link="https://g.page/r/test")
+    job = Job(
+        business_id=client.id,
+        service_type="billing complaint",
+        urgency="routine",
+        callback_number="+15551234567",
+        completed_at=datetime.utcnow() - timedelta(days=2),
+        origin=ORIGIN_ESCALATION,
+    )
+    session.add(job)
+    session.commit()
+
+    sent = review_service.send_due_review_requests(session)
+
+    assert sent == []
+    assert fake_channel.sent == []
+    session.refresh(job)
+    assert job.review_requested_at is None

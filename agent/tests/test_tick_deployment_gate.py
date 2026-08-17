@@ -121,10 +121,22 @@ def _fully_configured_business(session, **overrides):
 
 
 def _completed_job(session, business, phone="+15125550001"):
-    """is_estimate=True on purpose: it is Quote Chaser's ONLY trigger, and
+    """Seeds TWO completed jobs for the same customer, because no single job
+    triggers every employee any more.
+
+    is_estimate=True on purpose: it is Quote Chaser's ONLY trigger, and
     without it enroll_completed_estimates silently matches nothing — the guard
     would call the function, assert silence, and pass no matter how ungated it
-    was. Reviews and Referral ignore the flag, so one job exercises all three.
+    was.
+
+    Reviews used to ride on that same estimate row, which was itself the
+    ONBOARDING-RUNBOOK blocking defect: a completed estimate triggered both
+    Quote Chaser and "how did we do?". Now that send_due_review_requests
+    correctly excludes estimates (and escalations), Reviews needs a plain
+    completed service job of its own — otherwise these gate tests would assert
+    silence from an employee that had nothing to act on, and pass however
+    ungated it was. Same phone for both, so per-tenant recipient assertions
+    stay exact.
 
     The JobQualification is written DIRECTLY here rather than left to
     qualify_new_jobs for exactly the same reason. Lead Qualifier is itself
@@ -156,6 +168,18 @@ def _completed_job(session, business, phone="+15125550001"):
             priority="normal",
             possible_spam=False,
             reasoning="test-fixture",
+        )
+    )
+    # Reviews' and Referral's trigger: real work that actually happened.
+    session.add(
+        Job(
+            business_id=business.id,
+            customer_phone=phone,
+            customer_name="Dana Cruz",
+            service_type="AC compressor replacement",
+            urgency="same_day",
+            callback_number=phone,
+            completed_at=datetime.utcnow() - timedelta(hours=2),
         )
     )
     session.commit()
