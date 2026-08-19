@@ -424,6 +424,16 @@ def roster_page():
     return FileResponse(LANDING_DIR / "roster.html", media_type="text/html")
 
 
+@app.get("/terms")
+def terms_page():
+    return FileResponse(LANDING_DIR / "terms.html", media_type="text/html")
+
+
+@app.get("/privacy")
+def privacy_page():
+    return FileResponse(LANDING_DIR / "privacy.html", media_type="text/html")
+
+
 # Nothing was pointing crawlers at the site or telling them what not to index
 # (/clients is credentialed but a Disallow keeps it out of results entirely;
 # /preview is a duplicate alias of "/"). Two evergreen pages exist today.
