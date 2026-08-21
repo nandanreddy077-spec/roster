@@ -549,3 +549,5 @@ a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible
 .footer-inner { display: flex; align-items: baseline; justify-content: space-between; gap: var(--s3); flex-wrap: wrap; }
 .footer .logo { font-size: 17px; }
 .footer-note { font-size: 14px; color: var(--text-dim); }
+.footer-legal { margin-top: var(--s3); }
+.footer-legal a { color: var(--text-dim); }
