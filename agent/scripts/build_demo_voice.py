@@ -16,11 +16,17 @@ Writes agent/static/voice/*.mp3 plus manifest.json.
 
 Sounding real is mostly in the SCRIPT, not the model. Each line has:
   * `display` — the clean sentence shown in the transcript on the page;
-  * `speak`   — what's synthesised: contractions and one or two `[pause]`s
-                for natural rhythm. NO `<soft>` / `[whisper]` / `[breath]`
-                tags — they make xAI drop to a breathy near-whisper, which
-                reads as timid, not warm. A real receptionist is clear,
-                upbeat and in control at a normal speaking volume.
+  * `speak`   — what's synthesised.
+
+The caller lines already sound human because they're SHORT — a sentence or
+two, one idea each. The employee lines used to sound robotic because they
+were long, comma-spliced paragraphs ("I'm looking at your account now, and I
+see we replaced ..., so that's ..., and I have ...") — TTS reads a long
+sentence flat. So the employee lines are now written the same way a person
+actually talks: short sentences, one thought each, a real opener ("Oh no.
+Okay."), contractions, and a `[pause]` only at the genuine beats. NO
+`<soft>` / `[whisper]` / `[breath]` tags — they drop xAI to a breathy
+near-whisper.
 Both sides speak at normal speed (1.0). Numbers and times are written out
 longhand so `text_normalization` never has to guess.
 """
@@ -68,8 +74,8 @@ CALLS = {
         ),
         (
             "ai",
-            "Oh no, I'm sorry to hear that. Let's get you taken care of. I'm looking at your account now, and I see we replaced your pressure valve back in March, so that's still under warranty. I have a technician, Dave, available between 7:30 and 9 tonight. Would you like me to hold that window for you?",
-            "Oh no, I'm sorry to hear that. Let's get you taken care of. [pause] I'm looking at your account now, and I see we replaced your pressure valve back in March, so that's still under warranty. I have a technician, Dave, available between seven thirty and nine tonight. Would you like me to hold that window for you?",
+            "Oh no. Okay — let's get someone out to you tonight. I'm pulling up your account now. Looks like we replaced your pressure valve back in March, so that's still under warranty. I've got a tech, Dave, who can be there between 7:30 and 9. Want me to hold that for you?",
+            "Oh no. Okay. [pause] Let's get someone out to you tonight. I'm pulling up your account now. [pause] Looks like we replaced your pressure valve back in March. So that's still under warranty. I've got a tech, Dave. He can be there between seven thirty and nine. [pause] Want me to hold that for you?",
         ),
         (
             "caller",
@@ -78,15 +84,15 @@ CALLS = {
         ),
         (
             "ai",
-            "You're all set. Dave will text you when he's about 15 minutes out. If you can, try to keep the area around the heater clear, and we'll take good care of you tonight.",
-            "You're all set. Dave will text you when he's about 15 minutes out. [pause] If you can, try to keep the area around the heater clear, and we'll take good care of you tonight.",
+            "You're all set. Dave will text you when he's about 15 minutes out. Try to keep the area around the heater clear if you can. Hang in there — we've got you.",
+            "You're all set. Dave will text you when he's about 15 minutes out. [pause] Try to keep the area around the heater clear if you can. Hang in there. We've got you.",
         ),
     ],
     "quote": [
         (
             "ai",
-            "Hi Marcus, this is Roster calling on behalf of Kestrel. I'm following up on the estimate we sent for the rooftop unit — that was for $4,200. I wanted to check in and see if you had any questions.",
-            "Hi Marcus, this is Roster calling on behalf of Kestrel. I'm following up on the estimate we sent for the rooftop unit, that was for forty-two hundred dollars. I wanted to check in and see if you had any questions.",
+            "Hi Marcus, it's Roster calling for Kestrel. I'm following up on that rooftop unit estimate — the $4,200. Just wanted to see if you had any questions.",
+            "Hi Marcus, it's Roster calling for Kestrel. [pause] I'm following up on that rooftop unit estimate. The one for forty-two hundred dollars. [pause] Just wanted to see if you had any questions.",
         ),
         (
             "caller",
@@ -95,8 +101,8 @@ CALLS = {
         ),
         (
             "ai",
-            "I completely understand. We can split that into three monthly payments at no interest, and I can lock in this quarter's pricing so nothing changes. Would you like me to send that over?",
-            "I completely understand. We can split that into three monthly payments at no interest, and I can lock in this quarter's pricing so nothing changes. [pause] Would you like me to send that over?",
+            "Totally understand. We can split it into three monthly payments, no interest. And I'll lock in this quarter's pricing so nothing changes. Want me to send that over?",
+            "Totally understand. [pause] We can split it into three monthly payments, no interest. And I'll lock in this quarter's pricing, so nothing changes. [pause] Want me to send that over?",
         ),
         (
             "caller",
@@ -107,8 +113,8 @@ CALLS = {
     "club": [
         (
             "ai",
-            "Hi Janet, this is Roster with Kestrel. Your Comfort Club plan comes up for renewal on the 14th, and you're also due for your fall tune-up. Would you like me to get that scheduled while I have you?",
-            "Hi Janet, this is Roster with Kestrel. Your Comfort Club plan comes up for renewal on the fourteenth, and you're also due for your fall tune up. Would you like me to get that scheduled while I have you?",
+            "Hi Janet, it's Roster with Kestrel. Your Comfort Club plan renews on the 14th, and you're due for your fall tune-up. Want me to get that on the schedule while I have you?",
+            "Hi Janet, it's Roster with Kestrel. [pause] Your Comfort Club plan renews on the fourteenth. And you're due for your fall tune up. [pause] Want me to get that on the schedule while I have you?",
         ),
         (
             "caller",
@@ -117,8 +123,8 @@ CALLS = {
         ),
         (
             "ai",
-            "It looks like it expired last month. I can text you a secure link to update it — it only takes about ten seconds.",
-            "It looks like it expired last month. I can text you a secure link to update it, it only takes about ten seconds.",
+            "Looks like it expired last month. I can text you a secure link to update it — takes about ten seconds.",
+            "Looks like it expired last month. [pause] I can text you a secure link to update it. Takes about ten seconds.",
         ),
         (
             "caller",

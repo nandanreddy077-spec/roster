@@ -26,7 +26,7 @@
       {
         "role": "caller",
         "text": "Hi, my water heater just burst \u2014 there's water all over my garage floor. Is there any way you can get someone out tonight?",
-        "dur": 7.11,
+        "dur": 7.19,
         "files": {
           "cosmo": "/static/voice/leak-0-cosmo.mp3",
           "iris": "/static/voice/leak-0-iris.mp3"
@@ -34,8 +34,8 @@
       },
       {
         "role": "ai",
-        "text": "Oh no, I'm sorry to hear that. Let's get you taken care of. I'm looking at your account now, and I see we replaced your pressure valve back in March, so that's still under warranty. I have a technician, Dave, available between 7:30 and 9 tonight. Would you like me to hold that window for you?",
-        "dur": 18.87,
+        "text": "Oh no. Okay \u2014 let's get someone out to you tonight. I'm pulling up your account now. Looks like we replaced your pressure valve back in March, so that's still under warranty. I've got a tech, Dave, who can be there between 7:30 and 9. Want me to hold that for you?",
+        "dur": 18.0,
         "files": {
           "eve": "/static/voice/leak-1-eve.mp3",
           "ara": "/static/voice/leak-1-ara.mp3",
@@ -48,7 +48,7 @@
       {
         "role": "caller",
         "text": "Yes, please \u2014 that would be a huge help.",
-        "dur": 2.55,
+        "dur": 2.39,
         "files": {
           "cosmo": "/static/voice/leak-2-cosmo.mp3",
           "iris": "/static/voice/leak-2-iris.mp3"
@@ -56,8 +56,8 @@
       },
       {
         "role": "ai",
-        "text": "You're all set. Dave will text you when he's about 15 minutes out. If you can, try to keep the area around the heater clear, and we'll take good care of you tonight.",
-        "dur": 10.23,
+        "text": "You're all set. Dave will text you when he's about 15 minutes out. Try to keep the area around the heater clear if you can. Hang in there \u2014 we've got you.",
+        "dur": 9.67,
         "files": {
           "eve": "/static/voice/leak-3-eve.mp3",
           "ara": "/static/voice/leak-3-ara.mp3",
@@ -71,8 +71,8 @@
     "quote": [
       {
         "role": "ai",
-        "text": "Hi Marcus, this is Roster calling on behalf of Kestrel. I'm following up on the estimate we sent for the rooftop unit \u2014 that was for $4,200. I wanted to check in and see if you had any questions.",
-        "dur": 12.63,
+        "text": "Hi Marcus, it's Roster calling for Kestrel. I'm following up on that rooftop unit estimate \u2014 the $4,200. Just wanted to see if you had any questions.",
+        "dur": 11.91,
         "files": {
           "eve": "/static/voice/quote-0-eve.mp3",
           "ara": "/static/voice/quote-0-ara.mp3",
@@ -85,7 +85,7 @@
       {
         "role": "caller",
         "text": "Yeah \u2014 honestly, it's a bit more than I budgeted for this quarter.",
-        "dur": 3.59,
+        "dur": 3.43,
         "files": {
           "cosmo": "/static/voice/quote-1-cosmo.mp3",
           "iris": "/static/voice/quote-1-iris.mp3"
@@ -93,8 +93,8 @@
       },
       {
         "role": "ai",
-        "text": "I completely understand. We can split that into three monthly payments at no interest, and I can lock in this quarter's pricing so nothing changes. Would you like me to send that over?",
-        "dur": 11.27,
+        "text": "Totally understand. We can split it into three monthly payments, no interest. And I'll lock in this quarter's pricing so nothing changes. Want me to send that over?",
+        "dur": 12.39,
         "files": {
           "eve": "/static/voice/quote-2-eve.mp3",
           "ara": "/static/voice/quote-2-ara.mp3",
@@ -107,7 +107,7 @@
       {
         "role": "caller",
         "text": "Yeah, that works. Go ahead and send it.",
-        "dur": 2.23,
+        "dur": 2.31,
         "files": {
           "cosmo": "/static/voice/quote-3-cosmo.mp3",
           "iris": "/static/voice/quote-3-iris.mp3"
@@ -117,8 +117,8 @@
     "club": [
       {
         "role": "ai",
-        "text": "Hi Janet, this is Roster with Kestrel. Your Comfort Club plan comes up for renewal on the 14th, and you're also due for your fall tune-up. Would you like me to get that scheduled while I have you?",
-        "dur": 11.27,
+        "text": "Hi Janet, it's Roster with Kestrel. Your Comfort Club plan renews on the 14th, and you're due for your fall tune-up. Want me to get that on the schedule while I have you?",
+        "dur": 12.07,
         "files": {
           "eve": "/static/voice/club-0-eve.mp3",
           "ara": "/static/voice/club-0-ara.mp3",
@@ -139,8 +139,8 @@
       },
       {
         "role": "ai",
-        "text": "It looks like it expired last month. I can text you a secure link to update it \u2014 it only takes about ten seconds.",
-        "dur": 7.27,
+        "text": "Looks like it expired last month. I can text you a secure link to update it \u2014 takes about ten seconds.",
+        "dur": 7.51,
         "files": {
           "eve": "/static/voice/club-2-eve.mp3",
           "ara": "/static/voice/club-2-ara.mp3",
@@ -153,7 +153,7 @@
       {
         "role": "caller",
         "text": "Perfect. Go ahead and send it.",
-        "dur": 1.83,
+        "dur": 1.99,
         "files": {
           "cosmo": "/static/voice/club-3-cosmo.mp3",
           "iris": "/static/voice/club-3-iris.mp3"
