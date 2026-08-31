@@ -3,60 +3,70 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Roster — Hire the office. Not the software.</title>
-<meta name="description" content="Roster staffs your front office with AI employees. Each one owns a job: answering every call, chasing every estimate, dispatching the crew, asking for every review. Built for home service businesses.">
-<meta name="theme-color" content="#F7F4EC">
-<meta property="og:title" content="Roster — Hire the office. Not the software.">
-<meta property="og:description" content="Roster staffs your front office with AI employees. Each one owns a job — answering calls, chasing estimates, dispatching the crew, asking for reviews. You get the finished work.">
+<title>Roster — AI employees for home service businesses</title>
+<meta name="description" content="Hire the office, not the software. Roster's AI employees answer the calls, chase the estimates, dispatch the crew and ask for the reviews. Built for HVAC, plumbing and electrical shops.">
+<meta name="theme-color" content="#F5F5F3">
+<meta property="og:title" content="Roster — AI employees for home service businesses">
+<meta property="og:description" content="Each employee owns a job — answering the calls, chasing the estimates, dispatching the crew, asking for the reviews. You get the finished work.">
 <meta property="og:type" content="website">
 <meta property="og:url" content="https://rosterhires.com/">
 <link rel="canonical" href="https://rosterhires.com/">
 <link rel="icon" type="image/png" href="/static/favicon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700;800&display=swap">
 <link rel="stylesheet" href="styles-v2.css">
+<!-- Reveal elements start at opacity:0. The JS has a 3s safety net, but with
+     JS disabled that net never runs and the page would stay blank. -->
+<noscript><style>
+  .reveal, .call, .feed li { opacity: 1 !important; transform: none !important; }
+</style></noscript>
 </head>
 <body>
 
 <a class="skip-link" href="#main">Skip to content</a>
 
-<!-- Icon sprite: hand-rolled line-art, one symbol per trade. No icon library. -->
 <svg class="sprite" aria-hidden="true" focusable="false" xmlns="http://www.w3.org/2000/svg">
-  <symbol id="i-hvac" viewBox="0 0 24 24"><circle cx="12" cy="12" r="2.2"/><path d="M12 9.8V4M12 14.2V20M9.8 12H4M14.2 12H20"/></symbol>
-  <symbol id="i-plumbing" viewBox="0 0 24 24"><path d="M12 3.5c3 4 5 6.6 5 9a5 5 0 0 1-10 0c0-2.4 2-5 5-9Z"/></symbol>
-  <symbol id="i-electrical" viewBox="0 0 24 24"><path d="M13.5 3 6 13.5h4.5L9.5 21 18 10h-5l.5-7Z"/></symbol>
-  <symbol id="i-roofing" viewBox="0 0 24 24"><path d="M3 12 12 5l9 7"/><path d="M6 12v7h12v-7"/></symbol>
-  <symbol id="i-landscaping" viewBox="0 0 24 24"><path d="M12 21v-6"/><path d="M12 15c0-4 2.5-7 7-7 0 4-2.5 7-7 7Z"/><path d="M12 15c0-3.5-2-6-5.5-6 0 3.5 2 6 5.5 6Z"/></symbol>
-  <symbol id="i-cleaning" viewBox="0 0 24 24"><path d="M9 9h5a2 2 0 0 1 2 2v9H7v-9a2 2 0 0 1 2-2Z"/><path d="M10 9V4h3v5"/><path d="M16 6h4M18 4v4"/></symbol>
-  <symbol id="i-garage" viewBox="0 0 24 24"><path d="M3 20V9l9-5 9 5v11"/><path d="M6 20v-8h12v8"/><path d="M6 16h12"/></symbol>
-  <symbol id="i-pest" viewBox="0 0 24 24"><ellipse cx="12" cy="13" rx="4" ry="5.5"/><path d="M12 7.5V5M9.5 4l1.4 2M14.5 4l-1.4 2M8 10.5 4.5 9M16 10.5 19.5 9M8 15H4.5M16 15h3.5"/></symbol>
-  <symbol id="i-painting" viewBox="0 0 24 24"><rect x="4" y="4" width="13" height="5" rx="1"/><path d="M17 6.5h3v4h-8v3"/><rect x="10" y="13.5" width="4" height="6.5" rx="1"/></symbol>
-  <symbol id="i-pool" viewBox="0 0 24 24"><path d="M3 9c2-1.6 3.5-1.6 5.5 0S12 10.6 14 9s3.5-1.6 5.5 0"/><path d="M3 14c2-1.6 3.5-1.6 5.5 0S12 15.6 14 14s3.5-1.6 5.5 0"/><path d="M3 19c2-1.6 3.5-1.6 5.5 0S12 20.6 14 19s3.5-1.6 5.5 0"/></symbol>
   <symbol id="i-tick" viewBox="0 0 16 16"><path d="M3 8.5 6.2 12 13 4.5"/></symbol>
+  <symbol id="i-cross" viewBox="0 0 16 16"><path d="M4 4l8 8M12 4l-8 8"/></symbol>
+  <symbol id="i-play" viewBox="0 0 24 24"><path d="M8 5.5v13l11-6.5z" fill="currentColor" stroke="none"/></symbol>
+  <symbol id="i-pause" viewBox="0 0 24 24"><path d="M8.5 5h2.5v14H8.5zM13 5h2.5v14H13z" fill="currentColor" stroke="none"/></symbol>
+  <symbol id="i-lock" viewBox="0 0 16 16"><rect x="3.5" y="7" width="9" height="6.5" rx="1.2"/><path d="M5.75 7V5a2.25 2.25 0 0 1 4.5 0v2"/></symbol>
 </svg>
 
 <header class="nav" id="nav">
-  <div class="shell hero-shell nav-inner">
+  <div class="shell nav-inner">
     <a class="logo" href="/">Roster</a>
     <nav class="nav-actions" aria-label="Main">
       <a class="nav-link" href="#how">How it works</a>
-      <a class="nav-link" href="/roster">The roster</a>
+      <a class="nav-link" href="#roster">The roster</a>
+      <a class="nav-link" href="#voice">Live voice demo</a>
+      <a class="nav-link" href="#comparison">Comparison</a>
+      <a class="nav-link" href="#pricing">Pricing</a>
       <a class="nav-cta" href="#request">Request a demo</a>
     </nav>
+  </div>
+  <!-- Below 1080px the section links are hidden; this strip replaces them so
+       an 11,000px page is still navigable on a phone. -->
+  <div class="nav-strip" aria-label="Sections">
+    <a href="#how">How it works</a>
+    <a href="#roster">The roster</a>
+    <a href="#voice">Live voice demo</a>
+    <a href="#comparison">Comparison</a>
+    <a href="#pricing">Pricing</a>
   </div>
 </header>
 
 <main id="main">
 
-<!-- ═══ 1. HERO — what is this, who is it for, what do I do next ═════════ -->
+<!-- ═══ 1. HERO ════════════════════════════════════════════════════════════ -->
 <section class="hero" aria-labelledby="hero-h">
-  <div class="shell hero-shell hero-grid">
+  <div class="shell hero-grid">
 
     <div class="hero-copy">
       <p class="eyebrow">AI employees for home service businesses</p>
-      <h1 id="hero-h">Hire the office.<br>Not the software.</h1>
-      <p class="lede">
+      <h1 id="hero-h">Hire the office.<br>Not the <em>software</em>.</h1>
+      <p class="lede lede-hero">
         Each employee owns a job — answering the calls, chasing the estimates,
         dispatching the crew, asking for the reviews. You get the finished work.
       </p>
@@ -64,432 +74,430 @@
         <a class="btn btn-primary" href="#request">Request a demo</a>
         <a class="btn btn-ghost" href="#how">See how it works</a>
       </div>
-      <p class="microtrust">No setup fee. No contract. We onboard a few businesses at a time.</p>
+      <p class="microtrust"><span class="mt-dot" aria-hidden="true"></span>No setup fee. No contract. We onboard a few businesses at a time.</p>
     </div>
 
-    <!-- The product. A sample account, mid-shift. -->
-    <div class="console-wrap">
-      <div class="console" id="console">
-        <div class="console-bar">
-          <span class="console-mark">Roster</span>
-          <span class="console-biz">Kestrel Plumbing &amp; Heating</span>
-          <span class="console-tag">Sample account</span>
+    <div class="office-wrap">
+      <div class="office">
+        <div class="office-bar">
+          <span class="office-dots" aria-hidden="true"><i></i><i></i><i></i></span>
+          <span class="office-brand">Roster</span>
+          <span class="office-biz">· Kestrel Plumbing &amp; Heating · Austin, TX</span>
+          <span class="office-tag">Sample account</span>
+          <span class="office-live"><span class="live-dot" aria-hidden="true"></span>Live Feed · Tuesday 6:12 PM</span>
         </div>
 
-        <div class="console-body">
-          <aside class="rail" aria-label="Employees on shift">
-            <p class="rail-dept">Customer Service</p>
-            <ul class="rail-list">
-              <li class="rail-emp is-live">
-                <span class="dot dot-live" aria-hidden="true"></span>
-                <span><span class="rail-name">Frontdesk</span><br><span class="rail-state num">On a call · 00:32</span></span>
-              </li>
-              <li class="rail-emp">
-                <span class="dot dot-on" aria-hidden="true"></span>
-                <span><span class="rail-name">Reviews</span><br><span class="rail-state num">3 requests sent today</span></span>
-              </li>
-            </ul>
-            <p class="rail-dept">Sales</p>
-            <ul class="rail-list">
-              <li class="rail-emp">
-                <span class="dot dot-on" aria-hidden="true"></span>
-                <span><span class="rail-name">Quote Chaser</span><br><span class="rail-state num">14 estimates open</span></span>
-              </li>
-              <li class="rail-emp">
-                <span class="dot dot-on" aria-hidden="true"></span>
-                <span><span class="rail-name">Lead Qualifier</span><br><span class="rail-state num">6 leads scored</span></span>
-              </li>
-            </ul>
-            <p class="rail-dept">Operations</p>
-            <ul class="rail-list">
-              <li class="rail-emp">
-                <span class="dot dot-on" aria-hidden="true"></span>
-                <span><span class="rail-name">Dispatcher</span><br><span class="rail-state num">Routing 4 jobs</span></span>
-              </li>
-            </ul>
-          </aside>
+        <div class="office-body">
 
-          <div class="feed">
-            <div class="feed-head">
-              <span class="feed-title">Today</span>
-              <span class="feed-when num">Tuesday · 6:12 PM</span>
+          <div class="office-rail">
+            <div class="rail-group">
+              <p class="rail-dept">Customer Service</p>
+              <p class="rail-emp" data-emp="frontdesk"><span class="dot" aria-hidden="true"></span><span class="rail-name">Frontdesk</span><span class="rail-note">On a call · <span class="num">00:32</span></span></p>
+              <p class="rail-emp" data-emp="reviews"><span class="dot" aria-hidden="true"></span><span class="rail-name">Reviews</span><span class="rail-note"><span class="num">3</span> requests sent today</span></p>
             </div>
+            <div class="rail-group">
+              <p class="rail-dept">Sales</p>
+              <p class="rail-emp" data-emp="chaser"><span class="dot" aria-hidden="true"></span><span class="rail-name">Quote Chaser</span><span class="rail-note"><span class="num">14</span> estimates open</span></p>
+              <p class="rail-emp" data-emp="qualifier"><span class="dot" aria-hidden="true"></span><span class="rail-name">Lead Qualifier</span><span class="rail-note"><span class="num">6</span> leads scored</span></p>
+            </div>
+            <div class="rail-group">
+              <p class="rail-dept">Operations</p>
+              <p class="rail-emp" data-emp="dispatcher"><span class="dot" aria-hidden="true"></span><span class="rail-name">Dispatcher</span><span class="rail-note">Routing <span class="num">4</span> jobs</span></p>
+            </div>
+          </div>
 
-            <!-- The open item: one call, and the thing another employee
-                 wrote down in March that let Frontdesk answer it. -->
-            <div class="ev-open">
-              <div class="ev-open-head">
-                <span class="ev-open-who">Frontdesk</span>
-                <span class="ev-open-time num">6:12 PM · live</span>
-              </div>
-              <p class="ev-quote">
-                <span class="said">“My water heater's leaking all over the garage floor —
-                can somebody come out tonight?”</span>
-                <br>Dana Whitmore · Cavanaugh Dr.
+          <div class="office-stream">
+            <p class="stream-head">Shared office stream <span class="stream-live"><span class="live-dot" aria-hidden="true"></span>Live Feed · 6:12 PM</span></p>
+
+            <!-- The stream cycles between employees; each card is one beat. -->
+            <div class="stream-cards">
+            <div class="call is-on" data-for="frontdesk">
+              <p class="call-by">Frontdesk AI <span class="call-meta"><span class="num">6:12 PM</span> · Live Call Handled</span></p>
+              <p class="call-quote">“My water heater's leaking all over the garage floor — can somebody come out tonight?”</p>
+              <p class="call-who">Dana Whitmore · Cavanaugh Dr.</p>
+              <p class="memo">Water heater valve replaced Mar 12 — labor warranty still active.
+                <span class="memo-src">From shared memory · written by Dispatcher</span>
               </p>
-              <div class="memory">
-                <p class="memory-text">Water heater valve replaced Mar 12 — labor warranty still active.</p>
-                <p class="memory-by">Written by Dispatcher · shared memory</p>
-              </div>
-              <p class="ev-result">
-                <svg class="ti tick" width="15" height="15" aria-hidden="true"><use href="#i-tick"/></svg>
+              <p class="call-out">
+                <svg class="ti" width="14" height="14" aria-hidden="true"><use href="#i-tick"/></svg>
                 Booked tonight, 7:30–9:00 · covered under warranty
               </p>
             </div>
 
-            <ol class="feed-list">
-              <li class="ev">
-                <span class="ev-time num">6:09p</span>
-                <span class="ev-body"><span class="ev-who">Quote Chaser</span>
-                  <span class="ev-what">— estimate approved, Vasquez · $4,200</span></span>
-              </li>
-              <li class="ev">
-                <span class="ev-time num">6:02p</span>
-                <span class="ev-body"><span class="ev-who">Reviews</span>
-                  <span class="ev-what">— asked for a review on job #1184</span></span>
-              </li>
-              <li class="ev">
-                <span class="ev-time num">5:54p</span>
-                <span class="ev-body"><span class="ev-who">Dispatcher</span>
-                  <span class="ev-what">— moved tomorrow's 8 AM to Truck 2, shorter drive</span></span>
-              </li>
-              <li class="ev">
-                <span class="ev-time num">5:41p</span>
-                <span class="ev-body"><span class="ev-who">Frontdesk</span>
-                  <span class="ev-what">— texted back three calls that came in during the storm</span></span>
-              </li>
-            </ol>
-
-            <p class="feed-foot">Nobody on your team touched any of this.</p>
-          </div>
-        </div>
-      </div>
-    </div>
-
-  </div>
-</section>
-
-<!-- ═══ 2. THE COST — why should I care ═════════════════════════════════ -->
-<section class="cost" aria-labelledby="cost-h">
-  <div class="shell hero-shell cost-grid">
-    <div>
-      <p class="eyebrow eyebrow-dark">Sound familiar?</p>
-      <h2 id="cost-h" class="sr-only">What running without an office costs you</h2>
-      <ul class="monologue">
-        <li class="reveal">“I've got 18 missed calls and it's not even lunch.”</li>
-        <li class="reveal">“That $14,000 estimate? Nobody ever followed up.”</li>
-        <li class="reveal">“I'm sending invoices at 10 at night. Again.”</li>
-        <li class="reveal">“Why am I doing office work instead of running my company?”</li>
-      </ul>
-      <p class="cost-closer reveal">
-        That's not you failing at business.<br>
-        That's a business running <em>without an office</em>.
-      </p>
-    </div>
-
-    <div>
-      <div class="ledger reveal">
-        <p class="ledger-title">What the empty desk costs you</p>
-        <div class="ledger-fields">
-          <div class="field">
-            <label for="calls">Calls you miss in a week</label>
-            <input type="number" id="calls" value="15" min="0" max="999" step="1" inputmode="numeric">
-          </div>
-          <div class="field">
-            <label for="ticket">Your average ticket</label>
-            <div class="field-money">
-              <span class="field-prefix" aria-hidden="true">$</span>
-              <input type="number" id="ticket" value="450" min="0" max="99999" step="10" inputmode="numeric">
+            <div class="call" data-for="qualifier">
+              <p class="call-by">Lead Qualifier AI <span class="call-meta"><span class="num">3:45 PM</span> · Inbound Filter</span></p>
+              <p class="call-quote">“Emergency commercial rooftop unit replacement inquiry scored <span class="num">94/100</span>.”</p>
+              <p class="call-who">Travis Industrial Park · 5 rooftop units requiring maintenance</p>
+              <p class="call-out">
+                <svg class="ti" width="14" height="14" aria-hidden="true"><use href="#i-tick"/></svg>
+                Qualified lead · dispatched to senior technician calendar
+              </p>
             </div>
+            </div>
+
+            <ul class="feed">
+              <li><span class="feed-t num">6:09p</span><span class="feed-w"><b>Quote Chaser</b> — estimate approved, Vasquez · <span class="num">$4,200</span></span></li>
+              <li><span class="feed-t num">6:02p</span><span class="feed-w"><b>Reviews</b> — asked for a review on job <span class="num">#1184</span></span></li>
+              <li><span class="feed-t num">5:54p</span><span class="feed-w"><b>Dispatcher</b> — moved tomorrow's 8 AM to Truck 2, shorter drive</span></li>
+              <li><span class="feed-t num">5:41p</span><span class="feed-w"><b>Frontdesk</b> — texted back three calls that came in during the storm</span></li>
+            </ul>
           </div>
+
         </div>
-        <div class="ledger-out" aria-live="polite">
-          <p class="ledger-label">If only one in three of those would have booked</p>
-          <p class="ledger-big" id="calcBig">$117,000</p>
-          <p class="ledger-unit">walks out of your business every year</p>
-          <p class="ledger-note">
-            Every one of those callers reached your business and then dialed
-            somebody else. Gross value of the calls you missed:
-            <strong id="calcGross">$351,000</strong>.
-          </p>
-        </div>
+
+        <p class="office-foot">
+          <svg class="ti" width="13" height="13" aria-hidden="true"><use href="#i-lock"/></svg>
+          Autonomous execution. Nobody on your team touched any of this.
+        </p>
       </div>
-      <p class="footnote">Your own numbers, multiplied over 52 weeks. Nothing is sent anywhere.</p>
     </div>
+
   </div>
 </section>
 
-<!-- ═══ 3. HOW IT WORKS — what do I have to do ═════════════════════════ -->
-<section class="how ruled" id="how" aria-labelledby="how-h">
+<!-- ═══ 2. HOW IT WORKS ════════════════════════════════════════════════════ -->
+<section class="how" id="how" aria-labelledby="how-h">
   <div class="shell">
-    <div class="section-head">
-      <h2 id="how-h">It starts with one phone call.</h2>
-      <p class="lede">You pick the roles. We hire, train and manage them.</p>
-    </div>
-    <ol class="steps">
-      <li class="step reveal">
+    <p class="eyebrow">Operational simplicity</p>
+    <h2 id="how-h">Live in minutes. Managed by no one.</h2>
+    <p class="lede">ServiceTitan and Jobber give you tools. Roster gives you the employees.</p>
+
+    <div class="step-grid">
+      <article class="card step reveal">
         <span class="step-num num">01</span>
-        <h3>Tell us how you work</h3>
-        <p>One call. Your prices, your hours, your service area, how you talk
-        to customers. That's the whole interview.</p>
-      </li>
-      <li class="step reveal">
+        <h3>You hire a role</h3>
+        <p>Pick an employee — Front Desk to start. Bring Roster into how customers
+        already reach you. Keep your number, tools, and workflow.</p>
+      </article>
+      <article class="card step reveal">
         <span class="step-num num">02</span>
-        <h3>Your employees start</h3>
-        <p>Within days. We read every conversation and tune every answer.
-        You never open a piece of software.</p>
-      </li>
-      <li class="step reveal">
+        <h3>It learns your business</h3>
+        <p>Prices, hours, service area, and custom policies captured in a short
+        15-minute briefing conversation. No painful configuration project.</p>
+      </article>
+      <article class="card step reveal">
         <span class="step-num num">03</span>
-        <h3>Work comes back finished</h3>
-        <p>Jobs on your calendar. Estimates closed. Crews routed. One short
-        report each morning — that's your entire workload.</p>
-      </li>
-    </ol>
+        <h3>It does the work</h3>
+        <p>Completes the task, reports the outcome, syncs directly to your CRM,
+        and escalates emergencies straight to you. Pause or fire anytime.</p>
+      </article>
+    </div>
   </div>
 </section>
 
-<!-- ═══ 4. THE EMPLOYEES — what work actually gets done ════════════════ -->
-<section class="employees ruled" aria-labelledby="emp-h">
+<!-- ═══ 3. THE ROSTER ══════════════════════════════════════════════════════ -->
+<section class="roster" id="roster" aria-labelledby="roster-h">
   <div class="shell">
-    <div class="section-head">
-      <h2 id="emp-h">The work that stops slipping.</h2>
-      <p class="lede">Each one owns a job start to finish. Nobody has to remind them.</p>
-    </div>
+    <p class="eyebrow">Your AI roster</p>
+    <h2 id="roster-h">A full office, hired one seat at a time.</h2>
+    <p class="lede">Five employees are built and running today in one shared engine.
+    Each one owns a job start to finish.</p>
 
     <div class="emp-grid">
-      <article class="emp reveal">
-        <p class="emp-role">Frontdesk</p>
-        <h3 class="emp-outcome">Never miss another customer.</h3>
-        <p class="emp-body">Answers the call, texts back the ones you missed, and books the job
-        before they try the next name on Google.</p>
-        <p class="emp-metric"><strong>Answers in two rings</strong> · 24 hours a day</p>
+      <article class="card emp reveal">
+        <p class="emp-label"><span class="num">01</span> · Front Desk</p>
+        <h3>Never miss another customer.</h3>
+        <p class="emp-body">Answers calls in 2 rings, texts back missed calls in
+        under 5 seconds, answers customer questions, and books directly to your
+        schedule.</p>
+        <p class="emp-stat"><b>Answers in 2 rings</b> · <span>24/7/365 coverage</span></p>
       </article>
 
-      <article class="emp reveal">
-        <p class="emp-role">Quote Chaser</p>
-        <h3 class="emp-outcome">Recover the estimates you already paid to win.</h3>
-        <p class="emp-body">Follows up on every open quote, patiently, for weeks — until it's a
-        yes or a clean no.</p>
-        <p class="emp-metric"><strong>Most shops send one.</strong> Closing takes eight.</p>
+      <article class="card emp reveal">
+        <p class="emp-label"><span class="num">02</span> · Quote Follow-Up</p>
+        <h3>Recover the estimates you already paid to win.</h3>
+        <p class="emp-body">Follows up across multiple weeks until it's an approved
+        job or a clean answer. Overcomes pricing objections automatically.</p>
+        <p class="emp-stat"><b>Most shops send 1 follow-up</b> · <span>closing takes 8</span></p>
       </article>
 
-      <article class="emp reveal">
-        <p class="emp-role">Dispatcher</p>
-        <h3 class="emp-outcome">Put the right truck on the right job.</h3>
-        <p class="emp-body">Assigns each job to the closest available crew and reshuffles the
-        day when an emergency lands.</p>
-        <p class="emp-metric"><strong>Fewer miles</strong> · more jobs per truck</p>
+      <article class="card emp reveal">
+        <p class="emp-label"><span class="num">03</span> · Membership Renewals</p>
+        <h3>Protect recurring maintenance revenue.</h3>
+        <p class="emp-body">Proactively reaches out to service-plan members before
+        agreements lapse, scheduling tune-ups and updating cards.</p>
+        <p class="emp-stat"><b>Zero churn</b> · <span>protects your most profitable revenue</span></p>
       </article>
 
-      <article class="emp reveal">
-        <p class="emp-role">Reviews</p>
-        <h3 class="emp-outcome">Turn finished jobs into five stars.</h3>
-        <p class="emp-body">Asks the moment the work is done, while the customer is still glad
-        you showed up.</p>
-        <p class="emp-metric"><strong>Every job</strong> · not just the ones you remember</p>
+      <article class="card emp reveal">
+        <p class="emp-label"><span class="num">04</span> · Customer Reactivation</p>
+        <h3>Bring back dormant customers you already earned.</h3>
+        <p class="emp-body">Works through the past customer database that no one has
+        time to call, bringing old clients back for maintenance.</p>
+        <p class="emp-stat"><b>Cheapest job you'll sell</b> · <span>they already trust your shop</span></p>
       </article>
 
-      <article class="emp reveal">
-        <p class="emp-role">Rebooker</p>
-        <h3 class="emp-outcome">Bring back the customers you already earned.</h3>
-        <p class="emp-body">Works the dormant customer list nobody on your team has time to
-        call.</p>
-        <p class="emp-metric"><strong>The cheapest job you'll sell</strong> · they already trust you.</p>
+      <article class="card emp reveal">
+        <p class="emp-label"><span class="num">05</span> · Review Management</p>
+        <h3>Turn completed jobs into 5-star Google reviews.</h3>
+        <p class="emp-body">Sends review requests the second a job is finished while
+        the customer is delighted. Catches negative feedback privately.</p>
+        <p class="emp-stat"><b>Every single job</b> · <span>drives organic Google search ranking</span></p>
       </article>
 
-      <article class="emp emp-note reveal">
-        <p class="emp-role">How they work together</p>
-        <h3 class="emp-outcome">What one employee learns, every employee knows.</h3>
-        <p class="emp-body">The warranty Dispatcher logged in March is the reason Frontdesk
-        gets tonight's call right.</p>
-        <p class="emp-metric"><strong>One customer record</strong> · every department reads it</p>
+      <article class="card emp reveal">
+        <p class="emp-label"><span class="num">06</span> · Shared Memory System</p>
+        <h3>Every employee shares one brain.</h3>
+        <p class="emp-body">Hire Renewals and it already knows every customer Front
+        Desk ever spoke to. Single unified context across the entire shop.</p>
+        <p class="emp-stat"><b>Single unified context</b> · <span>zero information silos</span></p>
       </article>
-    </div>
-
-    <a class="roster-link" href="/roster">
-      <span class="roster-link-text">
-        <strong>The full roster:</strong> fourteen more roles across seven departments —
-        collections, financing, routing, referrals, analysis. Some are working today,
-        some are still being hired.
-      </span>
-      <span class="roster-link-cta">See the full roster <span aria-hidden="true">→</span></span>
-    </a>
-  </div>
-</section>
-
-<!-- ═══ 5. THE DIFFERENCE — why is this not an AI receptionist ═════════ -->
-<section class="diff ruled" aria-labelledby="diff-h">
-  <div class="shell">
-    <div class="section-head">
-      <h2 id="diff-h">Everyone else sells you one phone answerer.</h2>
-      <p class="lede">An office isn't a desk. It's everything that happens after the call.</p>
-    </div>
-
-    <div class="diff-grid">
-      <div class="diff-col diff-fade reveal">
-        <p class="diff-head">A typical AI receptionist</p>
-        <ul class="diff-list">
-          <li>Answers the call</li>
-          <li>Books the appointment</li>
-          <li class="diff-stop">Then it stops.</li>
-        </ul>
-        <p class="diff-foot">Everything after the booking is still yours.</p>
-      </div>
-      <div class="diff-col diff-ours reveal">
-        <p class="diff-head">Roster</p>
-        <ul class="diff-list">
-          <li>Answers the call</li>
-          <li>Books the appointment</li>
-          <li>Routes it to the right truck</li>
-          <li>Chases every open estimate</li>
-          <li>Asks for the review</li>
-          <li>Wakes up your dormant customers</li>
-        </ul>
-        <p class="diff-foot">Nothing after the booking is yours.</p>
-      </div>
     </div>
   </div>
 </section>
 
-<!-- ═══ 6. PRICING — what does it cost ═════════════════════════════════ -->
-<section class="pricing ruled" aria-labelledby="pr-h">
+<!-- ═══ 4. LIVE VOICE DEMO ═════════════════════════════════════════════════ -->
+<section class="voice" id="voice" aria-labelledby="voice-h">
   <div class="shell">
-    <div class="section-head">
-      <h2 id="pr-h">Priced like a hire, not a subscription.</h2>
-      <p class="lede">Compare it to the person you'd otherwise put at that desk.</p>
+    <div class="voice-head">
+      <p class="eyebrow">Live voice simulation</p>
+      <h2 id="voice-h">Hear how natural your AI employees sound.</h2>
+      <p class="lede lede-center">Conversational AI trained specifically on home
+      services trade terminology.</p>
     </div>
+
+    <div class="card replay reveal">
+      <div class="replay-bar">
+        <span class="replay-title">Interactive call replay</span>
+      </div>
+
+      <div class="replay-tabs" role="tablist" aria-label="Call scenarios">
+        <button class="rtab is-on" role="tab" aria-selected="true" data-call="leak">Emergency Leak Call</button>
+        <button class="rtab" role="tab" aria-selected="false" data-call="quote"><span class="num">$4,200</span> Quote Follow-up</button>
+        <button class="rtab" role="tab" aria-selected="false" data-call="club">HVAC Club Renewal</button>
+      </div>
+
+      <div class="replay-player">
+        <button class="play" type="button" aria-label="Play call recording">
+          <svg class="icon-play" width="20" height="20" aria-hidden="true"><use href="#i-play"/></svg>
+          <svg class="icon-pause" width="20" height="20" aria-hidden="true"><use href="#i-pause"/></svg>
+        </button>
+        <div class="wave" role="slider" tabindex="0" aria-label="Seek within the call"
+             aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"></div>
+        <span class="replay-time num" id="replayTime">00:00 / 00:40</span>
+      </div>
+
+      <div class="voice-picker" id="voicePicker" hidden>
+        <label for="voiceSel">AI employee voice</label>
+        <select id="voiceSel"></select>
+        <span class="voice-caller" id="voiceCaller"></span>
+        <button class="voice-try" type="button" id="voiceTry">Hear it</button>
+      </div>
+
+      <div class="transcript" data-call="leak">
+        <p class="tline"><b class="t-caller">Caller:</b> “Hi, my water heater just burst — there's water all over my garage floor. Is there any way you can get someone out tonight?”</p>
+        <p class="tline t-ai"><b>Frontdesk AI:</b> “Oh no. Okay — let's get someone out to you tonight. I'm pulling up your account now. Looks like we replaced your pressure valve back in March, so that's still under warranty. I've got a tech, Dave, who can be there between 7:30 and 9. Want me to hold that for you?”</p>
+        <p class="tline"><b class="t-caller">Caller:</b> “Yes, please — that would be a huge help.”</p>
+        <p class="tline t-ai"><b>Frontdesk AI:</b> “You're all set. Dave will text you when he's about 15 minutes out. Try to keep the area around the heater clear if you can. Hang in there — we've got you.”</p>
+      </div>
+
+      <div class="transcript" data-call="quote" hidden>
+        <p class="tline t-ai"><b>Quote Chaser AI:</b> “Hi Marcus, it's Roster calling for Kestrel. I'm following up on that rooftop unit estimate — the <span class="num">$4,200</span>. Just wanted to see if you had any questions.”</p>
+        <p class="tline"><b class="t-caller">Customer:</b> “Yeah — honestly, it's a bit more than I budgeted for this quarter.”</p>
+        <p class="tline t-ai"><b>Quote Chaser AI:</b> “Totally understand. We can split it into three monthly payments, no interest. And I'll lock in this quarter's pricing so nothing changes. Want me to send that over?”</p>
+        <p class="tline"><b class="t-caller">Customer:</b> “Yeah, that works. Go ahead and send it.”</p>
+      </div>
+
+      <div class="transcript" data-call="club" hidden>
+        <p class="tline t-ai"><b>Renewals AI:</b> “Hi Janet, it's Roster with Kestrel. Your Comfort Club plan renews on the 14th, and you're due for your fall tune-up. Want me to get that on the schedule while I have you?”</p>
+        <p class="tline"><b class="t-caller">Customer:</b> “Sure. Is the card you have on file still good?”</p>
+        <p class="tline t-ai"><b>Renewals AI:</b> “Looks like it expired last month. I can text you a secure link to update it — takes about ten seconds.”</p>
+        <p class="tline"><b class="t-caller">Customer:</b> “Perfect. Go ahead and send it.”</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══ 5. THE INDUSTRY PROBLEM ════════════════════════════════════════════ -->
+<section class="problem" aria-labelledby="prob-h">
+  <div class="shell problem-grid">
+
+    <div class="problem-copy">
+      <p class="eyebrow">The industry problem</p>
+      <h2 id="prob-h">Home services runs on <span class="struck">office labor</span> it can't keep staffed.</h2>
+
+      <div class="card quotebox reveal">
+        <p>“I've got 18 missed calls and it's not even lunch.”</p>
+        <p>“That $14,000 estimate? Nobody ever followed up.”</p>
+        <p>“I'm sending invoices at 10 at night. Again.”</p>
+        <p>“Why am I doing office work instead of running my company?”</p>
+      </div>
+
+      <p class="problem-body">Every plumbing, HVAC, and electrical shop needs people
+      managing customer requests, booking jobs, dispatching trucks, chasing
+      estimates, and saving memberships. That person is expensive, hard to hire,
+      and gone in a year.</p>
+
+      <div class="stat-grid">
+        <div class="card stat reveal"><p class="stat-n num">$65K</p><p class="stat-l">Fully-loaded cost of one hire</p></div>
+        <div class="card stat reveal"><p class="stat-n num">62%</p><p class="stat-l">Of inbound calls go unanswered</p></div>
+        <div class="card stat reveal"><p class="stat-n num">$126K</p><p class="stat-l">Average revenue lost to missed calls/yr</p></div>
+        <div class="card stat reveal"><p class="stat-n num">$1T</p><p class="stat-l">Labor shortage impact on owners</p></div>
+      </div>
+    </div>
+
+    <div class="card calc reveal">
+      <p class="calc-title">Interactive loss calculator</p>
+
+      <div class="calc-field">
+        <label for="calls">Calls you miss in a week <output class="calc-val num" id="callsOut" for="calls">15</output></label>
+        <input type="range" id="calls" min="0" max="80" step="1" value="15">
+      </div>
+      <div class="calc-field">
+        <label for="ticket">Your average ticket ($) <output class="calc-val num" id="ticketOut" for="ticket">$ 450</output></label>
+        <input type="range" id="ticket" min="100" max="3000" step="25" value="450">
+      </div>
+
+      <div class="calc-out" aria-live="polite">
+        <p class="calc-lead">If only one in three of those would have booked:</p>
+        <p class="calc-big num" id="calcBig">$117,000</p>
+        <p class="calc-unit">walks out of your business every year</p>
+        <p class="calc-note">Every one of those callers reached your shop and then
+        dialed the next competitor on Google. Gross value of calls missed:
+        <strong id="calcGross">$351,000</strong>.</p>
+      </div>
+
+      <a class="btn btn-primary btn-big" href="#request">Recover this revenue with Roster <span aria-hidden="true">→</span></a>
+    </div>
+
+  </div>
+</section>
+
+<!-- ═══ 6. COMPARISON ══════════════════════════════════════════════════════ -->
+<section class="comparison" id="comparison" aria-labelledby="cmp-h">
+  <div class="shell">
+    <p class="eyebrow">Market positioning</p>
+    <h2 id="cmp-h">A new category between staff, outsourcing, and software.</h2>
+    <p class="lede">You don't buy software to manage. You get completed outcomes.</p>
+
+    <div class="card cmp-card reveal">
+      <table class="cmp">
+        <caption class="sr-only">How Roster compares to human staff, answering services and vertical SaaS</caption>
+        <thead>
+          <tr>
+            <th scope="col">Category</th>
+            <th scope="col">Completes the work</th>
+            <th scope="col">No human to hire</th>
+            <th scope="col">Multi-role office</th>
+            <th scope="col">Shared memory</th>
+            <th scope="col">Annual cost</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <th scope="row">Human Office Staff<span>Receptionist, Dispatcher</span></th>
+            <td data-label="Completes the work"><span class="mark"><svg class="ti" width="13" height="13" aria-hidden="true"><use href="#i-tick"/></svg>Yes</span></td>
+            <td data-label="No human to hire"><span class="no"><svg class="ti" width="13" height="13" aria-hidden="true"><use href="#i-cross"/></svg>Requires hiring</span></td>
+            <td data-label="Multi-role office">1 person = 1 role</td>
+            <td data-label="Shared memory">In their head</td>
+            <td data-label="Annual cost" class="num">$45,000–$65,000/yr</td>
+          </tr>
+          <tr>
+            <th scope="row">BPO / Answering Services<span>Smith.ai, Ruby, Offshore</span></th>
+            <td data-label="Completes the work">Takes messages only</td>
+            <td data-label="No human to hire"><span class="mark"><svg class="ti" width="13" height="13" aria-hidden="true"><use href="#i-tick"/></svg>Yes</span></td>
+            <td data-label="Multi-role office">Front desk only</td>
+            <td data-label="Shared memory"><span class="no"><svg class="ti" width="13" height="13" aria-hidden="true"><use href="#i-cross"/></svg>No</span></td>
+            <td data-label="Annual cost" class="num">$4,000–$23,000/yr</td>
+          </tr>
+          <tr>
+            <th scope="row">Vertical SaaS<span>ServiceTitan, Jobber</span></th>
+            <td data-label="Completes the work"><span class="no"><svg class="ti" width="13" height="13" aria-hidden="true"><use href="#i-cross"/></svg>You do the work</span></td>
+            <td data-label="No human to hire"><span class="no"><svg class="ti" width="13" height="13" aria-hidden="true"><use href="#i-cross"/></svg>Needs staff</span></td>
+            <td data-label="Multi-role office">Tooling, not labor</td>
+            <td data-label="Shared memory">Data, not action</td>
+            <td data-label="Annual cost" class="num">$3,000–$12,000/yr</td>
+          </tr>
+          <tr class="cmp-ours">
+            <th scope="row">Roster AI Employees<span>Managed AI Workforce</span></th>
+            <td data-label="Completes the work"><span class="yes"><svg class="ti" width="13" height="13" aria-hidden="true"><use href="#i-tick"/></svg>Yes (Booked jobs)</span></td>
+            <td data-label="No human to hire"><span class="yes"><svg class="ti" width="13" height="13" aria-hidden="true"><use href="#i-tick"/></svg>Yes (Zero management)</span></td>
+            <td data-label="Multi-role office"><span class="yes"><svg class="ti" width="13" height="13" aria-hidden="true"><use href="#i-tick"/></svg>Full 5-employee office</span></td>
+            <td data-label="Shared memory"><span class="yes"><svg class="ti" width="13" height="13" aria-hidden="true"><use href="#i-tick"/></svg>One shared brain</span></td>
+            <td data-label="Annual cost" class="num cmp-price">$2,000–$4,000/yr</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<!-- ═══ 7. PRICING ═════════════════════════════════════════════════════════ -->
+<section class="pricing" id="pricing" aria-labelledby="pr-h">
+  <div class="shell">
+    <p class="eyebrow">Transparent pricing</p>
+    <h2 id="pr-h">Priced per employee. Cheaper than one hire.</h2>
+    <p class="lede">Start with Front Desk. Expand your office as you grow.</p>
 
     <div class="price-grid">
-      <div class="price-card reveal">
+      <div class="card price-card reveal">
         <p class="price-label">One human office hire</p>
-        <p class="price-num num">$45,000<span class="price-per">/year</span></p>
-        <p class="price-sub">plus payroll taxes, benefits and PTO</p>
+        <p class="price-num num">$45,000–$65,000<span class="price-per">/year</span></p>
+        <p class="price-sub">plus payroll taxes, benefits, desk equipment, and PTO</p>
         <ul>
-          <li>Works 40 of the week's 168 hours</li>
-          <li>Calls in sick, quits, needs re-training</li>
-          <li>Answers the phone — and that's about it</li>
+          <li>Works only 40 of the week's 168 hours</li>
+          <li>Calls in sick, quits after 9 months, requires continuous retraining</li>
+          <li>Answers the phone — but doesn't chase estimates or memberships</li>
+          <li>Leaves nights, weekends, and holidays completely uncovered</li>
         </ul>
       </div>
-      <div class="price-card price-ours reveal">
-        <p class="price-label">Your Roster</p>
+      <div class="card price-card price-ours reveal">
+        <p class="price-label">Your Roster AI office</p>
         <p class="price-num">One flat rate<span class="price-per">/month</span></p>
-        <p class="price-sub">a fraction of a single salary</p>
+        <p class="price-sub">a fraction of a single salary — set on your discovery call</p>
         <ul>
-          <li>Works all 168 — nights, weekends, holidays</li>
-          <li>Never quits, never needs a second training</li>
-          <li>Answers, routes, chases, follows up, reports back</li>
+          <li>Works all 168 hours — 24/7 nights, weekends, holidays</li>
+          <li>Never quits, never sick, continuous weekly quality tuning included</li>
+          <li>Answers, books, chases estimates, secures reviews, and reactivates</li>
+          <li>Shared brain: every employee already knows your customer history</li>
         </ul>
+        <a class="btn btn-primary price-cta" href="#request">Start with Front Desk <span aria-hidden="true">→</span></a>
       </div>
     </div>
-    <p class="footnote" style="margin-top:var(--s3)">No setup fee. No contract. Cancel any day it stops earning its keep.</p>
   </div>
 </section>
 
-<!-- ═══ 7. TRUST — can I believe this ══════════════════════════════════ -->
-<section class="faq ruled" aria-labelledby="faq-h">
-  <div class="shell">
-    <div class="section-head">
-      <h2 id="faq-h">The three things every owner asks.</h2>
-      <p class="lede">Asked on nearly every call. Answered the same way here.</p>
-    </div>
-
-    <div class="qa reveal">
-      <h3>“Won't my customers hate talking to a robot?”</h3>
-      <p>Some would — so they don't have to. Anyone who wants a person gets you,
-      immediately. For everyone else the real choice isn't robot versus human. It's
-      a text back in five seconds versus your voicemail, and most people who hit
-      voicemail just call the next name on Google.</p>
-    </div>
-    <div class="qa reveal">
-      <h3>“Do I have to change my number or my software?”</h3>
-      <p>No. Keep your number. Keep whatever you already run the business on. Your
-      office works alongside it and puts booked jobs on your calendar. Setup is our
-      job, not yours.</p>
-    </div>
-    <div class="qa reveal">
-      <h3>“What happens when it gets something wrong?”</h3>
-      <p>A human catches it — that's the product. Roster is managed: we read your
-      conversations, fix wrong answers, and tune your employees every week. You're
-      not buying software and hoping. You're hiring staff with a manager included.</p>
-    </div>
-
-  </div>
-</section>
-
-<!-- Is it for me? One line, one strip. -->
-<section class="trades ruled" aria-labelledby="tr-h">
-  <div class="shell">
-    <h2 id="tr-h" class="trades-h">Built for any home service business with a phone line and a crew.</h2>
-    <ul class="trade-strip" aria-label="Trades we staff">
-      <li><svg class="ti" width="17" height="17" aria-hidden="true"><use href="#i-hvac"/></svg>HVAC</li>
-      <li><svg class="ti" width="17" height="17" aria-hidden="true"><use href="#i-plumbing"/></svg>Plumbing</li>
-      <li><svg class="ti" width="17" height="17" aria-hidden="true"><use href="#i-electrical"/></svg>Electrical</li>
-      <li><svg class="ti" width="17" height="17" aria-hidden="true"><use href="#i-roofing"/></svg>Roofing</li>
-      <li><svg class="ti" width="17" height="17" aria-hidden="true"><use href="#i-landscaping"/></svg>Landscaping</li>
-      <li><svg class="ti" width="17" height="17" aria-hidden="true"><use href="#i-cleaning"/></svg>Cleaning</li>
-      <li><svg class="ti" width="17" height="17" aria-hidden="true"><use href="#i-garage"/></svg>Garage Door</li>
-      <li><svg class="ti" width="17" height="17" aria-hidden="true"><use href="#i-pest"/></svg>Pest Control</li>
-      <li><svg class="ti" width="17" height="17" aria-hidden="true"><use href="#i-painting"/></svg>Painting</li>
-      <li><svg class="ti" width="17" height="17" aria-hidden="true"><use href="#i-pool"/></svg>Pool Service</li>
-    </ul>
-  </div>
-</section>
-
-<!-- ═══ 8. CLOSE — what do I do next ═══════════════════════════════════ -->
+<!-- ═══ 8. CLOSE ═══════════════════════════════════════════════════════════ -->
 <section class="cta" id="request" aria-labelledby="cta-h">
-  <div class="shell hero-shell cta-grid">
-    <div>
-      <p class="eyebrow eyebrow-dark">Request a demo</p>
-      <h2 id="cta-h">Your next hire doesn't need a desk.</h2>
-      <p class="lede">
-        Roster is new and we're not pretending otherwise. We take on a handful of
-        businesses at a time so each office gets set up personally — and the first
-        shops keep founding pricing for good.
-      </p>
-      <ul class="cta-points">
-        <li>A 15-minute call, on your schedule</li>
-        <li>We show you your own office, staffed</li>
-        <li>No setup fee, no contract, no pressure</li>
-      </ul>
+  <div class="shell narrow">
+    <div class="cta-head">
+      <p class="eyebrow">Request a demo</p>
+      <h2 id="cta-h">See your own office, working.</h2>
+      <p class="lede lede-center">Keep your numbers, keep your CRM, and see Roster
+      answer test calls on your shop's schedule in under 15 minutes.</p>
     </div>
 
-    <form class="cta-form" method="post" action="/request-access">
-      <div class="form-row">
-        <div class="field">
-          <label for="f-name">Your name</label>
-          <input type="text" id="f-name" name="name" autocomplete="name" required>
-        </div>
-        <div class="field">
-          <label for="f-biz">Business name</label>
-          <input type="text" id="f-biz" name="business_name" autocomplete="organization">
-        </div>
+    <form class="card cta-form" method="post" action="/request-access">
+      <div class="field">
+        <label for="f-name">Your name</label>
+        <input type="text" id="f-name" name="name" autocomplete="name" placeholder="Dave Miller" required>
       </div>
-      <div class="form-row">
-        <div class="field">
-          <label for="f-phone">Phone</label>
-          <input type="tel" id="f-phone" name="phone" autocomplete="tel" required>
-        </div>
-        <div class="field">
-          <label for="f-trade">Your trade</label>
-          <select id="f-trade" name="trade" required>
-            <option value="" disabled selected>Choose one</option>
-            <option>HVAC</option>
-            <option>Plumbing</option>
-            <option>Electrical</option>
-            <option>Roofing</option>
-            <option>Landscaping</option>
-            <option>Cleaning</option>
-            <option>Garage Door</option>
-            <option>Pest Control</option>
-            <option>Painting</option>
-            <option>Pool Service</option>
-            <option>Other</option>
-          </select>
-        </div>
+      <div class="field">
+        <label for="f-biz">Business name</label>
+        <input type="text" id="f-biz" name="business_name" autocomplete="organization" placeholder="Miller Brothers HVAC">
       </div>
-      <button class="btn btn-primary btn-big" type="submit">Claim a founding spot</button>
-      <p class="footnote">We reach out within a day.</p>
+      <div class="field">
+        <label for="f-phone">Phone</label>
+        <input type="tel" id="f-phone" name="phone" autocomplete="tel" placeholder="(555) 234-5678" required>
+      </div>
+      <div class="field">
+        <label for="f-trade">Your trade</label>
+        <select id="f-trade" name="trade" required>
+          <option value="" disabled selected>Choose one</option>
+          <option>HVAC</option>
+          <option>Plumbing</option>
+          <option>Electrical</option>
+          <option>Roofing</option>
+          <option>Pest Control</option>
+          <option>Garage Door</option>
+          <option>Cleaning</option>
+          <option>Landscaping</option>
+          <option>Painting</option>
+          <option>Pool Service</option>
+          <option>Other</option>
+        </select>
+      </div>
+      <button class="btn btn-primary btn-big" type="submit">Request a 15-min Demo <span aria-hidden="true">→</span></button>
     </form>
   </div>
 </section>
@@ -497,17 +505,19 @@
 </main>
 
 <footer class="footer">
-  <div class="shell hero-shell footer-inner">
+  <div class="shell footer-inner">
     <span class="logo">Roster</span>
-    <span class="footer-note">You run the business. We'll run the office.</span>
+    <nav class="footer-nav" aria-label="Footer">
+      <a href="#how">How It Works</a>
+      <a href="#roster">The Roster</a>
+      <a href="#voice">Live Voice Demo</a>
+      <a href="#comparison">Comparison</a>
+      <a href="#pricing">Pricing</a>
+    </nav>
   </div>
-  <div class="shell hero-shell footer-legal">
-    <p class="footnote">Text messaging: when you contact a Roster-powered business
-    by phone or text, Roster may text you back on that business's behalf &mdash;
-    missed-call replies, appointment confirmations, quote follow-ups, review
-    requests, and service reminders. Message frequency varies; message and data
-    rates may apply. Reply STOP to opt out, HELP for help.
-    <a href="/privacy">Privacy Policy</a> &middot; <a href="/terms">Terms of Service</a></p>
+  <div class="shell footer-legal">
+    <span>© 2026 Roster Hires Inc. Built for home service contractors. All rights reserved.</span>
+    <span class="footer-links"><a href="/terms">Terms</a> · <a href="/privacy">Privacy</a></span>
   </div>
 </footer>
 
@@ -517,13 +527,8 @@
 
   /* ---- Scroll reveal: one-time, never repeats --------------------------- */
   var reveals = document.querySelectorAll('.reveal');
-  function showAll() {
-    reveals.forEach(function (el) { el.classList.add('in'); });
-  }
-
-  // Content is opacity:0 until revealed, so anything that stops the observer
-  // firing would hide the page. Force everything visible after 3s regardless.
-  setTimeout(showAll, 3000);
+  function showAll() { reveals.forEach(function (el) { el.classList.add('in'); }); }
+  setTimeout(showAll, 3000);            // safety net: never leave the page blank
 
   if (reduced || !('IntersectionObserver' in window)) {
     showAll();
@@ -532,7 +537,6 @@
       entries.forEach(function (e) {
         if (!e.isIntersecting) return;
         var el = e.target;
-        // Stagger siblings so a row cascades instead of popping.
         var sibs = Array.prototype.slice.call(el.parentNode.children);
         el.style.transitionDelay = Math.min(Math.max(sibs.indexOf(el), 0), 6) * 60 + 'ms';
         el.classList.add('in');
@@ -542,29 +546,474 @@
     reveals.forEach(function (el) { io.observe(el); });
   }
 
-  /* ---- Console feed: fills in once, then rests -------------------------- */
-  var rows = document.querySelectorAll('#console .ev');
-  if (rows.length) {
-    if (reduced) {
-      rows.forEach(function (r) { r.classList.add('in'); });
-    } else {
-      rows.forEach(function (r, i) {
-        setTimeout(function () { r.classList.add('in'); }, 420 + i * 130);
-      });
-    }
-  }
+  /* ---- Tap ripple: the feedback that works where hover doesn't ---------- */
+  document.querySelectorAll('.btn').forEach(function (b) {
+    b.addEventListener('pointerdown', function (e) {
+      var r = b.getBoundingClientRect();
+      b.style.setProperty('--rx', ((e.clientX - r.left) / r.width * 100) + '%');
+      b.style.setProperty('--ry', ((e.clientY - r.top) / r.height * 100) + '%');
+      b.classList.add('is-tapped');
+      setTimeout(function () { b.classList.remove('is-tapped'); }, 460);
+    });
+  });
 
-  /* ---- Nav hairline appears only once the page has moved ---------------- */
+  /* ---- Hero office panel: cycles, and the rail is clickable ------------- */
+  var calls = document.querySelectorAll('.office .call');
+  var rails = document.querySelectorAll('.rail-emp');
+  var cycle = null;
+  function focusEmp(key) {
+    var hit = false;
+    calls.forEach(function (c) {
+      var on = c.dataset.for === key;
+      if (on) hit = true;
+      c.classList.toggle('is-on', on);
+    });
+    // Rail entries with no card of their own still highlight, so a tap always
+    // acknowledges itself even when there is nothing new to show.
+    rails.forEach(function (r) { r.classList.toggle('is-active', r.dataset.emp === key); });
+    return hit;
+  }
+  function startCycle() {
+    if (reduced || calls.length < 2) return;
+    stopCycle();
+    var order = ['frontdesk', 'qualifier'], i = 0;
+    cycle = setInterval(function () {
+      i = (i + 1) % order.length;
+      focusEmp(order[i]);
+    }, 5200);
+  }
+  function stopCycle() { if (cycle) { clearInterval(cycle); cycle = null; } }
+
+  focusEmp('frontdesk');
+  startCycle();
+
+  rails.forEach(function (r) {
+    r.setAttribute('tabindex', '0');
+    r.setAttribute('role', 'button');
+    function pick() {
+      stopCycle();                       // a manual pick wins over the rotation
+      if (!focusEmp(r.dataset.emp)) {
+        // no card for this one — fall back so the stream is never empty
+        focusEmp(r.dataset.emp);
+      }
+    }
+    r.addEventListener('click', pick);
+    r.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); pick(); }
+    });
+  });
+
+  /* ---- Nav: highlight the section you're actually in -------------------- */
   var nav = document.getElementById('nav');
   if (nav) {
     var onScroll = function () { nav.classList.toggle('is-stuck', window.scrollY > 8); };
     onScroll();
     window.addEventListener('scroll', onScroll, { passive: true });
   }
+  // Both the desktop links and the mobile strip track the current section.
+  var navLinks = Array.prototype.slice.call(document.querySelectorAll('.nav-link, .nav-strip a'));
+  var seen = [];
+  navLinks.forEach(function (a) {
+    var href = a.getAttribute('href');
+    if (seen.indexOf(href) < 0) seen.push(href);
+  });
+  if ('IntersectionObserver' in window) {
+    var spy = new IntersectionObserver(function (entries) {
+      entries.forEach(function (e) {
+        if (!e.isIntersecting) return;
+        var id = '#' + e.target.id;
+        navLinks.forEach(function (a) {
+          a.classList.toggle('is-current', a.getAttribute('href') === id);
+        });
+        // Keep the active chip in view on the mobile strip.
+        var chip = document.querySelector('.nav-strip a.is-current');
+        var strip = document.querySelector('.nav-strip');
+        if (chip && strip && strip.offsetParent !== null) {
+          var c = chip.getBoundingClientRect(), sRect = strip.getBoundingClientRect();
+          if (c.left < sRect.left || c.right > sRect.right) {
+            strip.scrollTo({ left: chip.offsetLeft - 16, behavior: reduced ? 'auto' : 'smooth' });
+          }
+        }
+      });
+    }, { rootMargin: '-45% 0px -50% 0px', threshold: 0 });
+    seen.forEach(function (h) {
+      var sec = document.querySelector(h);
+      if (sec) spy.observe(sec);
+    });
+  }
 
-  /* ---- Loss ledger ------------------------------------------------------ */
+  /* ═══ THE VOICE PLAYER ═════════════════════════════════════════════════
+     Two modes, decided at load:
+
+     REAL AUDIO — /static/voice/manifest.json exists, so the page plays MP3s
+     pre-rendered by xAI TTS in the same voice the product answers calls with
+     (scripts/build_demo_voice.py). Durations come from the manifest, so the
+     transcript highlight is frame-accurate rather than estimated.
+
+     FALLBACK — no manifest, so it speaks through the browser's own engine.
+     Keeps the demo alive before the audio has been generated, and on any
+     device where the files fail to load.
+
+     xAI is never called from the browser: its realtime API is keyed to an
+     inbound SIP call_id, and any client-side call would ship XAI_API_KEY to
+     every visitor and bill per pageview. */
+  var wave = document.querySelector('.wave');
+  var playBtn = document.querySelector('.play');
+  var timeEl = document.getElementById('replayTime');
+  var BARS = 56;
+
+  if (wave && playBtn) {
+    if (window.matchMedia('(max-width: 520px)').matches) BARS = 30;
+
+    // Shape derived from the ACTUAL turn structure, so the envelope goes
+    // near-silent between speakers instead of being one continuous ramp.
+    function buildShape(lines, total, n) {
+      var out = [];
+      for (var i = 0; i < n; i++) {
+        var t = (i + 0.5) / n * total;
+        var live = null;
+        for (var k = 0; k < lines.length; k++) {
+          if (t >= lines[k].start && t < lines[k].end) { live = lines[k]; break; }
+        }
+        if (!live) { out.push(6); continue; }
+        var seed = Math.sin((i + 1) * 12.9898) * 43758.5453;
+        seed = seed - Math.floor(seed);
+        var into = (t - live.start) / (live.end - live.start);
+        var env = Math.sin(into * Math.PI);
+        out.push(Math.round(14 + seed * 70 * (0.35 + env * 0.65)));
+      }
+      return out;
+    }
+    for (var bi = 0; bi < BARS; bi++) wave.appendChild(document.createElement('i'));
+    var bars = wave.querySelectorAll('i');
+
+    var synth = window.speechSynthesis || null;
+    var manifest = null, audioMode = false;
+    var playing = false, t0 = 0, elapsed = 0, raf = null, lineTimers = [];
+    var clips = [], idx = 0;                 // real-audio mode
+    var aiVoice = null, callerVoice = null;  // fallback mode
+    var sel = document.getElementById('voiceSel');
+    var picker = document.getElementById('voicePicker');
+    var callerLabel = document.getElementById('voiceCaller');
+    var tryBtn = document.getElementById('voiceTry');
+
+    function currentCall() {
+      var on = document.querySelector('.rtab.is-on');
+      return on ? on.dataset.call : 'leak';
+    }
+    function activeTranscript() { return document.querySelector('.transcript:not([hidden])'); }
+
+    /* ---- Timing plan ---------------------------------------------------- */
+    function planLines() {
+      var tr = activeTranscript();
+      if (!tr) return { lines: [], total: 6 };
+      var els = tr.querySelectorAll('.tline');
+      var entries = audioMode && manifest ? (manifest.calls[currentCall()] || []) : null;
+      var lines = [], at = 0;
+      for (var i = 0; i < els.length; i++) {
+        // Real duration when we have it; a words-per-second estimate otherwise.
+        var dur = entries && entries[i]
+          ? entries[i].dur
+          : Math.max(1.6, els[i].textContent.trim().split(/\s+/).length / 2.9);
+        lines.push({ el: els[i], start: at, end: at + dur, i: i });
+        at += dur + 0.35;
+      }
+      return { lines: lines, total: at };
+    }
+    var plan = planLines();
+    function paintShape() {
+      var h = buildShape(plan.lines, plan.total, BARS);
+      for (var i = 0; i < BARS; i++) bars[i].style.setProperty('--h', h[i] + '%');
+    }
+    paintShape();
+
+    function fmt(sec) {
+      sec = Math.max(0, Math.round(sec));
+      return ('0' + Math.floor(sec / 60)).slice(-2) + ':' + ('0' + (sec % 60)).slice(-2);
+    }
+    function paint(pos) {
+      var pct = plan.total ? pos / plan.total : 0;
+      var head = Math.floor(pct * BARS);
+      for (var i = 0; i < BARS; i++) {
+        bars[i].classList.toggle('played', i < head);
+        bars[i].classList.toggle('at', playing && i === head);
+      }
+      if (timeEl) timeEl.textContent = fmt(pos) + ' / ' + fmt(plan.total);
+      wave.setAttribute('aria-valuenow', Math.round(pct * 100));
+      var tr = activeTranscript();
+      if (tr) tr.classList.toggle('is-live', playing);
+      plan.lines.forEach(function (L) {
+        var on = pos >= L.start && pos < L.end;
+        L.el.classList.toggle('is-speaking', on && playing);
+        L.el.classList.toggle('is-spoken', pos >= L.end);
+      });
+    }
+
+    /* ---- Voice options -------------------------------------------------- */
+    // Fallback mode only: macOS ships ~47 English voices, most of them
+    // novelties (Bad News, Boing, Trinoids). Block those, rank the rest.
+    var NOVELTY = /^(albert|agnes|bad news|bahh|bells|boing|bruce|bubbles|cellos|deranged|fred|good news|hysterical|jester|junior|kathy|organ|pipe organ|princess|ralph|superstar|trinoids|victoria|whisper|wobble|zarvox)$/i;
+    var CHARACTER = /^(eddy|flo|grandma|grandpa|reed|rocko|sandy|shelley)\b/i;
+    var PREFERRED = ['ava','samantha','allison','serena','zoe','evan','tom','alex','nicky','aaron','susan','karen','moira','tessa','daniel','arthur','catherine','martha','gordon','rishi','google us english','google uk english','aria','jenny','guy','michelle'];
+    function voiceScore(v) {
+      var n = v.name.toLowerCase(), score = 0;
+      if (/premium|enhanced|neural|natural|online|siri/.test(n)) score += 100;
+      for (var i = 0; i < PREFERRED.length; i++) {
+        if (n.indexOf(PREFERRED[i]) === 0 || n === PREFERRED[i]) { score += (PREFERRED.length - i) * 2; break; }
+      }
+      if (v.localService) score += 3;
+      if (/en[-_]us/i.test(v.lang)) score += 2;
+      return score;
+    }
+    function usableVoices() {
+      return ((synth && synth.getVoices()) || [])
+        .filter(function (v) { return /^en[-_]/i.test(v.lang); })
+        .filter(function (v) {
+          var bare = v.name.replace(/\s*\(.*$/, '').trim();
+          return !NOVELTY.test(bare) && !CHARACTER.test(bare);
+        })
+        .sort(function (a, b) { return voiceScore(b) - voiceScore(a); });
+    }
+
+    var chosen = null;   // xAI voice id in audio mode, voice name in fallback
+    function saveChoice(v) { try { localStorage.setItem('roster.voice', v); } catch (e) {} }
+    function readChoice() { try { return localStorage.getItem('roster.voice'); } catch (e) { return null; } }
+
+    function buildPicker() {
+      if (!sel) return;
+      var opts;
+      if (audioMode && manifest) {
+        opts = manifest.ai_voices.map(function (v) { return { value: v, label: v.charAt(0).toUpperCase() + v.slice(1) }; });
+      } else {
+        var list = usableVoices();
+        if (!list.length) return;
+        opts = list.map(function (v) {
+          return { value: v.name, label: v.name.replace(/\s*\(.*$/, '') + (/premium|enhanced|neural|natural/i.test(v.name) ? ' · HD' : '') };
+        });
+      }
+      if (sel.options.length === opts.length && chosen) return;
+      sel.innerHTML = '';
+      opts.forEach(function (o) {
+        var el = document.createElement('option');
+        el.value = o.value; el.textContent = o.label;
+        sel.appendChild(el);
+      });
+      var saved = readChoice();
+      chosen = (saved && opts.some(function (o) { return o.value === saved; })) ? saved : opts[0].value;
+      sel.value = chosen;
+      applyChoice();
+      if (picker) picker.hidden = false;
+    }
+    function applyChoice() {
+      chosen = sel ? sel.value : chosen;
+      saveChoice(chosen);
+      if (audioMode && manifest) {
+        if (callerLabel) callerLabel.textContent = 'Caller: ' + cap(callerVoiceId());
+        loadClips();
+      } else {
+        var list = usableVoices();
+        aiVoice = list.filter(function (v) { return v.name === chosen; })[0] || list[0];
+        callerVoice = list.filter(function (v) { return v.name !== (aiVoice && aiVoice.name); })[0] || aiVoice;
+        if (callerLabel && callerVoice) callerLabel.textContent = 'Caller: ' + callerVoice.name.replace(/\s*\(.*$/, '');
+      }
+    }
+    if (sel) sel.addEventListener('change', function () { stop(false); elapsed = 0; applyChoice(); paint(0); sample(); });
+
+    /* ---- Real-audio playback -------------------------------------------- */
+    function cap(v) { return v ? v.charAt(0).toUpperCase() + v.slice(1) : v; }
+    // The customer is voiced by the opposite gender to the employee, so the
+    // two sides of the call never sound like one person talking to themselves.
+    function callerVoiceId() {
+      if (!manifest) return null;
+      var g = (manifest.gender || {})[chosen] === 'female' ? 'male' : 'female';
+      var cv = manifest.caller_voices || {};
+      return cv[g] || cv.male || cv.female;
+    }
+    function loadClips() {
+      clips.forEach(function (a) { try { a.pause(); a.onended = null; } catch (e) {} });
+      clips = [];
+      if (!manifest) return;
+      var caller = callerVoiceId();
+      (manifest.calls[currentCall()] || []).forEach(function (entry) {
+        var src = entry.role === 'ai' ? entry.files[chosen] : entry.files[caller];
+        if (!src) { for (var k in entry.files) { src = entry.files[k]; break; } }
+        var a = new Audio(src);
+        a.preload = 'auto';
+        clips.push(a);
+      });
+    }
+    function lineAt(pos) {
+      for (var i = 0; i < plan.lines.length; i++) if (pos < plan.lines[i].end) return i;
+      return plan.lines.length - 1;
+    }
+    var pendingSeek = null;   // honoured until the clip reports the new position
+    function playClip(i, offset) {
+      if (i >= clips.length) { stop(true); return; }
+      idx = i;
+      var a = clips[i];
+      a.onended = function () { if (playing) playClip(idx + 1, 0); };
+      pendingSeek = offset ? plan.lines[i].start + offset : null;
+      // Setting currentTime before metadata has loaded is silently discarded,
+      // which made every seek land back at the start of the line.
+      var begin = function () {
+        if (offset) { try { a.currentTime = offset; } catch (e) {} }
+        a.play().catch(function () { /* autoplay blocked until a gesture */ });
+      };
+      if (a.readyState >= 1) begin();
+      else a.addEventListener('loadedmetadata', begin, { once: true });
+    }
+    function audioElapsed() {
+      var L = plan.lines[idx];
+      if (!L) return elapsed;
+      var a = clips[idx];
+      var at = (a && !isNaN(a.currentTime)) ? a.currentTime : 0;
+      if (pendingSeek !== null) {
+        // Hold the requested position until the element has actually moved.
+        if (at > 0.05) pendingSeek = null;
+        else return pendingSeek;
+      }
+      return L.start + at;
+    }
+
+    /* ---- Fallback (browser speech) -------------------------------------- */
+    function speakFrom(pos) {
+      if (!synth) return;
+      try { synth.cancel(); } catch (e) { return; }
+      plan.lines.forEach(function (L) {
+        if (L.end <= pos) return;
+        lineTimers.push(setTimeout(function () {
+          if (!playing) return;
+          var raw = L.el.textContent.replace(/^\s*[A-Za-z ]+:\s*/, '').replace(/[“”"]/g, '');
+          var u = new SpeechSynthesisUtterance(raw);
+          var isAI = L.el.classList.contains('t-ai');
+          u.voice = isAI ? aiVoice : callerVoice;
+          u.rate = isAI ? 0.98 : 1.06;
+          u.pitch = isAI ? 1.0 : 1.06;
+          try { synth.speak(u); } catch (e) {}
+        }, Math.max(0, (L.start - pos) * 1000)));
+      });
+    }
+    function clearTimers() { lineTimers.forEach(clearTimeout); lineTimers = []; }
+
+    function sample() {
+      var line = "Thanks for calling Kestrel Plumbing. How can I help?";
+      if (audioMode && clips.length) {
+        var first = clips.filter(function (_, i) { return plan.lines[i] && plan.lines[i].el.classList.contains('t-ai'); })[0] || clips[0];
+        try { first.currentTime = 0; first.play(); } catch (e) {}
+        return;
+      }
+      if (!synth || !aiVoice) return;
+      try { synth.cancel(); } catch (e) { return; }
+      var u = new SpeechSynthesisUtterance(line);
+      u.voice = aiVoice; u.rate = 0.98;
+      try { synth.speak(u); } catch (e) {}
+    }
+    if (tryBtn) tryBtn.addEventListener('click', function () { stop(false); sample(); });
+
+    /* ---- Transport ------------------------------------------------------ */
+    function tick() {
+      if (!playing) return;
+      elapsed = audioMode ? audioElapsed() : (performance.now() - t0) / 1000;
+      if (elapsed >= plan.total) { stop(true); return; }
+      paint(elapsed);
+      raf = requestAnimationFrame(tick);
+    }
+    function play() {
+      playing = true;
+      playBtn.classList.add('is-playing');
+      playBtn.setAttribute('aria-label', 'Pause call recording');
+      if (elapsed >= plan.total) elapsed = 0;
+      if (audioMode) {
+        var i = lineAt(elapsed);
+        playClip(i, Math.max(0, elapsed - plan.lines[i].start));
+      } else {
+        t0 = performance.now() - elapsed * 1000;
+        speakFrom(elapsed);
+      }
+      raf = requestAnimationFrame(tick);
+    }
+    function stop(finished) {
+      playing = false;
+      playBtn.classList.remove('is-playing');
+      playBtn.setAttribute('aria-label', 'Play call recording');
+      if (raf) cancelAnimationFrame(raf);
+      pendingSeek = null;
+      clearTimers();
+      clips.forEach(function (a) { try { a.pause(); a.onended = null; } catch (e) {} });
+      if (synth) { try { synth.cancel(); } catch (e) {} }
+      if (finished) { elapsed = plan.total; paint(plan.total); } else paint(elapsed);
+    }
+    playBtn.addEventListener('click', function () { playing ? stop(false) : play(); });
+
+    function seekTo(clientX) {
+      var r = wave.getBoundingClientRect();
+      elapsed = Math.min(Math.max((clientX - r.left) / r.width, 0), 1) * plan.total;
+      if (playing) { stop(false); play(); } else paint(elapsed);
+    }
+    wave.addEventListener('click', function (e) { seekTo(e.clientX); });
+    wave.addEventListener('keydown', function (e) {
+      var step = plan.total / 20;
+      if (e.key === 'ArrowRight') elapsed = Math.min(plan.total, elapsed + step);
+      else if (e.key === 'ArrowLeft') elapsed = Math.max(0, elapsed - step);
+      else if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); playing ? stop(false) : play(); return; }
+      else return;
+      e.preventDefault();
+      if (playing) { stop(false); play(); } else paint(elapsed);
+    });
+
+    var tabs = document.querySelectorAll('.rtab');
+    tabs.forEach(function (tab) {
+      tab.addEventListener('click', function () {
+        var key = tab.dataset.call;
+        tabs.forEach(function (t) {
+          var on = t === tab;
+          t.classList.toggle('is-on', on);
+          t.setAttribute('aria-selected', on ? 'true' : 'false');
+        });
+        document.querySelectorAll('.transcript').forEach(function (tr) {
+          tr.hidden = tr.dataset.call !== key;
+          tr.querySelectorAll('.tline').forEach(function (l) { l.classList.remove('is-speaking', 'is-spoken'); });
+        });
+        stop(false);
+        elapsed = 0; idx = 0;
+        plan = planLines();
+        if (audioMode) loadClips();
+        paintShape();
+        paint(0);
+      });
+    });
+
+    /* ---- Mode selection ------------------------------------------------- */
+    function useFallback() {
+      audioMode = false;
+      if (synth) {
+        buildPicker();
+        if (typeof synth.onvoiceschanged !== 'undefined') synth.onvoiceschanged = buildPicker;
+        setTimeout(buildPicker, 600);
+      }
+    }
+    fetch('/static/voice/manifest.json', { cache: 'no-cache' })
+      .then(function (r) { if (!r.ok) throw new Error('no manifest'); return r.json(); })
+      .then(function (m) {
+        manifest = m; audioMode = true;
+        buildPicker();
+        plan = planLines();
+        paintShape();
+        paint(0);
+      })
+      .catch(useFallback);
+
+    window.addEventListener('pagehide', function () { if (playing) stop(false); });
+    document.addEventListener('visibilitychange', function () { if (document.hidden && playing) stop(false); });
+
+    paint(0);
+  }
+
+  /* ---- Loss calculator -------------------------------------------------- */
   var callsEl = document.getElementById('calls');
   var ticketEl = document.getElementById('ticket');
+  var callsOut = document.getElementById('callsOut');
+  var ticketOut = document.getElementById('ticketOut');
   var bigEl = document.getElementById('calcBig');
   var grossEl = document.getElementById('calcGross');
 
@@ -579,16 +1028,32 @@
   }
   window.__lostRevenue = lostRevenue;
 
-  function renderCalc() {
+  function fillTrack(el) {
+    var min = +el.min, max = +el.max;
+    el.style.setProperty('--fill', ((el.value - min) / (max - min) * 100) + '%');
+  }
+  function bump(el) {
+    if (reduced || !el) return;
+    el.classList.remove('bump');
+    void el.offsetWidth;                 // restart the transition
+    el.classList.add('bump');
+    setTimeout(function () { el.classList.remove('bump'); }, 200);
+  }
+
+  function renderCalc(animate) {
     var r = lostRevenue(callsEl.value, ticketEl.value);
+    callsOut.textContent = callsEl.value;
+    ticketOut.textContent = '$ ' + ticketEl.value;
     bigEl.textContent = money(r.conservative);
     grossEl.textContent = money(r.gross);
+    fillTrack(callsEl); fillTrack(ticketEl);
+    if (animate) { bump(callsOut); bump(ticketOut); }
   }
 
   if (callsEl && ticketEl && bigEl && grossEl) {
-    callsEl.addEventListener('input', renderCalc);
-    ticketEl.addEventListener('input', renderCalc);
-    renderCalc();
+    callsEl.addEventListener('input', function () { renderCalc(true); });
+    ticketEl.addEventListener('input', function () { renderCalc(true); });
+    renderCalc(false);
   }
 })();
 </script>

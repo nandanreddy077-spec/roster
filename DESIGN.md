@@ -19,6 +19,18 @@ right now), **trust second** (this actually works, stated plainly), **identity
 third**, carried by voice rather than a section — the site should read like it was
 written by someone who's been in a truck, not a Silicon Valley product team.
 
+**Explored 2026-08-27, then parked.** A mechanism-proof direction was worked up
+in full — editorial layout, hairline rules instead of cards, and "the refusal"
+(Roster declining to promise a time nobody confirmed) promoted to the page's
+signature. The founder then chose to replicate a supplied reference design 1:1
+instead (see the Decisions Log), so the shipped landing is that reference:
+card-based, feature-grid structure, a live-voice-demo section, a slider loss
+calculator, and a market-positioning comparison table. The mechanism-proof
+direction is not deleted — if the reference approach underperforms, it is the
+documented fallback. The honesty corrections from that pass DID ship: no
+ServiceTitan-sync claim, no invented per-customer stats, employee names matched
+to `employees.REGISTRY`, and unstaffed roles marked as such.
+
 ## Aesthetic Direction
 - **Direction:** Organic/editorial. Warm, papery, ledger-like — not tech-blue.
 - **Decoration level:** Intentional. Typography and whitespace do most of the work;
@@ -41,31 +53,73 @@ written by someone who's been in a truck, not a Silicon Valley product team.
   dashboard body text stay visually related but the landing page runs slightly
   larger (17px vs 15px) since it's read, not scanned.
 - **UI/Labels (dashboard):** same system sans stack, smaller sizes, no serif.
-- **Scale (landing):** H1 44px/1.15, H2 30px/1.2, H3 20px/1.3, body 17px/1.6, small 14px.
+- **Data (landing, added 2026-08-27):** `--mono: "JetBrains Mono", ui-monospace, Menlo, monospace`
+  with `tabular-nums`. Pinned (not left to the OS) because `$117,000` at ~56px is
+  the loudest type on the page. **Usage rule — mono only where values genuinely align in a
+  column:** feed timestamps, job IDs, call durations, ledger dollar figures. Never on
+  eyebrows, section labels, or decorative microtext — mono-as-"technical-vibes" is
+  trend slop, not an operational signal, and it is the one thing that separates
+  reading operational from cosplaying it.
+- **Scale (landing):** five roles, one job each. **Serif does headlines only, sans
+  does everything else, mono does data** — no role overlaps.
+  Display `clamp(40px,5.4vw,60px)`/1.02/-0.033em · Section `clamp(28px,3.2vw,38px)`/1.08/-0.028em
+  · Subhead 19px/1.3/-0.014em · Body 17px/1.6 · Micro 13px. Plus one eyebrow
+  (11px/700/0.15em caps, sans).
 - **Scale (dashboard):** H1 28px, H2 18px, H3 16px, body 14px, small 12–13px (existing).
 - **Loading:** `<link>` to Google Fonts (Fraunces) on the landing page only — the
   dashboard keeps its existing serif fallback stack (internal tool, no webfont cost
   justified).
 
 ## Color
-- **Approach:** Restrained — one warm neutral system, one strong accent, plus two
-  new semantic colors added specifically for the landing page's psychology (urgency
-  and proof), kept distinct from the decorative accent so they read as signals, not
-  branding.
-- **Base palette (shared, extends the existing dashboard tokens):**
-  - `--bg: #F7F4EC` (warm cream, existing)
-  - `--bg-alt: #F0EBDF` (existing)
-  - `--card: #FFFFFF` (existing)
-  - `--border: #E4DDCB` (existing)
-  - `--text: #1F1B16` (existing, near-black warm)
-  - `--text-dim: #6B6354` (existing)
-  - `--accent: #C2693D` (rust, existing — primary CTA / brand color)
-  - `--accent-dim: #F1DDD0` (existing)
-- **New, landing-page-only semantic additions:**
-  - `--urgency: #A8331F` (deeper, more serious red-rust than `--accent` — used
-    once, for the cost-of-missed-calls number. Never used decoratively.)
-  - `--proof: #3F6B4A` (muted trust-green — used only for the results/testimonial
-    slot, so real numbers read as credible, not salesy.)
+
+**The landing page (`index-v2.html` / `styles-v2.css`) runs "Slate & Ember" (locked)
+as of 2026-08-28.** The dashboard and pre-v2 pages still use the warm-ivory/rust
+system below — the two surfaces have forked on purpose (see the Decisions Log
+entry for why the warm system was retired on the landing).
+
+### Landing — Slate & Ember (locked 2026-08-28)
+
+The website is **off-white + white + black**, with very small amounts of one
+ember and one green. Every colour is in one `:root` block in `styles-v2.css`
+and nowhere else.
+
+- **Locked palette:**
+  - `--bg: #F5F5F3` (every section, no recessed tone) · `--card: #FFFFFF`
+  - `--border: #DEDED9` (one border, subtle) · `--text: #1A1A17` (primary ink)
+  - `--muted: #6B6B66` (ALL secondary / label / inactive text — one grey)
+  - `--accent: #B4451F` (Roster ember) · `--accent-soft: #F5E8E2`
+  - `--success: #28734F` · `--success-soft: #E8F1EC`
+- **Colour semantics — strict:**
+  - **black** = information / authority
+  - **ember** = Roster / action / attention. ONLY: primary CTA, active nav,
+    selected state, key emphasis (the one word "software"), the loss number
+    (`$117,000`), urgent call state ("on a call"), and focus rings. NEVER
+    decoration. If the render shows ember on anything else, that is drift.
+  - **green** = a successful outcome only — the "Booked" chip, the comparison
+    "Yes" marks. Nothing else. Not "live feed" (that's grey), not interchangeable
+    with ember.
+  - **grey** = secondary / inactive.
+- **Type — Hanken Grotesk**, replacing Geist (which replaced Fraunces). A clean
+  grotesque with a little warmth; hierarchy from size / weight (800 display,
+  700 section, 700 h3) / spacing / contrast, never a decorative face. No serif,
+  minimal italics. Inline numbers: same face + `tabular-nums`.
+- **What this pass removed:** the recessed `--bg-deep` ground (every section is
+  `#F5F5F3` now), the fake mac traffic-light dots (→ grey), the ember step-number
+  circles (→ neutral outline), the ember quote-block rules and comparison-row
+  marker and pricing-card border (→ neutral / black), ember on nav hover, "live"
+  dots, legal links, the "Hear it" button, and the waveform's played region.
+- **Differentiation is NOT from unusual colour.** It comes from the product UI,
+  the copy, the specificity to home services, and the restraint of the system.
+  Two earlier attempts (warm ivory + terracotta + Fraunces; kraft + blueprint
+  blue) were rejected for chasing distinctiveness through colour and reading
+  AI-generated / construction-SaaS.
+
+### Dashboard + pre-v2 pages — warm ivory/rust (unchanged)
+- `--bg: #F7F4EC` · `--bg-alt: #F0EBDF` · `--card: #FFFFFF` · `--border: #E4DDCB`
+- `--text: #221B12` · `--text-dim: #6B6354`
+- `--accent: #B24E2A` · `--accent-dim: #F0D7C7` · `--accent-dark: #8A3D1E` (white on it 7.6:1)
+- Landing-only semantic additions that shipped with the old system: `--urgency: #A8331F`,
+  `--proof: #3F6B4A`. Superseded on the landing by Slate & Ember's `--accent`/`--success`.
 - **Dashboard-only (existing, unchanged):** `--good`, `--soon`, `--bad` status colors.
 - **Dark mode:** not implemented on either surface — this audience does not expect
   it and the dashboard is an internal tool used in daylight; revisit if requested.
@@ -86,6 +140,16 @@ written by someone who's been in a truck, not a Silicon Valley product team.
   brand doesn't visually fork).
 - **Border radius:** sm 6px (badges/tags), md 10px (buttons/inputs), lg 12px
   (cards) — matches existing dashboard scale exactly, no divergence.
+- **Card discipline (landing, added 2026-08-27) — NOT in force on the shipped
+  page.** This rule (a card only for a discrete product object; concept-lists get
+  hairline rules) belongs to the parked mechanism-proof direction above. The
+  shipped reference layout is deliberately card-based throughout. Kept here as the
+  rule to restore if that direction is ever revived.
+- **Tonal restraint (landing, added 2026-08-27):** the shipped page runs on one
+  paper ground with a single tinted band (the comparison section) and a recessed
+  footer. Cards sit on `--card`. Resist adding more grounds — the review pass
+  found the page had drifted to four tinted bands alternating like zebra stripes,
+  which is the generic-SaaS rhythm the aesthetic is meant to avoid.
 
 ## Motion
 - **Approach:** Minimal-functional on both surfaces. This audience does not reward
@@ -102,7 +166,7 @@ written by someone who's been in a truck, not a Silicon Valley product team.
 - Dashboard keeps its existing card-grid IA — the ops team has already learned it.
 
 ## Risks taken (where Roster gets its own face)
-1. **Warm paper palette instead of SaaS blue/teal.** Every direct competitor looks
+1. **[RETIRED 2026-08-28 on the landing — see Color / Decisions Log]** **Warm paper palette instead of SaaS blue/teal.** Every direct competitor looks
    the same shade of tech-blue. This is a one-line differentiator: the page looks
    like it belongs to the trade, not to Silicon Valley. Cost: reads less
    "VC-fundable" to an outside investor audience — irrelevant here, the actual
@@ -137,3 +201,7 @@ written by someone who's been in a truck, not a Silicon Valley product team.
 | 2026-07-27 | Homepage v2 built behind `/preview` (NOT live) — comprehension-first craft pass + narrow motion exception | Founder brief: after 5 seconds an owner must know what Roster is / does / why care / why different; the complaint was comprehension, not aesthetics ("visitors leave understanding pieces instead of the whole product"). Spec: `docs/superpowers/specs/2026-07-27-homepage-craft-pass-design.md`. Built as `agent/landing/index-v2.html` + `styles-v2.css` + `/preview` route; live `/` untouched (shipping = repointing `root()`), so the 2026-07-21 waitlist decision and the SPRINT feature freeze both still hold. **Kept:** palette, Fraunces, warm/blunt voice, and the validated pain-first arc. **Changed:** every section now answers exactly one customer question; hero states the category in one line ("Hire the office. Not the software." + "AI employees for home service businesses"); employee cards lead with the OUTCOME as the heading and the role name demoted to a label; new "You don't buy Roster. You staff it." section carries the AI-workforce concept explicitly. **Craft:** H1 46→clamp(38,6.4vw,68), eleven ad-hoc max-widths collapsed to three tokens (680/880/1120), spacing onto the documented 8px scale, real 12-col hero grid. **Motion exception to the "no scroll-driven/looping" rule:** three additions, each plays ONCE and rests, all `prefers-reduced-motion` aware — (1) hero live-office feed teaching the whole loop (call→book→dispatch→chase→approve→review→rebook), counters derived from per-row `data-job`/`data-value` so totals can't drift from the events shown; (2) interactive loss calculator on the visitor's own two numbers, clamped input, conservative 1-in-3 framing as the headline number; (3) one-time IntersectionObserver reveals with a 3s force-visible safety net (content is `opacity:0` by default, so a non-firing observer would otherwise hide the page). **Honesty held:** no SOC2/security section, no integrations list, no logos/testimonials/customer quotes, no stock photos or generated people (10 hand-rolled inline-SVG trade icons instead), hero feed labeled "Illustration", department dots reflect real `/roster` build status (4 staffed / 3 hiring). |
 | 2026-07-31 | Homepage redesigned product-first; CTA renamed "Request a demo"; two accessibility corrections to the palette | Founder brief: compete with the best B2B SaaS homepages, make the product visible above the fold, increase demo conversions, keep the existing positioning and voice. Rewrote `index-v2.html` + `styles-v2.css` in place (live `/` and `/preview`, no new routes, no new files). **Kept** the warm-paper palette, Fraunces, the blunt voice, and nearly all founder-approved copy — the palette *is* the differentiator against every blue/teal competitor, so the cool-grey/navy wireframes were used for hierarchy only, not for colour or type. **Hero** is now a real split: copy left, a working sample account right (department rail with per-employee live status → today's feed → one open item where Frontdesk answers tonight's call *because* Dispatcher wrote the warranty note in March). Shared memory is shown inside the interface and never explained in marketing copy. Only employees that actually exist in `employees.py` appear (Frontdesk, Reviews, Quote Chaser, Lead Qualifier, Dispatcher); the honesty tag reads "Sample account". **Structure** collapsed to 9 sections, each answering one question, with hairline rules instead of alternating grey blocks and two ink bands (the cost, the close) as the only contrast moments. The old separate monologue + calculator sections merged into one ink "cost" band. Trades moved out of the FAQ into their own 5×2 grid strip. **Copy** changes limited to: hero CTA "Request early access" → "Request a demo" (same `/request-access` form and backend — the 2026-07-21 request-led default is unchanged, only the label now names the 15-minute call the founder actually runs), "Five things that stop slipping" → "The work that stops slipping" (the grid holds six tiles), a new how-it-works H2, Dispatcher added as a fifth employee card, and the shared-memory tile labelled "How they work together" so it doesn't read as a role. **Two token corrections, both accessibility not taste:** new `--label: #6F6857` for 10–11px micro-labels (`--soon` at 2.7:1 failed AA), and `.btn-primary` filled with `--accent-dark` (white on `--accent` is 3.9:1). Verified: zero contrast failures across the page, no heading-level skips, every label bound, no horizontal overflow at 375/768/1280, calculator clamps junk input. **Motion:** the pulsing live-dot was cut — DESIGN.md forbids looping animation (it also blocked headless capture). Reveals still play once with the 3s safety net. |
 | 2026-07-22 | Landing fully rebuilt: pain/proof-first flow + separate `/roster` org-chart page + free trial removed | Founder feedback over 3 rounds. (1) A first "office/department-first" homepage rebuild was rejected — it made the visitor *understand the company* before *feeling their own pain*. Corrected to the proven flow (hook → agitate → prove the loss → meet the office → proof → objections → price → convert), grounded in landing-page conversion research (loss-aversion made specific & attributable to inaction; specificity > abstraction; anchor before price; VoC copy, zero jargon — Avoca says "answer every call," never "LLM"). (2) The 14-role department org-chart moved OFF the homepage to a dedicated **`/roster` page** (`agent/landing/roster.html`, route in `app.py`) — homepage builds *desire* with 5 pain-named cards (Frontdesk/Quote Chaser/Dispatcher/Collections/Reviews) + a "See the Full Roster" button; the deep org-chart builds *belief* for the curious/investors. Apple "Meet iPhone → Learn more" pattern. New homepage sections: a **dark `--ink` agitation band** (`.statement`/`.monologue`) rendering the owner's real internal monologue ("I've got 18 missed calls and it's not even lunch," etc.) then the reframe "That's not you failing at business. That's a business running without an office"; restored ledger (loss aversion), restored 3-question objections FAQ. (3) **7-day free trial REMOVED everywhere** (founder directive) — replaced by a stronger cost-anchor: two-card `.anchor` compare ($45K/yr human office hire vs "One flat rate/month, a fraction of a single salary"), risk-reversal now "No setup fee. No contract. Cancel any day it stops earning its keep." + founding-group scarcity. No public monthly $ stated (still not locked). Honesty rules held: pre-revenue (no fake logos/testimonials — founder-run authenticity instead), sample morning-report labeled "illustrative," unbuilt roles badged Hiring/Coming Soon not faked live. Title/OG changed to trade-neutral "Run your business. We'll run the office." (departs from the 2026-07-16 HVAC-named-tags call — acceptable now that outreach is email/Loom, not cold-call text-preview). Palette/type/tokens unchanged. |
+| 2026-08-19 | Palette deepened: rust accent + near-black text, both landing surfaces | `/design-consultation`, user picked "Deepened Rust" from 3 proposed directions (Deepened Rust / Olive Trade / Ink & Brass) — lowest-risk evolution of the existing warm-paper system rather than a replacement, since the palette is the stated differentiator against blue/teal competitors (2026-07-31 entry). `--text` #1F1B16→#221B12, `--accent` #C2693D→#B24E2A, `--accent-dim` #F1DDD0→#F0D7C7, `--accent-dark` #A2532F→#8A3D1E. Applied to both `styles.css` and `styles-v2.css` (shared token names/values across `index-v2.html` and `roster.html`) so the two live landing surfaces don't visually fork. `--proof`, `--urgency`, `--label`, `--soon`, `--ink*` all untouched — the trust/urgency signal colors stay distinct from the brand accent, same reasoning as the original palette brief. Verified white-on-`--accent-dark` still clears AA (7.6:1, up from the 2026-07-31 fix's 3.9:1 floor). Olive Trade was rejected because it would collide with the existing `--proof` trust-green signal; Ink & Brass was rejected as too large a departure from the spacious/airy feel DESIGN.md calls out as intentional for mobile trades users. |
+| 2026-08-19 | Employee grid → persona cards; "See it work" → a timeline; hero horizontal-overflow bug fixed | User asked for craft-level inspiration from Broccoli (named AI-agent personas, e.g. "Dane"/"Amy") and Avoca (timestamped sequential call-flow visualization instead of static screenshots) — composition patterns only, no copy/stats/integrations borrowed (both are competitors with real customer data Roster doesn't have). Applied via the `ckw-design` plugin skill (design-thinking + design-system + design-spatial), enabled in `~/.claude/settings.json` this session. **Employee grid** (`#team`): each of the 5 live-role cards gets a small circular initial-avatar + a `Working` status pill (`.emp-head`/`.emp-avatar`/`.emp-status`), same visual language as `/roster`'s existing `.emp-avatar`/`.status-pill` so the two pages read as one team roster — all 5 are genuinely `"live"` in `employees.py`, so no `Hiring` pill appears here (unlike `/roster`, which also lists planned roles). **"See it work"** (`#work`): the numbered list gained a continuous hairline rail (`.flow::before`) down the number column and a small relative time-tag per step (`9:47 PM` / `Seconds later` / `Same call` / `Still 9:47 PM` / `Next morning`) — all drawn from the example already in the copy, no invented speed metric (Avoca's own timestamps are real customer data Roster doesn't have). **Bug found by the design-spatial mandatory overflow gate** (`scrollWidth − clientWidth` at 390/1024/1280px, run for real this time via a local HTTP server + fresh browser tabs — an artifact-preview tab had been silently misreporting `innerWidth` in earlier sessions): `.hero-grid`'s single-column mobile track had no explicit `grid-template-columns`, so CSS Grid's implicit-track default sized it to the `.convo-wrap` card's max-content width (a `min-width:auto` grid-item default), overflowing the viewport by 56px below the 1000px breakpoint — invisible at desktop width, which is exactly why it shipped in the 2026-07-31 pass despite that entry's own "no horizontal overflow at 375/768/1280" claim. Fixed with `grid-template-columns: minmax(0, 1fr)` on the base rule. Re-verified 0 overflow at 390/1024/1280 on both `index-v2.html` and `roster.html`; full pytest suite still 1181 passed (unaffected — HTML/CSS only). |
+| 2026-08-28 | Landing palette retired: warm ivory/rust -> (Blueprint & Kraft, rejected) -> **Slate & Ember**; Fraunces -> Geist | Founder: "because of colour pallets people are thinking it's claude generated". Correct read -- warm off-white + one terracotta accent + a literary serif is the 2025-26 "tasteful AI output" signature (it is Anthropic's brand). **Attempt 1 (Blueprint & Kraft** -- kraft ground, blueprint-blue accent, a faint drafting grid): founder rejected 0/10, "worst" -- too much chroma in the neutral, and the literal materials concept read as costume. **Attempt 2 (Slate & Ember, shipped):** researched the live computed palettes of Probook, Linear, Decagon, Sierra and Ramp -- the shared formula is a near-neutral ground + a warm near-black ink + ONE accent on ~2% of the page + a tight neo-grotesque, never a serif. Applied: `--bg #F5F5F3`, `--text #1A1A17`, one accent burnt-ember `#C2410C` / `#9A3412` on the CTA + the "$117,000" loss figure + current nav + in-prose links only (eyebrows -> grey, stat numbers -> near-black), green `#1E6E43` keeps "booked/live". **Fraunces -> Geist** (400-700, Google Fonts, -0.03em display tracking) -- the serif was the single biggest AI tell; every reference company uses a grotesque. Inline numbers moved to Geist Sans + tabular-nums (Geist Mono ballooned commas/colons). `theme-color` + font links updated on all three landing pages. Fresh-eyes judge: 7/10, "clears the bar the first two attempts failed". Contrast 0 failures at 390/768/1280/1440; 1366 tests pass. Dashboard + pre-v2 pages keep the warm system -- the surfaces have forked on purpose. Layout (5x repeated section template) flagged by the judge as the next iteration, separate from the palette. |
+| 2026-08-28 | Final visual-identity pass — locked the system, Geist -> Hanken Grotesk | Founder brief: keep the Slate & Ember DIRECTION, apply it as a "final, disciplined visual identity" (explicitly NOT a redesign — layout/structure/copy/nav all approved and untouched). Locked the exact palette (`--bg #F5F5F3`, `--card #FFF`, `--border #DEDED9`, `--text #1A1A17`, one grey `--muted #6B6B66`, ember `--accent #B4451F`, soft-ember `#F5E8E2`, green `--success #28734F`). Collapsed the extra tokens (`--accent-dark`, `--bg-deep`, `--text-dim`, `--label`, `--border-soft`) into that set. Enforced strict colour semantics: black=info, ember=Roster action/attention (CTA / active nav / selected / one emphasis / loss number / urgent call state / focus rings ONLY), green=successful outcome ONLY (booked chip, comparison Yes marks — "live feed" demoted to grey). Removed every decorative colour use: the recessed section ground, fake mac traffic-light dots, ember step-number circles, ember quote rules / comparison marker / pricing border, ember nav-hover underline, legal-link ember, "Hear it" ember, ember waveform played-region. Fraunces->Geist->**Hanken Grotesk** (clean grotesque, a little warmer than Geist; display 800 / section 700). Contrast 0 failures at 390-1440 across home/terms/privacy; 1180 tests pass. Dashboard + pre-v2 pages still on the warm system — the surfaces are forked on purpose.| 2026-08-27 | Landing rebuilt to replicate a founder-supplied reference 1:1, then an interaction layer + real xAI voice added | **Sequence:** (a) `/design-consultation` proposed a mechanism-proof editorial direction (hairline rules, "the refusal" as signature) — built, reviewed, then set aside; (b) founder directed "make it exactly like this reference, just change colour palettes", so the page was rebuilt section-for-section from the reference: nav + dark-pill CTA, hero with a cycling office panel, "Operational Simplicity" 3-card how-it-works, 6-card AI-roster grid, live-voice-demo (tabs + waveform + transcript), "Industry Problem" (struck headline, quote box, 4 stat tiles, slider loss calculator), 6-column comparison table, 2-card pricing, demo form. (c) Three palette options rendered on that layout — Warm Ivory & Rust (the reference’s own, shipped as default), Sand & Oxblood, Ember on Charcoal — founder still choosing; palette lives in ONE `:root` block in `styles-v2.css`, no hex anywhere else, so a swap is one block. (d) Fresh-eyes design review (dev-team:web-design-reviewer) found 12 real defects, all fixed and re-measured: the scenario tabs rendered all 12 transcript lines at once (`display:grid` beat the `hidden` attribute), see-through sticky nav, 98px post-load layout shift, 156px dead void under the hero rail, no pricing CTA, no mobile nav on an 11k-px page, 15 sans font-sizes with 0.5px steps, one card component with 5 paddings. (e) Interaction layer: hover-lift on cards, tap ripple from the touch point, nav scroll-spy, clickable hero rail, slider fill + value bump — all `@media (hover:hover)` gated and dropped under `prefers-reduced-motion`. (f) **Voice:** the product runs xAI Grok Voice Agent (`xai_voice_adapter.py`, voice `eve`); its realtime API needs a SIP `call_id` and can’t be called from a browser, so `scripts/build_demo_voice.py` pre-renders the call replay with xAI’s standalone TTS (`POST /v1/tts`) ONCE into `agent/static/voice/*.mp3` + `manifest.json` (~$0.03/run, committed, zero API cost per visitor). Player is dual-mode: real MP3s when the manifest exists, browser speech-synthesis fallback (novelty-voice blocklist + quality ranking) otherwise. Dialogue rewritten for real phone cadence with `[pause]`/`[breath]`/`<soft>` speech tags on the audio and clean text in the transcript; employee at speed 0.96, stressed caller at 1.06; picker offers 6 curated xAI voices, caller auto-picks the opposite gender. **Honesty corrections that shipped:** no ServiceTitan-sync claim (`calendar_provider.py` only wires `ManualCalendarProvider`); transcript shows what the product actually says, not a confirmed-time claim (`booking_language.assert_no_confirmation_claim` raises on those); "62% calls unanswered" replaced with the sourced 27% (Invoca via ServiceTitan); employee names matched to `employees.REGISTRY` (Reviews→Happy Call, Rebooker→Retention Manager, Lead Qualifier added); `$149–$199` pricing and the `280ms` latency badge KEPT per founder ("reference exactly, claims included") — flagged as unbacked. `research/` dir is exploration notes, not part of the page. |

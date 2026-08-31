@@ -1,0 +1,140 @@
+{
+  "caller_voices": {
+    "male": "cosmo",
+    "female": "iris"
+  },
+  "ai_voices": [
+    "ara",
+    "aurora",
+    "orion"
+  ],
+  "gender": {
+    "ara": "female",
+    "aurora": "female",
+    "orion": "male",
+    "cosmo": "male",
+    "iris": "female"
+  },
+  "calls": {
+    "leak": [
+      {
+        "role": "caller",
+        "text": "Hi, my water heater just burst \u2014 there's water all over my garage floor. Is there any way you can get someone out tonight?",
+        "dur": 7.51,
+        "files": {
+          "cosmo": "/static/voice/leak-0-cosmo.mp3",
+          "iris": "/static/voice/leak-0-iris.mp3"
+        }
+      },
+      {
+        "role": "ai",
+        "text": "Oh no. Okay \u2014 let's get someone out to you tonight. I'm pulling up your account now. Looks like we replaced your pressure valve back in March, so that's still under warranty. I've got a tech, Dave, who can be there between 7:30 and 9. Want me to hold that for you?",
+        "dur": 18.4,
+        "files": {
+          "ara": "/static/voice/leak-1-ara.mp3",
+          "aurora": "/static/voice/leak-1-aurora.mp3",
+          "orion": "/static/voice/leak-1-orion.mp3"
+        }
+      },
+      {
+        "role": "caller",
+        "text": "Yes, please \u2014 that would be a huge help.",
+        "dur": 2.31,
+        "files": {
+          "cosmo": "/static/voice/leak-2-cosmo.mp3",
+          "iris": "/static/voice/leak-2-iris.mp3"
+        }
+      },
+      {
+        "role": "ai",
+        "text": "You're all set. Dave will text you when he's about 15 minutes out. Try to keep the area around the heater clear if you can. Hang in there \u2014 we've got you.",
+        "dur": 9.91,
+        "files": {
+          "ara": "/static/voice/leak-3-ara.mp3",
+          "aurora": "/static/voice/leak-3-aurora.mp3",
+          "orion": "/static/voice/leak-3-orion.mp3"
+        }
+      }
+    ],
+    "quote": [
+      {
+        "role": "ai",
+        "text": "Hi Marcus, it's Roster calling for Kestrel. I'm following up on that rooftop unit estimate \u2014 the $4,200. Just wanted to see if you had any questions.",
+        "dur": 11.51,
+        "files": {
+          "ara": "/static/voice/quote-0-ara.mp3",
+          "aurora": "/static/voice/quote-0-aurora.mp3",
+          "orion": "/static/voice/quote-0-orion.mp3"
+        }
+      },
+      {
+        "role": "caller",
+        "text": "Yeah \u2014 honestly, it's a bit more than I budgeted for this quarter.",
+        "dur": 3.59,
+        "files": {
+          "cosmo": "/static/voice/quote-1-cosmo.mp3",
+          "iris": "/static/voice/quote-1-iris.mp3"
+        }
+      },
+      {
+        "role": "ai",
+        "text": "Totally understand. We can split it into three monthly payments, no interest. And I'll lock in this quarter's pricing so nothing changes. Want me to send that over?",
+        "dur": 11.51,
+        "files": {
+          "ara": "/static/voice/quote-2-ara.mp3",
+          "aurora": "/static/voice/quote-2-aurora.mp3",
+          "orion": "/static/voice/quote-2-orion.mp3"
+        }
+      },
+      {
+        "role": "caller",
+        "text": "Yeah, that works. Go ahead and send it.",
+        "dur": 2.23,
+        "files": {
+          "cosmo": "/static/voice/quote-3-cosmo.mp3",
+          "iris": "/static/voice/quote-3-iris.mp3"
+        }
+      }
+    ],
+    "club": [
+      {
+        "role": "ai",
+        "text": "Hi Janet, it's Roster with Kestrel. Your Comfort Club plan renews on the 14th, and you're due for your fall tune-up. Want me to get that on the schedule while I have you?",
+        "dur": 10.71,
+        "files": {
+          "ara": "/static/voice/club-0-ara.mp3",
+          "aurora": "/static/voice/club-0-aurora.mp3",
+          "orion": "/static/voice/club-0-orion.mp3"
+        }
+      },
+      {
+        "role": "caller",
+        "text": "Sure. Is the card you have on file still good?",
+        "dur": 3.19,
+        "files": {
+          "cosmo": "/static/voice/club-1-cosmo.mp3",
+          "iris": "/static/voice/club-1-iris.mp3"
+        }
+      },
+      {
+        "role": "ai",
+        "text": "Looks like it expired last month. I can text you a secure link to update it \u2014 takes about ten seconds.",
+        "dur": 7.19,
+        "files": {
+          "ara": "/static/voice/club-2-ara.mp3",
+          "aurora": "/static/voice/club-2-aurora.mp3",
+          "orion": "/static/voice/club-2-orion.mp3"
+        }
+      },
+      {
+        "role": "caller",
+        "text": "Perfect. Go ahead and send it.",
+        "dur": 2.23,
+        "files": {
+          "cosmo": "/static/voice/club-3-cosmo.mp3",
+          "iris": "/static/voice/club-3-iris.mp3"
+        }
+      }
+    ]
+  }
+}
