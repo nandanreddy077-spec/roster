@@ -1,0 +1,164 @@
+{
+  "caller_voices": {
+    "male": "cosmo",
+    "female": "iris"
+  },
+  "ai_voices": [
+    "eve",
+    "ara",
+    "aurora",
+    "atlas",
+    "orion",
+    "rex"
+  ],
+  "gender": {
+    "eve": "female",
+    "ara": "female",
+    "aurora": "female",
+    "atlas": "male",
+    "orion": "male",
+    "rex": "male",
+    "cosmo": "male",
+    "iris": "female"
+  },
+  "calls": {
+    "leak": [
+      {
+        "role": "caller",
+        "text": "Yeah, hi \u2014 my water heater just burst. There's water all over the garage floor. Is there any way someone can come out tonight?",
+        "dur": 9.25,
+        "files": {
+          "cosmo": "/static/voice/leak-0-cosmo.mp3",
+          "iris": "/static/voice/leak-0-iris.mp3"
+        }
+      },
+      {
+        "role": "ai",
+        "text": "Oh no. Okay \u2014 let's get someone out to you. I'm looking at your account now, and it looks like we replaced that pressure valve back in March, so that's still under warranty. I've got Dave free between 7:30 and 9 tonight. Want me to hold that for you?",
+        "dur": 18.29,
+        "files": {
+          "eve": "/static/voice/leak-1-eve.mp3",
+          "ara": "/static/voice/leak-1-ara.mp3",
+          "aurora": "/static/voice/leak-1-aurora.mp3",
+          "atlas": "/static/voice/leak-1-atlas.mp3",
+          "orion": "/static/voice/leak-1-orion.mp3",
+          "rex": "/static/voice/leak-1-rex.mp3"
+        }
+      },
+      {
+        "role": "caller",
+        "text": "Yes. Please. That would be amazing.",
+        "dur": 3.36,
+        "files": {
+          "cosmo": "/static/voice/leak-2-cosmo.mp3",
+          "iris": "/static/voice/leak-2-iris.mp3"
+        }
+      },
+      {
+        "role": "ai",
+        "text": "Done. He'll text you when he's about 15 minutes out. Try to keep the area clear if you can \u2014 and hang in there, okay?",
+        "dur": 9.21,
+        "files": {
+          "eve": "/static/voice/leak-3-eve.mp3",
+          "ara": "/static/voice/leak-3-ara.mp3",
+          "aurora": "/static/voice/leak-3-aurora.mp3",
+          "atlas": "/static/voice/leak-3-atlas.mp3",
+          "orion": "/static/voice/leak-3-orion.mp3",
+          "rex": "/static/voice/leak-3-rex.mp3"
+        }
+      }
+    ],
+    "quote": [
+      {
+        "role": "ai",
+        "text": "Hey Marcus, it's Roster calling for Kestrel \u2014 just circling back on that rooftop unit estimate, the $4,200. No pressure at all, just wondering where your head's at on it.",
+        "dur": 11.8,
+        "files": {
+          "eve": "/static/voice/quote-0-eve.mp3",
+          "ara": "/static/voice/quote-0-ara.mp3",
+          "aurora": "/static/voice/quote-0-aurora.mp3",
+          "atlas": "/static/voice/quote-0-atlas.mp3",
+          "orion": "/static/voice/quote-0-orion.mp3",
+          "rex": "/static/voice/quote-0-rex.mp3"
+        }
+      },
+      {
+        "role": "caller",
+        "text": "Yeah, honestly? It's a bit more than I've got room for this quarter.",
+        "dur": 4.87,
+        "files": {
+          "cosmo": "/static/voice/quote-1-cosmo.mp3",
+          "iris": "/static/voice/quote-1-iris.mp3"
+        }
+      },
+      {
+        "role": "ai",
+        "text": "Totally get it. We can actually split that into three payments, no interest \u2014 and I can lock in this quarter's pricing so it doesn't creep up on you. Want me to send that over?",
+        "dur": 12.21,
+        "files": {
+          "eve": "/static/voice/quote-2-eve.mp3",
+          "ara": "/static/voice/quote-2-ara.mp3",
+          "aurora": "/static/voice/quote-2-aurora.mp3",
+          "atlas": "/static/voice/quote-2-atlas.mp3",
+          "orion": "/static/voice/quote-2-orion.mp3",
+          "rex": "/static/voice/quote-2-rex.mp3"
+        }
+      },
+      {
+        "role": "caller",
+        "text": "Yeah. Yeah, do that.",
+        "dur": 3.13,
+        "files": {
+          "cosmo": "/static/voice/quote-3-cosmo.mp3",
+          "iris": "/static/voice/quote-3-iris.mp3"
+        }
+      }
+    ],
+    "club": [
+      {
+        "role": "ai",
+        "text": "Hi Janet, it's Roster for Kestrel \u2014 your Comfort Club plan comes up for renewal on the 14th, and you're actually due a fall tune-up. Want me to get that on the books while I've got you?",
+        "dur": 12.21,
+        "files": {
+          "eve": "/static/voice/club-0-eve.mp3",
+          "ara": "/static/voice/club-0-ara.mp3",
+          "aurora": "/static/voice/club-0-aurora.mp3",
+          "atlas": "/static/voice/club-0-atlas.mp3",
+          "orion": "/static/voice/club-0-orion.mp3",
+          "rex": "/static/voice/club-0-rex.mp3"
+        }
+      },
+      {
+        "role": "caller",
+        "text": "Sure. Is the card on file still good?",
+        "dur": 3.58,
+        "files": {
+          "cosmo": "/static/voice/club-1-cosmo.mp3",
+          "iris": "/static/voice/club-1-iris.mp3"
+        }
+      },
+      {
+        "role": "ai",
+        "text": "Looks like it expired last month, actually. I can text you a quick secure link to update it \u2014 takes maybe ten seconds.",
+        "dur": 9.04,
+        "files": {
+          "eve": "/static/voice/club-2-eve.mp3",
+          "ara": "/static/voice/club-2-ara.mp3",
+          "aurora": "/static/voice/club-2-aurora.mp3",
+          "atlas": "/static/voice/club-2-atlas.mp3",
+          "orion": "/static/voice/club-2-orion.mp3",
+          "rex": "/static/voice/club-2-rex.mp3"
+        }
+      },
+      {
+        "role": "caller",
+        "text": "Oh \u2014 yeah, perfect. Send it over.",
+        "dur": 3.89,
+        "files": {
+          "cosmo": "/static/voice/club-3-cosmo.mp3",
+          "iris": "/static/voice/club-3-iris.mp3"
+        }
+      }
+    ]
+  }
+}

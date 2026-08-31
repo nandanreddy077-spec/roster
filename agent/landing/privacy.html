@@ -5,34 +5,43 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Privacy Policy — Roster</title>
 <meta name="description" content="How Roster collects, uses, stores, and shares information for the businesses and customers it serves.">
+<meta name="robots" content="noindex">
 <link rel="canonical" href="https://rosterhires.com/privacy">
 <link rel="icon" type="image/png" href="/static/favicon.png">
-<link rel="stylesheet" href="styles.css">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&display=swap">
+<link rel="stylesheet" href="styles-v2.css">
 </head>
 <body>
 
-<header class="nav">
-  <div class="nav-inner">
+<a class="skip-link" href="#main">Skip to content</a>
+
+<header class="nav" id="nav">
+  <div class="shell nav-inner">
     <a class="logo" href="/">Roster</a>
-    <div class="nav-actions">
-      <a class="nav-link" href="/">Home</a>
-      <a class="nav-cta" href="/#request">Request early access</a>
-    </div>
+    <nav class="nav-actions" aria-label="Main">
+      <a class="nav-back" href="/"><span aria-hidden="true">&larr;</span> Back to home</a>
+      <a class="nav-cta" href="/#request">Request a demo</a>
+    </nav>
   </div>
 </header>
 
-<section class="roster-hero">
-  <div class="section-inner">
-    <p class="section-eyebrow">Legal</p>
+<main id="main">
+
+<section class="legal-head">
+  <div class="shell narrow">
+    <p class="eyebrow">Legal</p>
     <h1>Privacy Policy</h1>
-    <p class="roster-hero-sub">Last updated: August 19, 2026</p>
+    <p class="updated">Last updated: August 19, 2026</p>
   </div>
 </section>
 
-<section class="workforce-section">
-  <div class="section-inner legal-content">
+<section class="legal">
+  <div class="shell narrow">
+    <div class="legal-body">
 
-    <p>Roster ("Roster," "we," "us," or "our") provides AI-powered office
+<p>Roster ("Roster," "we," "us," or "our") provides AI-powered office
     staff and related software to home-service businesses. Roster is
     operated by Avanaganti Nandan Reddy, Hyderabad, Telangana, India.</p>
     <p>This Privacy Policy explains how Roster collects, uses, stores, and
@@ -148,9 +157,7 @@
     inquiry, appointment, or service — including confirmations, reminders,
     follow-ups, and review requests — from that business through Roster's
     platform. Message and data rates may apply, and message frequency
-    varies. Reply STOP at any time to opt out, or HELP for help. Your mobile
-    phone number is not sold or shared with third parties for their own
-    marketing purposes.</p>
+    varies. Reply STOP at any time to opt out, or HELP for help. Your mobile phone number is not sold or shared with third parties for their own marketing purposes.</p>
 
     <h2>6. Third-Party Service Providers</h2>
     <p>We use third-party providers to operate Roster.</p>
@@ -253,13 +260,26 @@
     of information, contact:</p>
     <p><a href="mailto:nandan@rosterhires.com">nandan@rosterhires.com</a></p>
 
+    </div>
   </div>
 </section>
 
+</main>
+
 <footer class="footer">
-  <div class="section-inner footer-inner">
+  <div class="shell footer-inner">
     <span class="logo">Roster</span>
-    <span class="footer-note">We run the office. You run the business.</span>
+    <nav class="footer-nav" aria-label="Footer">
+      <a href="/#how">How It Works</a>
+      <a href="/#roster">The Roster</a>
+      <a href="/#voice">Live Voice Demo</a>
+      <a href="/#comparison">Comparison</a>
+      <a href="/#pricing">Pricing</a>
+    </nav>
+  </div>
+  <div class="shell footer-legal">
+    <span>&copy; 2026 Roster Hires Inc. Built for home service contractors. All rights reserved.</span>
+    <span class="footer-links"><a href="/terms">Terms</a></span>
   </div>
 </footer>
 
