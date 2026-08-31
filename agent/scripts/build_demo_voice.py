@@ -43,17 +43,15 @@ API = "https://api.x.ai/v1/tts"
 OUT = Path(__file__).resolve().parent.parent / "static" / "voice"
 
 # xAI publishes 28 voices (GET /v1/tts/voices). A landing-page dropdown with
-# 28 entries is worse than six good ones, so this is a curated spread across
-# both genders with `eve` first -- the same voice DEFAULT_VOICE gives real
-# calls. Swap these and re-run to change what the picker offers.
-AI_VOICES = ["eve", "ara", "aurora", "atlas", "orion", "rex"]
+# 28 entries is worse than three good ones, so this is a hand-picked short
+# list -- the ones that actually sound like a person on the demo scripts.
+# eve/atlas/rex were cut for reading the lines flat. Swap these and re-run
+# to change what the picker offers.
+AI_VOICES = ["ara", "aurora", "orion"]
 VOICE_GENDER = {
-    "eve": "female",
     "ara": "female",
     "aurora": "female",
-    "atlas": "male",
     "orion": "male",
-    "rex": "male",
     "cosmo": "male",
     "iris": "female",
 }
