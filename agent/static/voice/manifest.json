@@ -25,8 +25,8 @@
     "leak": [
       {
         "role": "caller",
-        "text": "Yeah, hi \u2014 my water heater just burst. There's water all over the garage floor. Is there any way someone can come out tonight?",
-        "dur": 9.25,
+        "text": "Hi, my water heater just burst \u2014 there's water all over my garage floor. Is there any way you can get someone out tonight?",
+        "dur": 7.11,
         "files": {
           "cosmo": "/static/voice/leak-0-cosmo.mp3",
           "iris": "/static/voice/leak-0-iris.mp3"
@@ -34,8 +34,8 @@
       },
       {
         "role": "ai",
-        "text": "Oh no. Okay \u2014 let's get someone out to you. I'm looking at your account now, and it looks like we replaced that pressure valve back in March, so that's still under warranty. I've got Dave free between 7:30 and 9 tonight. Want me to hold that for you?",
-        "dur": 18.29,
+        "text": "Oh no, I'm sorry to hear that. Let's get you taken care of. I'm looking at your account now, and I see we replaced your pressure valve back in March, so that's still under warranty. I have a technician, Dave, available between 7:30 and 9 tonight. Would you like me to hold that window for you?",
+        "dur": 18.87,
         "files": {
           "eve": "/static/voice/leak-1-eve.mp3",
           "ara": "/static/voice/leak-1-ara.mp3",
@@ -47,8 +47,8 @@
       },
       {
         "role": "caller",
-        "text": "Yes. Please. That would be amazing.",
-        "dur": 3.36,
+        "text": "Yes, please \u2014 that would be a huge help.",
+        "dur": 2.55,
         "files": {
           "cosmo": "/static/voice/leak-2-cosmo.mp3",
           "iris": "/static/voice/leak-2-iris.mp3"
@@ -56,8 +56,8 @@
       },
       {
         "role": "ai",
-        "text": "Done. He'll text you when he's about 15 minutes out. Try to keep the area clear if you can \u2014 and hang in there, okay?",
-        "dur": 9.21,
+        "text": "You're all set. Dave will text you when he's about 15 minutes out. If you can, try to keep the area around the heater clear, and we'll take good care of you tonight.",
+        "dur": 10.23,
         "files": {
           "eve": "/static/voice/leak-3-eve.mp3",
           "ara": "/static/voice/leak-3-ara.mp3",
@@ -71,8 +71,8 @@
     "quote": [
       {
         "role": "ai",
-        "text": "Hey Marcus, it's Roster calling for Kestrel \u2014 just circling back on that rooftop unit estimate, the $4,200. No pressure at all, just wondering where your head's at on it.",
-        "dur": 11.8,
+        "text": "Hi Marcus, this is Roster calling on behalf of Kestrel. I'm following up on the estimate we sent for the rooftop unit \u2014 that was for $4,200. I wanted to check in and see if you had any questions.",
+        "dur": 12.63,
         "files": {
           "eve": "/static/voice/quote-0-eve.mp3",
           "ara": "/static/voice/quote-0-ara.mp3",
@@ -84,8 +84,8 @@
       },
       {
         "role": "caller",
-        "text": "Yeah, honestly? It's a bit more than I've got room for this quarter.",
-        "dur": 4.87,
+        "text": "Yeah \u2014 honestly, it's a bit more than I budgeted for this quarter.",
+        "dur": 3.59,
         "files": {
           "cosmo": "/static/voice/quote-1-cosmo.mp3",
           "iris": "/static/voice/quote-1-iris.mp3"
@@ -93,8 +93,8 @@
       },
       {
         "role": "ai",
-        "text": "Totally get it. We can actually split that into three payments, no interest \u2014 and I can lock in this quarter's pricing so it doesn't creep up on you. Want me to send that over?",
-        "dur": 12.21,
+        "text": "I completely understand. We can split that into three monthly payments at no interest, and I can lock in this quarter's pricing so nothing changes. Would you like me to send that over?",
+        "dur": 11.27,
         "files": {
           "eve": "/static/voice/quote-2-eve.mp3",
           "ara": "/static/voice/quote-2-ara.mp3",
@@ -106,8 +106,8 @@
       },
       {
         "role": "caller",
-        "text": "Yeah. Yeah, do that.",
-        "dur": 3.13,
+        "text": "Yeah, that works. Go ahead and send it.",
+        "dur": 2.23,
         "files": {
           "cosmo": "/static/voice/quote-3-cosmo.mp3",
           "iris": "/static/voice/quote-3-iris.mp3"
@@ -117,8 +117,8 @@
     "club": [
       {
         "role": "ai",
-        "text": "Hi Janet, it's Roster for Kestrel \u2014 your Comfort Club plan comes up for renewal on the 14th, and you're actually due a fall tune-up. Want me to get that on the books while I've got you?",
-        "dur": 12.21,
+        "text": "Hi Janet, this is Roster with Kestrel. Your Comfort Club plan comes up for renewal on the 14th, and you're also due for your fall tune-up. Would you like me to get that scheduled while I have you?",
+        "dur": 11.27,
         "files": {
           "eve": "/static/voice/club-0-eve.mp3",
           "ara": "/static/voice/club-0-ara.mp3",
@@ -130,8 +130,8 @@
       },
       {
         "role": "caller",
-        "text": "Sure. Is the card on file still good?",
-        "dur": 3.58,
+        "text": "Sure. Is the card you have on file still good?",
+        "dur": 3.03,
         "files": {
           "cosmo": "/static/voice/club-1-cosmo.mp3",
           "iris": "/static/voice/club-1-iris.mp3"
@@ -139,8 +139,8 @@
       },
       {
         "role": "ai",
-        "text": "Looks like it expired last month, actually. I can text you a quick secure link to update it \u2014 takes maybe ten seconds.",
-        "dur": 9.04,
+        "text": "It looks like it expired last month. I can text you a secure link to update it \u2014 it only takes about ten seconds.",
+        "dur": 7.27,
         "files": {
           "eve": "/static/voice/club-2-eve.mp3",
           "ara": "/static/voice/club-2-ara.mp3",
@@ -152,8 +152,8 @@
       },
       {
         "role": "caller",
-        "text": "Oh \u2014 yeah, perfect. Send it over.",
-        "dur": 3.89,
+        "text": "Perfect. Go ahead and send it.",
+        "dur": 1.83,
         "files": {
           "cosmo": "/static/voice/club-3-cosmo.mp3",
           "iris": "/static/voice/club-3-iris.mp3"

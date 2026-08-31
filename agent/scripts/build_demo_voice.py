@@ -16,13 +16,13 @@ Writes agent/static/voice/*.mp3 plus manifest.json.
 
 Sounding real is mostly in the SCRIPT, not the model. Each line has:
   * `display` — the clean sentence shown in the transcript on the page;
-  * `speak`   — what's actually synthesised: contractions, the way people
-                really trail off, and xAI speech tags ([pause], [breath],
-                <soft>...</soft>). Punctuation does most of the pacing work
-                per xAI's own guidance; tags are used sparingly on top.
-The employee speaks a touch slower (calm, in control); a stressed caller
-speaks a touch faster. `text_normalization` is a safety net — numbers and
-times are already written out longhand in `speak`.
+  * `speak`   — what's synthesised: contractions and one or two `[pause]`s
+                for natural rhythm. NO `<soft>` / `[whisper]` / `[breath]`
+                tags — they make xAI drop to a breathy near-whisper, which
+                reads as timid, not warm. A real receptionist is clear,
+                upbeat and in control at a normal speaking volume.
+Both sides speak at normal speed (1.0). Numbers and times are written out
+longhand so `text_normalization` never has to guess.
 """
 
 import base64
@@ -55,75 +55,75 @@ VOICE_GENDER = {
 # the chosen employee voice, so the two speakers never sound like one person.
 CALLER_VOICES = {"male": "cosmo", "female": "iris"}
 
-AI_SPEED = 0.96
-CALLER_SPEED = 1.06
+AI_SPEED = 1.0
+CALLER_SPEED = 1.0
 
 # (role, display, speak)
 CALLS = {
     "leak": [
         (
             "caller",
-            "Yeah, hi — my water heater just burst. There's water all over the garage floor. Is there any way someone can come out tonight?",
-            "[breath] Yeah, hi, um... my water heater just burst. There's water all over the garage floor. Is there any way, like, someone can come out tonight?",
+            "Hi, my water heater just burst — there's water all over my garage floor. Is there any way you can get someone out tonight?",
+            "Hi, my water heater just burst, there's water all over my garage floor. Is there any way you can get someone out tonight?",
         ),
         (
             "ai",
-            "Oh no. Okay — let's get someone out to you. I'm looking at your account now, and it looks like we replaced that pressure valve back in March, so that's still under warranty. I've got Dave free between 7:30 and 9 tonight. Want me to hold that for you?",
-            "Oh no. Okay — <soft>let's get someone out to you.</soft> [pause] I'm looking at your account right now... and it looks like we replaced that pressure valve back in March, so that's still under warranty. [pause] I've got Dave free between seven thirty and nine tonight. Want me to hold that window for you?",
+            "Oh no, I'm sorry to hear that. Let's get you taken care of. I'm looking at your account now, and I see we replaced your pressure valve back in March, so that's still under warranty. I have a technician, Dave, available between 7:30 and 9 tonight. Would you like me to hold that window for you?",
+            "Oh no, I'm sorry to hear that. Let's get you taken care of. [pause] I'm looking at your account now, and I see we replaced your pressure valve back in March, so that's still under warranty. I have a technician, Dave, available between seven thirty and nine tonight. Would you like me to hold that window for you?",
         ),
         (
             "caller",
-            "Yes. Please. That would be amazing.",
-            "Yes. [breath] Please. That would be amazing.",
+            "Yes, please — that would be a huge help.",
+            "Yes, please, that would be a huge help.",
         ),
         (
             "ai",
-            "Done. He'll text you when he's about 15 minutes out. Try to keep the area clear if you can — and hang in there, okay?",
-            "Okay, you're all set. He'll text you when he's about fifteen minutes out. [pause] Try to keep that area clear if you can — and hang in there, alright?",
+            "You're all set. Dave will text you when he's about 15 minutes out. If you can, try to keep the area around the heater clear, and we'll take good care of you tonight.",
+            "You're all set. Dave will text you when he's about 15 minutes out. [pause] If you can, try to keep the area around the heater clear, and we'll take good care of you tonight.",
         ),
     ],
     "quote": [
         (
             "ai",
-            "Hey Marcus, it's Roster calling for Kestrel — just circling back on that rooftop unit estimate, the $4,200. No pressure at all, just wondering where your head's at on it.",
-            "Hey Marcus, it's Roster calling for Kestrel — just circling back on that rooftop unit estimate, the forty-two hundred. [pause] No pressure at all... just wondering where your head's at on it.",
+            "Hi Marcus, this is Roster calling on behalf of Kestrel. I'm following up on the estimate we sent for the rooftop unit — that was for $4,200. I wanted to check in and see if you had any questions.",
+            "Hi Marcus, this is Roster calling on behalf of Kestrel. I'm following up on the estimate we sent for the rooftop unit, that was for forty-two hundred dollars. I wanted to check in and see if you had any questions.",
         ),
         (
             "caller",
-            "Yeah, honestly? It's a bit more than I've got room for this quarter.",
-            "Yeah, honestly? [breath] It's a bit more than I've got room for this quarter.",
+            "Yeah — honestly, it's a bit more than I budgeted for this quarter.",
+            "Yeah, honestly, it's a bit more than I budgeted for this quarter.",
         ),
         (
             "ai",
-            "Totally get it. We can actually split that into three payments, no interest — and I can lock in this quarter's pricing so it doesn't creep up on you. Want me to send that over?",
-            "Totally get it. [pause] So — we can actually split that into three payments, no interest. And I can lock in this quarter's pricing so it doesn't creep up on you later. Want me to send that over?",
+            "I completely understand. We can split that into three monthly payments at no interest, and I can lock in this quarter's pricing so nothing changes. Would you like me to send that over?",
+            "I completely understand. We can split that into three monthly payments at no interest, and I can lock in this quarter's pricing so nothing changes. [pause] Would you like me to send that over?",
         ),
         (
             "caller",
-            "Yeah. Yeah, do that.",
-            "Yeah. [pause] Yeah, do that.",
+            "Yeah, that works. Go ahead and send it.",
+            "Yeah, that works. Go ahead and send it.",
         ),
     ],
     "club": [
         (
             "ai",
-            "Hi Janet, it's Roster for Kestrel — your Comfort Club plan comes up for renewal on the 14th, and you're actually due a fall tune-up. Want me to get that on the books while I've got you?",
-            "Hi Janet, it's Roster calling for Kestrel — so your Comfort Club plan comes up for renewal on the fourteenth, and you're actually due a fall tune-up. Want me to just get that on the books while I've got you?",
+            "Hi Janet, this is Roster with Kestrel. Your Comfort Club plan comes up for renewal on the 14th, and you're also due for your fall tune-up. Would you like me to get that scheduled while I have you?",
+            "Hi Janet, this is Roster with Kestrel. Your Comfort Club plan comes up for renewal on the fourteenth, and you're also due for your fall tune up. Would you like me to get that scheduled while I have you?",
         ),
         (
             "caller",
-            "Sure. Is the card on file still good?",
-            "Sure. [pause] Is the card you've got on file still good?",
+            "Sure. Is the card you have on file still good?",
+            "Sure. Is the card you have on file still good?",
         ),
         (
             "ai",
-            "Looks like it expired last month, actually. I can text you a quick secure link to update it — takes maybe ten seconds.",
-            "Looks like it expired last month, actually. [pause] I can text you a quick, secure link to update it — takes maybe ten seconds.",
+            "It looks like it expired last month. I can text you a secure link to update it — it only takes about ten seconds.",
+            "It looks like it expired last month. I can text you a secure link to update it, it only takes about ten seconds.",
         ),
         (
             "caller",
-            "Oh — yeah, perfect. Send it over.",
-            "Oh — [breath] yeah, perfect. Send it over.",
+            "Perfect. Go ahead and send it.",
+            "Perfect. Go ahead and send it.",
         ),
     ],
 }
