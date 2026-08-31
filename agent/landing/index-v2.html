@@ -284,27 +284,25 @@
         <button class="voice-try" type="button" id="voiceTry">Hear it</button>
       </div>
 
-      <p class="voice-hint" id="voiceHint">Press play to hear the call. <b>Uses your device&rsquo;s built-in speech voices</b> — the production line uses a studio voice model.</p>
-
       <div class="transcript" data-call="leak">
-        <p class="tline"><b class="t-caller">Caller:</b> “Yeah, hi — my water heater just burst. There's water all over the garage floor. Is there any way someone can come out tonight?”</p>
-        <p class="tline t-ai"><b>Frontdesk AI:</b> “Oh no. Okay — let's get someone out to you. I'm looking at your account now, and it looks like we replaced that pressure valve back in March, so that's still under warranty. I've got Dave free between 7:30 and 9 tonight. Want me to hold that for you?”</p>
-        <p class="tline"><b class="t-caller">Caller:</b> “Yes. Please. That would be amazing.”</p>
-        <p class="tline t-ai"><b>Frontdesk AI:</b> “Done. He'll text you when he's about 15 minutes out. Try to keep the area clear if you can — and hang in there, okay?”</p>
+        <p class="tline"><b class="t-caller">Caller:</b> “Hi, my water heater just burst — there's water all over my garage floor. Is there any way you can get someone out tonight?”</p>
+        <p class="tline t-ai"><b>Frontdesk AI:</b> “Oh no, I'm sorry to hear that. Let's get you taken care of. I'm looking at your account now, and I see we replaced your pressure valve back in March, so that's still under warranty. I have a technician, Dave, available between 7:30 and 9 tonight. Would you like me to hold that window for you?”</p>
+        <p class="tline"><b class="t-caller">Caller:</b> “Yes, please — that would be a huge help.”</p>
+        <p class="tline t-ai"><b>Frontdesk AI:</b> “You're all set. Dave will text you when he's about 15 minutes out. If you can, try to keep the area around the heater clear, and we'll take good care of you tonight.”</p>
       </div>
 
       <div class="transcript" data-call="quote" hidden>
-        <p class="tline t-ai"><b>Quote Chaser AI:</b> “Hey Marcus, it's Roster calling for Kestrel — just circling back on that rooftop unit estimate, the <span class="num">$4,200</span>. No pressure at all, just wondering where your head's at on it.”</p>
-        <p class="tline"><b class="t-caller">Customer:</b> “Yeah, honestly? It's a bit more than I've got room for this quarter.”</p>
-        <p class="tline t-ai"><b>Quote Chaser AI:</b> “Totally get it. We can actually split that into three payments, no interest — and I can lock in this quarter's pricing so it doesn't creep up on you. Want me to send that over?”</p>
-        <p class="tline"><b class="t-caller">Customer:</b> “Yeah. Yeah, do that.”</p>
+        <p class="tline t-ai"><b>Quote Chaser AI:</b> “Hi Marcus, this is Roster calling on behalf of Kestrel. I'm following up on the estimate we sent for the rooftop unit — that was for <span class="num">$4,200</span>. I wanted to check in and see if you had any questions.”</p>
+        <p class="tline"><b class="t-caller">Customer:</b> “Yeah — honestly, it's a bit more than I budgeted for this quarter.”</p>
+        <p class="tline t-ai"><b>Quote Chaser AI:</b> “I completely understand. We can split that into three monthly payments at no interest, and I can lock in this quarter's pricing so nothing changes. Would you like me to send that over?”</p>
+        <p class="tline"><b class="t-caller">Customer:</b> “Yeah, that works. Go ahead and send it.”</p>
       </div>
 
       <div class="transcript" data-call="club" hidden>
-        <p class="tline t-ai"><b>Renewals AI:</b> “Hi Janet, it's Roster for Kestrel — your Comfort Club plan comes up for renewal on the 14th, and you're actually due a fall tune-up. Want me to get that on the books while I've got you?”</p>
-        <p class="tline"><b class="t-caller">Customer:</b> “Sure. Is the card on file still good?”</p>
-        <p class="tline t-ai"><b>Renewals AI:</b> “Looks like it expired last month, actually. I can text you a quick secure link to update it — takes maybe ten seconds.”</p>
-        <p class="tline"><b class="t-caller">Customer:</b> “Oh — yeah, perfect. Send it over.”</p>
+        <p class="tline t-ai"><b>Renewals AI:</b> “Hi Janet, this is Roster with Kestrel. Your Comfort Club plan comes up for renewal on the 14th, and you're also due for your fall tune-up. Would you like me to get that scheduled while I have you?”</p>
+        <p class="tline"><b class="t-caller">Customer:</b> “Sure. Is the card you have on file still good?”</p>
+        <p class="tline t-ai"><b>Renewals AI:</b> “It looks like it expired last month. I can text you a secure link to update it — it only takes about ten seconds.”</p>
+        <p class="tline"><b class="t-caller">Customer:</b> “Perfect. Go ahead and send it.”</p>
       </div>
     </div>
   </div>
@@ -388,7 +386,7 @@
         <tbody>
           <tr>
             <th scope="row">Human Office Staff<span>Receptionist, Dispatcher</span></th>
-            <td data-label="Completes the work"><span class="yes"><svg class="ti" width="13" height="13" aria-hidden="true"><use href="#i-tick"/></svg>Yes</span></td>
+            <td data-label="Completes the work"><span class="mark"><svg class="ti" width="13" height="13" aria-hidden="true"><use href="#i-tick"/></svg>Yes</span></td>
             <td data-label="No human to hire"><span class="no"><svg class="ti" width="13" height="13" aria-hidden="true"><use href="#i-cross"/></svg>Requires hiring</span></td>
             <td data-label="Multi-role office">1 person = 1 role</td>
             <td data-label="Shared memory">In their head</td>
@@ -397,7 +395,7 @@
           <tr>
             <th scope="row">BPO / Answering Services<span>Smith.ai, Ruby, Offshore</span></th>
             <td data-label="Completes the work">Takes messages only</td>
-            <td data-label="No human to hire"><span class="yes"><svg class="ti" width="13" height="13" aria-hidden="true"><use href="#i-tick"/></svg>Yes</span></td>
+            <td data-label="No human to hire"><span class="mark"><svg class="ti" width="13" height="13" aria-hidden="true"><use href="#i-tick"/></svg>Yes</span></td>
             <td data-label="Multi-role office">Front desk only</td>
             <td data-label="Shared memory"><span class="no"><svg class="ti" width="13" height="13" aria-hidden="true"><use href="#i-cross"/></svg>No</span></td>
             <td data-label="Annual cost" class="num">$4,000–$23,000/yr</td>
@@ -653,13 +651,6 @@
   }
 
   /* ═══ THE VOICE PLAYER ═════════════════════════════════════════════════
-     There is no recorded audio to ship, so the call is spoken live by the
-     browser's speech engine. Everything else — waveform, clock, transcript
-     highlighting — is driven off the same clock, so the player behaves like a
-     real one: play/pause, seek by clicking the waveform, switch scenarios.
-     If speech is unavailable the timings still run and the transcript still
-     follows; it just plays silently. */
-  /* ═══ THE VOICE PLAYER ═════════════════════════════════════════════════
      Two modes, decided at load:
 
      REAL AUDIO — /static/voice/manifest.json exists, so the page plays MP3s
@@ -713,7 +704,6 @@
     var picker = document.getElementById('voicePicker');
     var callerLabel = document.getElementById('voiceCaller');
     var tryBtn = document.getElementById('voiceTry');
-    var hint = document.getElementById('voiceHint');
 
     function currentCall() {
       var on = document.querySelector('.rtab.is-on');
@@ -1008,9 +998,6 @@
         buildPicker();
         if (typeof synth.onvoiceschanged !== 'undefined') synth.onvoiceschanged = buildPicker;
         setTimeout(buildPicker, 600);
-        if (hint) hint.innerHTML = 'Press play to hear the call. <b>Playing through your device&rsquo;s speech engine</b> &mdash; the recorded xAI voice hasn&rsquo;t been generated yet.';
-      } else if (hint) {
-        hint.innerHTML = 'Press play to follow the call. <b>This browser has no speech engine</b>, so it plays silently with the transcript.';
       }
     }
     fetch('/static/voice/manifest.json', { cache: 'no-cache' })
@@ -1021,7 +1008,6 @@
         plan = planLines();
         paintShape();
         paint(0);
-        if (hint) hint.innerHTML = 'Real audio, generated by <b>xAI TTS</b> &mdash; the same voice engine that answers your customers&rsquo; calls.';
       })
       .catch(useFallback);
 

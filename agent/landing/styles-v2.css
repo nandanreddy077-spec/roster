@@ -24,7 +24,6 @@
   --accent:       #B4451F;   /* Roster ember */
   --accent-soft:  #F5E8E2;   /* soft ember ground — Roster's row / the loss card */
   --success:      #28734F;   /* functional green */
-  --success-soft: #E8F1EC;   /* the one "booked" chip */
   --ink:          #1A1A17;   /* = --text; alias for dark-surface rules */
   --shadow:       0 1px 2px rgba(26, 26, 23, .04), 0 10px 28px -16px rgba(26, 26, 23, .14);
   /* ---- END PALETTE ---- */
@@ -252,12 +251,12 @@ a.logo { display: inline-flex; align-items: center; min-height: 44px; }
 .call-who { font-size: 13px; color: var(--muted); }
 .memo {
   margin-top: 11px; padding: 9px 11px; border: 1px solid var(--border); border-radius: var(--r-sm);
-  background: var(--bg); font-size: 13px; font-style: italic; color: var(--text); line-height: 1.45;
+  background: var(--bg); font-size: 13px; color: var(--text); line-height: 1.45;
 }
 .memo-src { display: block; margin-top: 5px; font-style: normal; font-size: 10px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
 .call-out {
-  display: flex; align-items: flex-start; gap: 7px; margin-top: 11px; padding: 9px 11px;
-  border-radius: var(--r-sm); background: var(--success-soft); color: var(--success);
+  display: flex; align-items: flex-start; gap: 7px; margin-top: 11px; padding: 8px 11px;
+  border-left: 2px solid var(--success); color: var(--success);
   font-size: 13px; font-weight: 600; line-height: 1.4;
 }
 .call-out .ti { flex: 0 0 auto; margin-top: 2px; }
@@ -383,6 +382,7 @@ a.logo { display: inline-flex; align-items: center; min-height: 44px; }
 .calc-field input[type="range"] {
   -webkit-appearance: none; appearance: none;
   width: 100%; height: 44px; background: transparent; cursor: pointer;
+  font-family: inherit; color: var(--text);
 }
 .calc-field input[type="range"]::-webkit-slider-runnable-track {
   height: 5px; border-radius: var(--r-pill); background: var(--border);
@@ -419,6 +419,8 @@ a.logo { display: inline-flex; align-items: center; min-height: 44px; }
 .cmp tbody td { padding: var(--s3) var(--s2); color: var(--muted); vertical-align: top; }
 .cmp tbody tr + tr { border-top: 1px solid var(--border); }
 .yes { color: var(--success); font-weight: 700; display: inline-flex; align-items: flex-start; gap: 6px; }
+.mark { color: var(--text); font-weight: 600; display: inline-flex; align-items: flex-start; gap: 6px; }
+.mark .ti { color: var(--muted); flex: 0 0 auto; margin-top: 3px; }
 .no  { color: var(--muted); display: inline-flex; align-items: flex-start; gap: 6px; }
 .yes .ti, .no .ti { flex: 0 0 auto; margin-top: 3px; }
 .cmp-ours { background: var(--accent-soft); }
@@ -446,7 +448,7 @@ a.logo { display: inline-flex; align-items: center; min-height: 44px; }
 /* ═══ 7. PRICING ══════════════════════════════════════════════════════════ */
 @media (min-width: 860px) { .price-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--s4); } }
 .price-card { padding: var(--pad-card); min-width: 0; display: flex; flex-direction: column; }
-.price-ours { border-color: var(--text); }
+.price-ours { border-color: var(--border); }
 .price-label { font-size: 11.5px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); margin-bottom: var(--s3); }
 .price-ours .price-label { color: var(--muted); }
 .price-num { font-size: clamp(30px, 3.6vw, 42px); font-weight: 700; color: var(--muted); line-height: 1.05; letter-spacing: -0.028em; }
@@ -491,7 +493,9 @@ a.logo { display: inline-flex; align-items: center; min-height: 44px; }
 .footer-links a { padding: 0 8px; }
 .footer-legal, .footer-legal span { color: var(--muted); }
 .footer-sms { padding-top: var(--s3); border-top: 1px solid var(--border); }
-.footer-sms .footnote { max-width: 90ch; }
+.footer-sms .footnote {
+  max-width: 90ch; font-size: 12px; line-height: 1.55; color: var(--muted);
+}
 
 a:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 2px; }
 
@@ -651,9 +655,6 @@ a:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-
 }
 .tline.is-spoken { opacity: .62; }
 .transcript.is-live .tline:not(.is-speaking):not(.is-spoken) { opacity: .5; }
-
-.voice-hint { margin-top: var(--s2); font-size: 13px; color: var(--muted); text-align: center; }
-.voice-hint b { color: var(--muted); font-weight: 600; }
 
 /* ---- Reduced motion: keep every STATE, drop every MOVE ------------------- */
 @media (prefers-reduced-motion: reduce) {
