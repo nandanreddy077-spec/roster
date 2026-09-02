@@ -16,9 +16,20 @@
     <span class="portal-state is-working">{{ workspace.health_label }}</span>
   </div>
   {% if workspace.outcomes %}
+  {# One window caption for the whole strip, not one per value: the old
+     dashboard repeated the time frame eight times down a single row, which
+     is noise, and a metric a department has never done yet renders muted —
+     seven zeros shouting as loudly as the two real numbers is what made this
+     page unreadable. `{% if value %}` is a presence check, the only kind of
+     conditional a template is allowed (ARCHITECTURE.md invariant 4); the
+     order is still the registry's, untouched. #}
+  <p class="portal-outcome-window portal-outcome-window-strip">{{ metric_window }}</p>
   <ul class="portal-outcomes">
     {% for label, value in workspace.outcomes %}
-    <li><span class="portal-outcome-value">{{ value }}</span><span class="portal-outcome-label">{{ label }}</span></li>
+    <li{{ "" if value else ' class="is-zero"' | safe }}>
+      <span class="portal-outcome-value">{{ value }}</span>
+      <span class="portal-outcome-label">{{ label }}</span>
+    </li>
     {% endfor %}
   </ul>
   {% endif %}
@@ -37,7 +48,7 @@
     {% if employee.outcomes %}
     <ul class="portal-outcomes portal-outcomes-compact">
       {% for label, value in employee.outcomes %}
-      <li><span class="portal-outcome-value">{{ value }}</span><span class="portal-outcome-label">{{ label }}</span></li>
+      <li{{ "" if value else ' class="is-zero"' | safe }}><span class="portal-outcome-value">{{ value }}</span><span class="portal-outcome-label">{{ label }}</span></li>
       {% endfor %}
     </ul>
     {% endif %}

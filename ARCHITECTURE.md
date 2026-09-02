@@ -65,15 +65,33 @@ to special-case it.
    (`workspace.METRIC_LABELS`, `workspace.CUSTOMER_STATE_LABELS`,
    `workspace.NOTIFICATION_KIND_LABELS`) registered as Jinja globals.
 
-5. **Navigation always follows the workspace hierarchy**: Overview →
-   Departments/Briefing → Department Workspace → Employee Workspace |
+5. **Navigation always follows the workspace hierarchy**: Home →
+   Departments → Department Workspace → Employee Workspace |
    Expansion Workspace. `portal.NAV_ITEMS` names stable customer concepts,
    never implementation structure —
    `test_the_nav_names_no_implementation_structure` fails the build if a nav
    label contains "employee", "agent", "job", "campaign", "recovery",
    "roster", or "role". Expansion is deliberately never a nav item — it's
-   reached contextually, from within a Department Workspace or a Briefing
+   reached contextually, from within a Department Workspace or a Home growth
    nudge, never as a permanent "buy more" tab.
+
+   **AMENDED 2026-09-01 (founder), five destinations → three.** The nav was
+   Overview / Departments / The Briefing / Notifications / Settings. Overview
+   and Departments rendered the same gateway cards from one shared partial,
+   and the Briefing hand-rolled a third near-identical grid — so an owner had
+   no way to know which of the three to open, and the product read as a maze.
+   The Briefing was the only one of the three that answered a question ("does
+   anything need me?"), so it moved to the front door as **Home**, absorbing
+   Overview; `dashboard_v2/overview.html`, `dashboard_v2/briefing.html` and
+   `dashboard_v2/_gateway_card.html` were deleted, and `/v2/dashboard/briefing`
+   became a 303 to `/v2/dashboard` (the URL is in owners' text messages).
+   Notifications became a drill-down reached from Home, the same shape as the
+   Employee and Expansion workspaces — a feed that is empty most days does not
+   earn a permanent tab. Guarded by `test_no_two_destinations_render_the_same_page`,
+   which is the regression this amendment exists to prevent.
+
+   The invariant this amendment does NOT relax: adding a destination is still
+   the thing to resist. Three is the new ceiling, not a new floor.
 
 6. **Every customer-visible metric must have a future drill-down path.**
    Metrics represent concrete underlying records, not opaque summary
@@ -130,11 +148,11 @@ to special-case it.
 The dashboard's complete hierarchy is:
 
 ```
-Overview → Briefing → Department Workspace → Employee Workspace
-                                            → Expansion Workspace
+Home → Departments → Department Workspace → Employee Workspace
+                                           → Expansion Workspace
 ```
 
-Resist adding new top-level pages. New work should deepen one of these five
+Resist adding new top-level pages. New work should deepen one of these
 workspaces or improve the underlying AI employees — not introduce a sixth
 destination. A genuinely new top-level page needs to represent an entirely
 new *workspace*, not a new report or a new widget bolted onto navigation.

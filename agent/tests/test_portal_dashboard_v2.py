@@ -1,4 +1,11 @@
-"""Overview and Departments — the customer's first two department-first pages.
+"""Home and Departments — the customer dashboard's two nav destinations
+(Settings is the third, covered by test_dashboard_settings.py).
+
+`/v2/dashboard` was Overview until 2026-09-01, when the founder collapsed five
+destinations to three: it rendered the same gateway cards as the Departments
+grid and as the Briefing, so an owner had no way to know which of the three to
+open. Home now renders a BriefingWorkspace instead. The tests below kept their
+`overview_` names where they still guard the same rule on the same URL.
 
 Deployment state comes from departments.department_status_for over Employee
 rows, never from requested_roster or a hardcoded badge (the blueprint's
@@ -56,7 +63,7 @@ def _page(test_engine, monkeypatch, path="/v2/dashboard", **kw):
     return r.text
 
 
-# --- Overview -----------------------------------------------------------------
+# --- Home -----------------------------------------------------------------
 
 
 def test_overview_is_honest_when_nothing_is_deployed(test_engine, monkeypatch):
@@ -126,12 +133,15 @@ def test_every_active_department_on_overview_links_to_its_workspace(test_engine,
     assert 'href="/v2/dashboard/departments/customer_service"' in body
 
 
-def test_overview_shows_the_departments_question_not_its_mission(test_engine, monkeypatch):
-    """Consistent voice with the workspace page, which leads with the
-    question too (Task 6)."""
+def test_a_gateway_card_shows_the_departments_question_not_its_mission(test_engine, monkeypatch):
+    """Consistent voice with the workspace page, which leads with the question
+    too (Task 6). Asserted on the Departments grid rather than Home: Home is
+    the answer-a-question page now, so its department rows carry the headline
+    number and health only — repeating the registry question there is exactly
+    the duplication the collapse removed."""
     from departments import get_department
 
-    body = _page(test_engine, monkeypatch, deploy="customer_service")
+    body = _page(test_engine, monkeypatch, path=DEPARTMENTS, deploy="customer_service")
     department = get_department("customer_service")
 
     assert department.question in body

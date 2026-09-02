@@ -21,22 +21,39 @@ def _nav_html(body: str) -> str:
     return match.group(0)
 
 
-def test_the_five_nav_items_are_the_blueprint_five_in_order():
+def test_the_three_destinations_are_in_order():
+    """THREE, down from five (founder, 2026-09-01). Overview, Departments and
+    the Briefing were three renderings of the same department cards, so an
+    owner had no way to know which of the three to open — that, not the
+    styling, is what made the dashboard confusing. Home absorbed the Briefing;
+    Notifications became a drill-down off Home."""
     assert [item["key"] for item in portal.NAV_ITEMS] == [
-        "overview",
+        "home",
         "departments",
-        "briefing",
-        "notifications",
         "settings",
     ]
 
 
-def test_there_is_no_sixth_nav_item():
+def test_there_is_no_fourth_nav_item():
     """Expansion is contextual content, never navigation — a permanent 'buy
     more' tab would make the product read as a storefront (blueprint §5)."""
-    assert len(portal.NAV_ITEMS) == 5
+    assert len(portal.NAV_ITEMS) == 3
     labels = " ".join(item["label"].lower() for item in portal.NAV_ITEMS)
     assert "grow" not in labels and "workforce" not in labels
+
+
+def test_no_two_destinations_render_the_same_page():
+    """The regression this collapse exists to prevent. Two nav items pointing
+    at one template is how the maze grew the first time."""
+    hrefs = [item["href"] for item in portal.NAV_ITEMS]
+    assert len(set(hrefs)) == len(hrefs)
+
+
+def test_every_destination_carries_an_icon():
+    """The bottom bar is the owner's primary nav on a phone in a truck; a
+    label-only tab is a small target to read at a glance."""
+    for item in portal.NAV_ITEMS:
+        assert item["icon"].startswith("M"), f"{item['key']} has no SVG path"
 
 
 def test_the_nav_names_no_implementation_structure():
@@ -52,11 +69,6 @@ def test_every_nav_label_is_centralized():
     """Renaming a nav item must be a one-line change, so labels live in
     NAV_ITEMS and templates render {{ item.label }}."""
     assert portal.templates.env.globals["nav_items"] == portal.NAV_ITEMS
-
-
-def test_the_briefing_nav_label_comes_from_the_one_constant():
-    briefing = next(i for i in portal.NAV_ITEMS if i["key"] == "briefing")
-    assert briefing["label"] == portal.BRIEFING_LABEL
 
 
 def test_the_new_dashboard_requires_a_session(test_engine, monkeypatch):

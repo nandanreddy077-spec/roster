@@ -1,0 +1,96 @@
+{% extends "portal_base.html" %}
+{% block heading %}{{ business.business_name or "Your workforce" }}{% endblock %}
+{% block subhead %}
+<p class="portal-lede">{{ workspace.summary }}</p>
+{% endblock %}
+
+{% block content %}
+{# Renders ONE assembled BriefingWorkspace (workspace.py) — a synthesis over
+   DepartmentWorkspace/ExpansionWorkspace, never a second independent report
+   (founder, 2026-07-29).
+
+   This page replaced overview.html AND briefing.html on 2026-09-01. The two
+   were showing the same department cards from the same _gateway_card
+   partial, one page apart, and Departments showed them a third time — the
+   owner's actual complaint was that nothing distinguished the three. Home is
+   now the only page that answers "what happened, and does anything want me?"
+
+   Order: what needs you, then what your workforce did, then where to grow,
+   then the raw feed. The view model already sorted highlights by kind; this
+   template splits them by that kind rather than flattening all three into
+   one undifferentiated list — an escalation and a booked-jobs count are not
+   the same news and must not look the same. #}
+{% set attention = workspace.highlights | selectattr("kind", "equalto", "attention") | list %}
+{% set growth = workspace.highlights | selectattr("kind", "equalto", "growth") | list %}
+
+{% if attention %}
+<section class="portal-attention">
+  <p class="portal-eyebrow">Needs you</p>
+  <ul class="portal-attention-list">
+    {% for highlight in attention %}
+    <li><a href="{{ highlight.href }}">{{ highlight.text }}</a></li>
+    {% endfor %}
+  </ul>
+</section>
+{% elif workspace.departments %}
+<p class="portal-allclear">Nothing needs you right now — your workforce is handling it.</p>
+{% endif %}
+
+{% if workspace.departments %}
+<h2 class="portal-section-title">What your workforce did</h2>
+<div class="portal-dept-grid">
+  {% for row in workspace.departments %}
+  <a class="portal-gateway-card-link" href="{{ row.href }}">
+  <section class="portal-card portal-gateway-card">
+    <div class="portal-dept-head">
+      <h2>{{ row.department.display_name }}</h2>
+      <span class="portal-state is-working">{{ row.health_label }}</span>
+    </div>
+    {% if row.headline %}
+    <ul class="portal-outcomes">
+      <li>
+        <span class="portal-outcome-value">{{ row.headline[1] }}</span>
+        <span class="portal-outcome-label">{{ row.headline[0] }}</span>
+        <span class="portal-outcome-window">{{ metric_window }}</span>
+      </li>
+    </ul>
+    {% else %}
+    <p class="portal-empty">No results to show yet.</p>
+    {% endif %}
+  </section>
+  </a>
+  {% endfor %}
+</div>
+{% else %}
+<section class="portal-card portal-card-wide">
+  <p class="portal-empty">Your workforce is being set up — you'll see activity here once it's live.</p>
+</section>
+{% endif %}
+
+{% if growth %}
+<h2 class="portal-section-title">Room to grow</h2>
+<section class="portal-card portal-card-wide">
+  {# Same row treatment as "Needs you" so these read as tappable, minus the
+     ember rule down the side — a suggestion is not an alert. #}
+  <ul class="portal-attention-list">
+    {% for highlight in growth %}
+    <li><a href="{{ highlight.href }}">{{ highlight.text }}</a></li>
+    {% endfor %}
+  </ul>
+</section>
+{% endif %}
+
+<h2 class="portal-section-title">Recent alerts</h2>
+<section class="portal-card portal-card-wide">
+  {% if workspace.notifications %}
+  <ul class="portal-timeline">
+    {% for n in workspace.notifications[:5] %}
+    <li><span class="portal-timeline-when">{{ n.created_at.strftime('%b %d, %I:%M %p') }}</span>{{ notification_kind_labels[n.kind] }}</li>
+    {% endfor %}
+  </ul>
+  <a class="back-link" href="/v2/dashboard/notifications">See every alert &rarr;</a>
+  {% else %}
+  <p class="portal-empty">Nothing yet.</p>
+  {% endif %}
+</section>
+{% endblock %}

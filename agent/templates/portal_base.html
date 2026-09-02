@@ -5,13 +5,24 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>{% block title %}{{ business.business_name or "Your workforce" }} — Roster{% endblock %}</title>
 <meta name="robots" content="noindex">
+<link rel="icon" type="image/png" href="/static/favicon.png">
 <link rel="stylesheet" href="/static/portal.css?v={{ portal_css_version }}">
 </head>
 <body class="portal-shell">
 
 {# Navigation names stable CUSTOMER concepts, never implementation structure
-   (founder, 2026-07-29). Labels live in portal.NAV_ITEMS so renaming one —
-   including the provisional Briefing name — is a one-line change. #}
+   (founder, 2026-07-29). Labels and icons live in portal.NAV_ITEMS so
+   renaming or retheming one is a one-line change.
+
+   THREE destinations since 2026-09-01, down from five: Overview, Departments
+   and the Briefing were three renderings of the same department cards, so an
+   owner had no way to know which to open. Home absorbed the Briefing — the
+   only one of the three that answered a question — and Notifications became
+   a drill-down off Home rather than a permanent tab. #}
+{% macro nav_icon(item) -%}
+<svg class="portal-nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="{{ item.icon }}" stroke-linecap="round" stroke-linejoin="round"/></svg>
+{%- endmacro %}
+
 <nav class="portal-nav" aria-label="Your workforce">
   <a class="logo portal-nav-logo" href="/v2/dashboard">Roster</a>
   <ul class="portal-nav-list">
@@ -19,7 +30,7 @@
     <li>
       <a href="{{ item.href }}"
          class="portal-nav-link{{ ' is-active' if item.key == active_nav }}"
-         {% if item.key == active_nav %}aria-current="page"{% endif %}>{{ item.label }}</a>
+         {% if item.key == active_nav %}aria-current="page"{% endif %}>{{ nav_icon(item) }}{{ item.label }}</a>
     </li>
     {% endfor %}
   </ul>
@@ -36,13 +47,14 @@
   {% block content %}{% endblock %}
 </main>
 
-{# The owner is on a phone in a truck (platform PRD P1), so the same five
-   concepts get a thumb-reachable bar rather than a hidden hamburger. #}
+{# The owner is on a phone in a truck (platform PRD P1), so the same
+   destinations get a thumb-reachable bar rather than a hidden hamburger.
+   Three items means each one is a wide target. #}
 <nav class="portal-tabbar" aria-label="Your workforce">
   {% for item in nav_items %}
   <a href="{{ item.href }}"
      class="portal-tab{{ ' is-active' if item.key == active_nav }}"
-     {% if item.key == active_nav %}aria-current="page"{% endif %}>{{ item.label }}</a>
+     {% if item.key == active_nav %}aria-current="page"{% endif %}>{{ nav_icon(item) }}{{ item.label }}</a>
   {% endfor %}
 </nav>
 

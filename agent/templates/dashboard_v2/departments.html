@@ -1,16 +1,39 @@
 {% extends "portal_base.html" %}
 {% block heading %}Departments{% endblock %}
 {% block subhead %}
-<p class="portal-lede">Your workforce, and what else it could do.</p>
+<p class="portal-lede">Everything your workforce covers today, and what it could cover next.</p>
 {% endblock %}
 
 {% block content %}
+{# The active-department card used to live in dashboard_v2/_gateway_card.html,
+   shared with an Overview page that showed the identical grid. Overview was
+   removed on 2026-09-01 (it and the Briefing were two more renderings of
+   this same grid, which is what made the dashboard a maze), leaving this
+   partial with exactly one caller — so it was inlined and deleted rather
+   than kept as a one-consumer indirection. #}
 <div class="portal-dept-grid">
   {% for card in cards %}
   {% if card.active %}
-  {# Gateway card, shared with Overview — the full outcomes list and employee
-     roster live in the Department Workspace this links to, not here. #}
-  {% include "dashboard_v2/_gateway_card.html" %}
+  {# A GATEWAY, not a report: the question and one headline number. The full
+     outcomes list and the roster live in the Department Workspace. #}
+  <a class="portal-gateway-card-link" href="/v2/dashboard/departments/{{ card.department.key }}">
+    <section class="portal-card portal-gateway-card">
+      <div class="portal-dept-head">
+        <h2>{{ card.department.display_name }}</h2>
+        <span class="portal-state is-working">{{ card.health_label }}</span>
+      </div>
+      <p class="portal-dept-mission">{{ card.department.question }}</p>
+      {% if card.headline %}
+      <ul class="portal-outcomes">
+        <li>
+          <span class="portal-outcome-value">{{ card.headline[1] }}</span>
+          <span class="portal-outcome-label">{{ card.headline[0] }}</span>
+          <span class="portal-outcome-window">{{ metric_window }}</span>
+        </li>
+      </ul>
+      {% endif %}
+    </section>
+  </a>
   {% else %}
   {# An inactive department educates rather than just reporting absence
      (blueprint §7) — the copy comes from the department registry, so it

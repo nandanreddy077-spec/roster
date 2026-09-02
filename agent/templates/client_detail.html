@@ -1,292 +1,55 @@
 {% extends "base.html" %}
 {% block title %}{{ client.business_name }} — Roster{% endblock %}
 {% block content %}
+{# WORK FIRST, SETUP FOLDED (founder, 2026-09-01).
+
+   This page used to be one flat 378-line scroll: ten sections at identical
+   visual weight, config forms interleaved with live work, and the bookings a
+   customer is right now waiting on sitting in a sidebar at the bottom,
+   underneath three "save this text field" forms. So the thing done daily was
+   the hardest thing to find.
+
+   The order is now: what needs doing → today's work → everything one-time,
+   collapsed. No route, no form and no control was removed — every one below
+   is the same POST it always was, just somewhere findable. #}
 <a class="back-link" href="/clients">&larr; All clients</a>
 <h1>{{ client.business_name }}</h1>
-<span class="trade-tag">{{ client.trade }}</span>
-<span class="trade-tag">{{ client.pipeline_stage }}</span>
+<p>
+  <span class="trade-tag">{{ client.trade }}</span>
+  <span class="trade-tag">{{ client.pipeline_stage }}</span>
+  {% if client.inbound_number %}<span class="trade-tag">{{ client.inbound_number }}</span>{% endif %}
+</p>
 
-{# Setup, in the order it actually gets done, so it stops being a memory game
-   across five scattered panels. Every item is derived from a real column —
-   nothing here can be ticked optimistically. #}
-<section class="agent-roster">
-  <h2 class="agent-roster-heading">Setup</h2>
-  <div class="agent-tile" style="max-width:640px;">
-    <ol class="setup-checklist">
-      {% for step in checklist %}
-      <li class="{{ 'is-done' if step.done else 'is-todo' }}">
-        <strong>{{ "✓" if step.done else "○" }} {{ step.label }}</strong>
-        {% if not step.done %}<div class="agent-tile-desc">{{ step.hint }}</div>{% endif %}
-      </li>
-      {% endfor %}
-    </ol>
-  </div>
-</section>
+{% if booking_error %}<p class="console-allclear is-error">{{ booking_error }}</p>{% endif %}
 
-<section class="agent-roster">
-  <h2 class="agent-roster-heading">Dashboard access</h2>
-  <div class="agent-tile" style="max-width:640px;">
-    <p class="agent-tile-desc">Roster sets every customer up by hand, so the owner never picks a password.
-      This link is how they get into their own dashboard — text it to them. It works for
-      {{ access_link_days }} days, then send a fresh one from this page.</p>
-    <input type="text" class="access-link-field" value="{{ access_link }}" readonly
-           onclick="this.select();" aria-label="Dashboard access link">
-
-    <p class="agent-tile-desc" style="margin-top:16px;">Their email is a backup door: with it set they can also
-      use Google sign-in, so a lost link isn't a support call. It is not a login on its own.</p>
-    <form method="post" action="/clients/{{ client.id }}/owner-email" class="review-link-form">
-      <input type="email" name="owner_email" placeholder="owner@theirshop.com" value="{{ client.email or '' }}">
-      <button class="btn btn-secondary btn-small" type="submit">Save email</button>
-    </form>
-    {% if access_error %}<p class="job-notes">{{ access_error }}</p>{% endif %}
-  </div>
-</section>
-
-<section class="agent-roster">
-  <h2 class="agent-roster-heading">Provisioning pipeline</h2>
-  {% if stage_error %}<p class="job-notes">{{ stage_error }}</p>{% endif %}
-  <div class="agent-tile" style="max-width:640px;">
-    <p class="agent-tile-desc">Where this business sits in onboarding. Set it explicitly — it never advances on its own.</p>
-    <form method="post" action="/clients/{{ client.id }}/pipeline-stage" class="review-link-form">
-      {% for s in pipeline_stages %}
-      <button class="btn {{ 'btn-primary' if s == client.pipeline_stage else 'btn-secondary' }} btn-small"
-              type="submit" name="stage" value="{{ s }}">{{ s }}</button>
-      {% endfor %}
-    </form>
-  </div>
-</section>
-
-{% if open_interests %}
-<section class="agent-roster">
-  <h2 class="agent-roster-heading">Expansion requests</h2>
-  <div class="agent-tile" style="max-width:640px;">
-    <p class="agent-tile-desc">Departments this customer asked about. Oldest first — handle the one that's waited longest.</p>
-    {% for row in open_interests %}
-    <div class="job-card">
-      <strong>Asked for {{ row.department.display_name if row.department else row.interest.department_key }}</strong>
-      <div>{{ row.interest.created_at.strftime('%b %d, %I:%M %p') }}</div>
-      <form method="post" action="/clients/{{ client.id }}/interests/{{ row.interest.id }}/actioned">
-        <button class="btn btn-secondary btn-small" type="submit">Mark handled</button>
-      </form>
-    </div>
+{% if action_queue %}
+{# Built in app._founder_action_queue from rows this route already loaded —
+   nothing extra is queried and nothing is invented. Severity comes from the
+   queue, never from the template deciding what looks urgent. #}
+<section class="console-queue{{ ' is-critical' if action_queue[0].severity == 'critical' }}">
+  <p class="console-queue-eyebrow">Needs you</p>
+  <ul class="console-queue-list">
+    {% for item in action_queue %}
+    <li class="{{ 'is-critical' if item.severity == 'critical' }}">
+      <a href="{{ item.href }}">{{ item.text }}</a>
+    </li>
     {% endfor %}
-    <p class="agent-tile-desc" style="margin-top:12px;">Marking a request handled records that ops dealt with it — it does not deploy anything. Deploy below.</p>
-  </div>
+  </ul>
 </section>
+{% else %}
+<p class="console-allclear">Nothing needs you on this client.</p>
 {% endif %}
 
-<section class="agent-roster">
-  <h2 class="agent-roster-heading">Departments</h2>
-  {% if deploy_error %}<p class="job-notes">{{ deploy_error }}</p>{% endif %}
-  <div class="agent-roster-grid">
-    {% for row in department_rows %}
-    <div class="agent-tile">
-      <div class="agent-tile-head">
-        <span class="agent-badge {{ 'agent-badge-active' if row.status.state == 'staffed' else 'agent-badge-off' }}">
-          {{ row.status.department.display_name }}
-        </span>
-      </div>
-      <p class="agent-tile-desc"><strong>{{ row.label }}</strong></p>
-      <p class="agent-tile-desc">{{ row.status.department.mission }}</p>
-      {% if row.status.staffed %}
-      <p class="agent-tile-desc">Working: {% for e in row.status.staffed %}{{ e.display_name }}{{ ", " if not loop.last }}{% endfor %}</p>
-      {% endif %}
-      {% if row.status.state == 'unavailable' %}
-      <p class="job-notes">Every role in this department is still planned — nothing to deploy yet.</p>
-      {% elif row.status.state in ('empty', 'partial') %}
-      <form method="post" action="/clients/{{ client.id }}/employees/deploy" class="review-link-form"
-            onsubmit="this.querySelector('button').disabled = true;">
-        <input type="hidden" name="department_key" value="{{ row.status.department.key }}">
-        <button class="btn btn-primary btn-small" type="submit">
-          {{ "Complete deployment" if row.status.state == 'partial' else "Deploy" }}
-        </button>
-      </form>
-      {% endif %}
-    </div>
-    {% endfor %}
-  </div>
-</section>
-
-<section class="agent-roster">
-  <h2 class="agent-roster-heading">Configuration</h2>
-  <div class="agent-roster-grid">
-    <div class="agent-tile">
-      <div class="agent-tile-head">
-        <span class="agent-badge {{ 'agent-badge-active' if client.xai_phone_number else 'agent-badge-off' }}">
-          Phone number{% if client.inbound_number %} &middot; {{ client.inbound_number }}{% endif %}
-        </span>
-      </div>
-      {% if client.xai_phone_number %}
-      <p class="agent-tile-desc">Live — voice + SMS both wired up. Have the client forward their real number to {{ client.inbound_number }}.</p>
-      {# The activation page promises the owner we'll send these steps, and
-         there is no email sender in the product to keep that promise. Until
-         there is, the founder sends them by hand — so they have to be on the
-         page the founder is already looking at, not in their head. #}
-      <details class="agent-tile-desc" style="margin-top:12px;">
-        <summary><strong>Forwarding steps to send the client</strong></summary>
-        {% if client.answer_mode == "primary" %}
-        <p style="margin-top:8px;">Primary mode — every call goes to Roster first. On the phone with the business line:</p>
-        <ul>
-          <li><strong>Verizon:</strong> dial <code>*72{{ client.inbound_number|replace("+1", "") }}</code> &middot; cancel with <code>*73</code></li>
-          <li><strong>AT&amp;T:</strong> dial <code>*21*{{ client.inbound_number }}#</code> &middot; cancel with <code>#21#</code></li>
-          <li><strong>T-Mobile:</strong> dial <code>**21*{{ client.inbound_number }}#</code> &middot; cancel with <code>##21#</code></li>
-        </ul>
-        {% else %}
-        <p style="margin-top:8px;">Backup mode — Roster only picks up what they miss. On the phone with the business line:</p>
-        <ul>
-          <li><strong>Verizon:</strong> dial <code>*71{{ client.inbound_number|replace("+1", "") }}</code> &middot; cancel with <code>*73</code></li>
-          <li><strong>AT&amp;T:</strong> dial <code>*61*{{ client.inbound_number }}#</code> &middot; cancel with <code>#61#</code></li>
-          <li><strong>T-Mobile:</strong> dial <code>**61*{{ client.inbound_number }}#</code> &middot; cancel with <code>##61#</code></li>
-        </ul>
-        {% endif %}
-        <p>Codes vary by carrier and plan — if one is rejected, the client's carrier support line has the right one. Confirm it worked by dialling their business number yourself and hearing Roster answer.</p>
-      </details>
-      {% elif client.twilio_number_sid %}
-      <p class="agent-tile-desc">Number bought and SMS-ready ({{ client.inbound_number }}), but voice registration with xAI didn't complete — see server logs.</p>
-      <form method="post" action="/clients/{{ client.id }}/retry-xai-registration" class="review-link-form">
-        <button class="btn btn-primary btn-small" type="submit">Retry xAI voice registration</button>
-      </form>
-      <p class="agent-tile-desc" style="margin-top:12px;">Or attach one manually: create the number in the xAI console, point its webhook at <code>/webhook/xai-incoming-call</code>, and paste it + its signing secret here.</p>
-      <form method="post" action="/clients/{{ client.id }}/attach-xai-number" class="review-link-form">
-        <input type="text" name="xai_phone_number" placeholder="xAI number, e.g. +15125550123" required>
-        <input type="text" name="xai_signing_secret" placeholder="Webhook signing secret" required>
-        <button class="btn btn-primary btn-small" type="submit">Attach xAI number</button>
-      </form>
-      {% else %}
-      {% if client.inbound_number %}
-      <p class="agent-tile-desc">Business line on file ({{ client.inbound_number }}), but no AI number is provisioned yet — buy one below to enable SMS and voice.</p>
-      {% else %}
-      <p class="agent-tile-desc">No number yet — buy one to enable SMS and voice for this client.</p>
-      {% endif %}
-      <form method="post" action="/clients/{{ client.id }}/provision-number" class="review-link-form"
-            onsubmit="this.querySelector('button').disabled = true;">
-        <input type="text" name="area_code" placeholder="Area code (optional)" maxlength="3">
-        <button class="btn btn-primary btn-small" type="submit">Buy &amp; wire up number</button>
-      </form>
-      <p class="agent-tile-desc" style="margin-top:12px;">Or attach an xAI voice number (no Twilio): create the number in the xAI console, point its webhook at <code>/webhook/xai-incoming-call</code>, and paste it + its signing secret here.</p>
-      <form method="post" action="/clients/{{ client.id }}/attach-xai-number" class="review-link-form">
-        <input type="text" name="xai_phone_number" placeholder="xAI number, e.g. +15125550123" required>
-        <input type="text" name="xai_signing_secret" placeholder="Webhook signing secret" required>
-        <button class="btn btn-primary btn-small" type="submit">Attach xAI number</button>
-      </form>
-      {% endif %}
-      {% if provision_error %}
-      <p class="job-notes">{{ provision_error }}</p>
-      {% endif %}
-      {# Billing state decides whether the spend cap can silence this client's
-         employees at all, so it belongs next to the cap reading, not on a
-         separate settings page. #}
-      <p class="job-notes">
-        Billing: <strong>{{ client.billing_state }}</strong>
-        · ${{ "%.2f"|format(client.trial_spend_cents / 100) }} spent
-        {% if client.billing_state == "paid" %}(uncapped){% endif %}
-      </p>
-      {% if client.billing_state != "paid" and client.trial_spend_cents >= client.trial_cap_cents %}
-      <p class="job-notes">⚠ Trial cap reached (${{ "%.2f"|format(client.trial_spend_cents / 100) }} spent, ${{ "%.2f"|format((client.trial_cap_cents + client.trial_soft_buffer_cents) / 100) }} hard stop) — <strong>this client's employees have stopped replying.</strong></p>
-      {% endif %}
-      {% if billing_error %}<p class="job-notes">{{ billing_error }}</p>{% endif %}
-      <form method="post" action="/clients/{{ client.id }}/billing-state">
-        {% if client.billing_state == "paid" %}
-        <input type="hidden" name="billing_state" value="trial">
-        <button class="btn btn-secondary btn-small" type="submit">Move back to trial</button>
-        {% else %}
-        <input type="hidden" name="billing_state" value="paid">
-        <button class="btn btn-primary btn-small" type="submit">Move to paid (remove cap)</button>
-        {% endif %}
-      </form>
-    </div>
-
-    {% for face in ["quote", "reactivation", "membership"] %}
-    <div class="agent-tile recovery-panel">
-      <div class="agent-tile-head">
-        <span class="agent-badge {{ 'agent-badge-active' if campaigns_by_face[face] else 'agent-badge-off' }}">
-          {{ face_display_names[face] }}{% if campaigns_by_face[face] %} &middot; {{ campaigns_by_face[face]|length }}{% endif %}
-        </span>
-        <a class="btn btn-primary btn-small" href="/clients/{{ client.id }}/recovery/new?face={{ face }}">+ New campaign</a>
-      </div>
-      {% for c in campaigns_by_face[face] %}
-      <div class="job-card">
-        <a href="/clients/{{ client.id }}/recovery/{{ c.id }}"><strong>{{ c.name }}</strong></a>
-      </div>
-      {% endfor %}
-      {% if not campaigns_by_face[face] %}<p class="empty">No {{ face_display_names[face] }} campaigns yet.</p>{% endif %}
-    </div>
-    {% endfor %}
-
-    <div class="agent-tile">
-      <div class="agent-tile-head">
-        <span class="agent-badge {{ 'agent-badge-active' if client.review_link else 'agent-badge-off' }}">
-          Reviews{% if client.review_link %} &middot; on{% endif %}
-        </span>
-      </div>
-      <p class="agent-tile-desc">Texts a review link the moment a job's marked done.</p>
-      <form method="post" action="/clients/{{ client.id }}/review-link" class="review-link-form">
-        <input type="url" name="review_link" placeholder="https://g.page/r/..." value="{{ client.review_link or '' }}">
-        <button class="btn btn-secondary btn-small" type="submit">Save</button>
-      </form>
-    </div>
-
-    <div class="agent-tile">
-      <div class="agent-tile-head">
-        <span class="agent-badge {{ 'agent-badge-active' if client.membership_plan else 'agent-badge-off' }}">
-          Membership{% if client.membership_plan %} &middot; on{% endif %}
-        </span>
-      </div>
-      <p class="agent-tile-desc">Offers the maintenance plan a week after a repair, to customers who don't have one. Quoted word for word — write it exactly as the owner would say it.</p>
-      <form method="post" action="/clients/{{ client.id }}/membership-plan" class="review-link-form">
-        <input type="text" name="membership_plan" placeholder="Comfort Club — $19/month, two tune-ups a year plus priority scheduling." value="{{ client.membership_plan or '' }}">
-        <button class="btn btn-secondary btn-small" type="submit">Save</button>
-      </form>
-    </div>
-
-    <div class="agent-tile">
-      <div class="agent-tile-head">
-        <span class="agent-badge {{ 'agent-badge-active' if client.referral_incentive else 'agent-badge-off' }}">
-          Lead-gen{% if client.referral_incentive %} &middot; on{% endif %}
-        </span>
-      </div>
-      <p class="agent-tile-desc">Asks happy customers to refer a friend, a few days after the job's done.</p>
-      <form method="post" action="/clients/{{ client.id }}/referral-incentive" class="review-link-form">
-        <input type="text" name="referral_incentive" placeholder="$25 off your next service" value="{{ client.referral_incentive or '' }}">
-        <button class="btn btn-secondary btn-small" type="submit">Save</button>
-      </form>
-      {% for lead in referral_leads %}
-      <div class="job-card">
-        {% if lead.referred_name or lead.referred_phone %}
-        <strong>{{ lead.referred_name or "Unknown name" }}</strong>
-        {% if lead.referred_phone %}<div>{{ lead.referred_phone }}</div>{% endif %}
-        {% else %}
-        <p class="job-notes">{{ lead.raw_reply_text }}</p>
-        {% endif %}
-      </div>
-      {% endfor %}
-      {% if not referral_leads %}<p class="empty">No referrals yet.</p>{% endif %}
-    </div>
-  </div>
-</section>
-
-<div class="detail-grid">
-  <section class="chat-panel">
-    <h2>Conversation</h2>
-    <div class="chat-log">
-      {% for m in chat %}
-      <div class="chat-bubble {{ m.role }}">{{ m.text }}</div>
-      {% endfor %}
-      {% if not chat %}<p class="empty">No messages yet.</p>{% endif %}
-    </div>
-    <form method="post" action="/clients/{{ client.id }}/chat" class="chat-form">
-      <input name="message" placeholder="Type as the customer..." autocomplete="off" required>
-      <button class="btn btn-primary" type="submit">Send</button>
-    </form>
-  </section>
-
-  <aside class="jobs-panel">
-    <h2>Captured jobs</h2>
+<section class="console-section" id="jobs">
+  <h2>Bookings &amp; jobs</h2>
+  {% if jobs %}
+  <div class="job-grid">
     {% for j in jobs %}
-    <div class="job-card">
+    {% set unsettled = j.preferred_window and j.booking_status not in ("confirmed", "cancelled") %}
+    <div class="job-card{{ ' is-waiting' if unsettled }}">
       <div class="job-urgency {{ j.urgency }}">{{ j.urgency }}</div>
-      <strong>{{ j.service_type }}</strong>
       {% if is_test_thread(j.customer_phone) %}<span class="agent-badge agent-badge-off">test</span>{% endif %}
+      <strong>{{ j.service_type }}</strong>
       {% if j.customer_name %}<div>{{ j.customer_name }}</div>{% endif %}
       {% if j.address %}<div>{{ j.address }}</div>{% endif %}
       {% if j.callback_number %}<div>{{ j.callback_number }}</div>{% endif %}
@@ -312,8 +75,7 @@
       {# The amount is optional on purpose: a blank stays unknown rather than
          becoming $0, and forcing a number here would just get one invented. #}
       <form method="post" action="/clients/{{ client.id }}/jobs/{{ j.id }}/complete">
-        <input type="text" name="value" placeholder="What was it worth? e.g. 1240"
-               inputmode="decimal" style="width:150px;">
+        <input type="text" name="value" placeholder="What was it worth? e.g. 1240" inputmode="decimal">
         <button class="btn btn-secondary btn-small" type="submit">Mark done</button>
       </form>
       {# Milestone A: every control below both changes the booking state AND
@@ -322,22 +84,40 @@
          Hidden once the booking is settled (confirmed or cancelled): a button
          whose transition would be rejected is a dead control. #}
       {% if j.booking_status not in ("confirmed", "cancelled") %}
+      {# Confirm only exists when there is a time to confirm. booking_manager
+         refuses a windowless confirm outright (it used to text the customer
+         "you're confirmed for your visit" — a confirmation with no time in
+         it), so rendering the button here would be a dead control by the
+         codebase's own rule. Offering a time is the real next action, so it
+         takes the ember instead. #}
+      {% if unsettled %}
       <form method="post" action="/clients/{{ client.id }}/jobs/{{ j.id }}/confirm">
-        <button class="btn btn-secondary btn-small" type="submit"
+        <button class="btn btn-primary btn-small" type="submit"
                 title="Only click this once you've actually checked real availability for this time — this is the one action that lets the customer be told it's confirmed.">
           I've confirmed this time
         </button>
       </form>
+      {% else %}
       <form method="post" action="/clients/{{ client.id }}/jobs/{{ j.id }}/propose">
-        <input type="text" name="window" placeholder="Suggest another window, e.g. Friday 8am-12pm"
-               style="width:280px;" required>
-        <button class="btn btn-secondary btn-small" type="submit">Suggest this time instead</button>
+        <input type="text" name="window" placeholder="Offer a time, e.g. Friday 8am-12pm" required>
+        <button class="btn btn-primary btn-small" type="submit">Offer this time</button>
       </form>
-      <form method="post" action="/clients/{{ client.id }}/jobs/{{ j.id }}/reject">
-        <input type="text" name="reason" placeholder="Why? (kept private — never sent to the customer)"
-               style="width:280px;">
-        <button class="btn btn-secondary btn-small" type="submit">Can't take this booking</button>
-      </form>
+      {% endif %}
+      {# Folded so the default card is one decision tall. Both still text the
+         customer the moment they're used — see booking_manager. #}
+      <details class="booking-timeline">
+        <summary>Other responses</summary>
+        {% if unsettled %}
+        <form method="post" action="/clients/{{ client.id }}/jobs/{{ j.id }}/propose">
+          <input type="text" name="window" placeholder="Suggest another window, e.g. Friday 8am-12pm" required>
+          <button class="btn btn-secondary btn-small" type="submit">Suggest this time instead</button>
+        </form>
+        {% endif %}
+        <form method="post" action="/clients/{{ client.id }}/jobs/{{ j.id }}/reject">
+          <input type="text" name="reason" placeholder="Why? (kept private — never sent to the customer)">
+          <button class="btn btn-secondary btn-small" type="submit">Can't take this booking</button>
+        </form>
+      </details>
       {% endif %}
       {% endif %}
       {% if j.booking_status == "cancelled" %}
@@ -360,19 +140,324 @@
       {% endif %}
     </div>
     {% endfor %}
-    {% if not jobs %}<p class="empty">No jobs captured yet.</p>{% endif %}
-  </aside>
-</div>
-
-<section class="agent-tile" style="margin-top:32px; max-width:480px;">
-  <div class="agent-tile-head">
-    <span class="agent-badge" style="background:transparent;color:var(--bad);border:1px solid var(--bad);">Danger zone</span>
   </div>
-  <p class="agent-tile-desc">Permanently deletes this business and everything under it — customers, jobs, messages, campaigns, employees. No undo.</p>
-  <form method="post" action="/clients/{{ client.id }}/delete" class="review-link-form"
-        onsubmit="return confirm('Permanently delete {{ client.business_name }}? This cannot be undone.');">
-    <input type="text" name="confirm_name" placeholder="Type &quot;{{ client.business_name }}&quot; to confirm" required>
-    <button class="btn btn-danger btn-small" type="submit">Delete client</button>
-  </form>
+  {% else %}
+  <p class="empty">No jobs captured yet.</p>
+  {% endif %}
 </section>
+
+{% if open_interests %}
+<section class="console-section" id="expansion">
+  <h2>Expansion requests</h2>
+  <div class="agent-tile">
+    <p class="agent-tile-desc">Departments this customer asked about. Oldest first — handle the one that's waited longest. Marking a request handled records that ops dealt with it; it does not deploy anything. Deploy from Setup below.</p>
+    {% for row in open_interests %}
+    <div class="job-card">
+      <strong>Asked for {{ row.department.display_name if row.department else row.interest.department_key }}</strong>
+      <div>{{ row.interest.created_at.strftime('%b %d, %I:%M %p') }}</div>
+      <form method="post" action="/clients/{{ client.id }}/interests/{{ row.interest.id }}/actioned">
+        <button class="btn btn-secondary btn-small" type="submit">Mark handled</button>
+      </form>
+    </div>
+    {% endfor %}
+  </div>
+</section>
+{% endif %}
+
+<section class="console-section">
+  <h2>Test as a customer</h2>
+  <div class="detail-grid">
+    <div class="chat-panel">
+      <div class="chat-log">
+        {% for m in chat %}
+        <div class="chat-bubble {{ m.role }}">{{ m.text }}</div>
+        {% endfor %}
+        {% if not chat %}<p class="empty">No messages yet.</p>{% endif %}
+      </div>
+      <form method="post" action="/clients/{{ client.id }}/chat" class="chat-form">
+        <input name="message" placeholder="Type as the customer..." autocomplete="off" required>
+        <button class="btn btn-primary" type="submit">Send</button>
+      </form>
+    </div>
+  </div>
+</section>
+
+{# ── Everything one-time, folded ─────────────────────────────────────────
+   Closed by default: a client is opened to do today's work, not to re-read
+   the carrier forwarding codes. Nothing here was cut — it is the same set of
+   panels, in the order the founder actually does them. #}
+<details class="console-fold" id="setup">
+  <summary>Setup &amp; configuration <span class="console-fold-hint">— provisioning, access, departments, campaigns</span></summary>
+  <div class="console-fold-body">
+
+    <section class="agent-roster">
+      <h2 class="agent-roster-heading">Setup</h2>
+      {# Every item is derived from a real column — nothing here can be ticked
+         optimistically. #}
+      <div class="agent-tile">
+        <ol class="setup-checklist">
+          {% for step in checklist %}
+          <li class="{{ 'is-done' if step.done else 'is-todo' }}">
+            <strong>{{ "✓" if step.done else "○" }} {{ step.label }}</strong>
+            {% if not step.done %}<div class="agent-tile-desc">{{ step.hint }}</div>{% endif %}
+          </li>
+          {% endfor %}
+        </ol>
+      </div>
+    </section>
+
+    <section class="agent-roster">
+      <h2 class="agent-roster-heading">Dashboard access</h2>
+      <div class="agent-tile">
+        <p class="agent-tile-desc">Roster sets every customer up by hand, so the owner never picks a password.
+          This link is how they get into their own dashboard — text it to them. It works for
+          {{ access_link_days }} days, then send a fresh one from this page.</p>
+        <input type="text" class="access-link-field" value="{{ access_link }}" readonly
+               onclick="this.select();" aria-label="Dashboard access link">
+
+        <p class="agent-tile-desc" style="margin-top:16px;">Their email is a backup door: with it set they can also
+          use Google sign-in, so a lost link isn't a support call. It is not a login on its own.</p>
+        <form method="post" action="/clients/{{ client.id }}/owner-email" class="review-link-form">
+          <input type="email" name="owner_email" placeholder="owner@theirshop.com" value="{{ client.email or '' }}">
+          <button class="btn btn-secondary btn-small" type="submit">Save email</button>
+        </form>
+        {% if access_error %}<p class="job-notes">{{ access_error }}</p>{% endif %}
+      </div>
+    </section>
+
+    <section class="agent-roster">
+      <h2 class="agent-roster-heading">Provisioning pipeline</h2>
+      {% if stage_error %}<p class="job-notes">{{ stage_error }}</p>{% endif %}
+      <div class="agent-tile">
+        <p class="agent-tile-desc">Where this business sits in onboarding. Set it explicitly — it never advances on its own.</p>
+        <form method="post" action="/clients/{{ client.id }}/pipeline-stage" class="review-link-form">
+          {% for s in pipeline_stages %}
+          <button class="btn {{ 'btn-primary' if s == client.pipeline_stage else 'btn-secondary' }} btn-small"
+                  type="submit" name="stage" value="{{ s }}">{{ s }}</button>
+          {% endfor %}
+        </form>
+      </div>
+    </section>
+
+    <section class="agent-roster">
+      <h2 class="agent-roster-heading">Departments</h2>
+      {% if deploy_error %}<p class="job-notes">{{ deploy_error }}</p>{% endif %}
+      <div class="agent-roster-grid">
+        {% for row in department_rows %}
+        <div class="agent-tile">
+          <div class="agent-tile-head">
+            <span class="agent-badge {{ 'agent-badge-active' if row.status.state == 'staffed' else 'agent-badge-off' }}">
+              {{ row.status.department.display_name }}
+            </span>
+          </div>
+          <p class="agent-tile-desc"><strong>{{ row.label }}</strong></p>
+          <p class="agent-tile-desc">{{ row.status.department.mission }}</p>
+          {% if row.status.staffed %}
+          <p class="agent-tile-desc">Working: {% for e in row.status.staffed %}{{ e.display_name }}{{ ", " if not loop.last }}{% endfor %}</p>
+          {% endif %}
+          {% if row.status.state == 'unavailable' %}
+          <p class="job-notes">Every role in this department is still planned — nothing to deploy yet.</p>
+          {% elif row.status.state in ('empty', 'partial') %}
+          <form method="post" action="/clients/{{ client.id }}/employees/deploy" class="review-link-form"
+                onsubmit="this.querySelector('button').disabled = true;">
+            <input type="hidden" name="department_key" value="{{ row.status.department.key }}">
+            <button class="btn btn-primary btn-small" type="submit">
+              {{ "Complete deployment" if row.status.state == 'partial' else "Deploy" }}
+            </button>
+          </form>
+          {% endif %}
+        </div>
+        {% endfor %}
+      </div>
+    </section>
+
+    <section class="agent-roster">
+      <h2 class="agent-roster-heading">Phone, voice &amp; billing</h2>
+      <div class="agent-tile">
+        <div class="agent-tile-head">
+          <span class="agent-badge {{ 'agent-badge-active' if client.xai_phone_number else 'agent-badge-off' }}">
+            Phone number{% if client.inbound_number %} &middot; {{ client.inbound_number }}{% endif %}
+          </span>
+        </div>
+        {% if client.xai_phone_number %}
+        <p class="agent-tile-desc">Live — voice + SMS both wired up. Have the client forward their real number to {{ client.inbound_number }}.</p>
+        {# The activation page promises the owner we'll send these steps, and
+           there is no email sender in the product to keep that promise. Until
+           there is, the founder sends them by hand — so they have to be on the
+           page the founder is already looking at, not in their head. #}
+        <details class="agent-tile-desc" style="margin-top:12px;">
+          <summary><strong>Forwarding steps to send the client</strong></summary>
+          {% if client.answer_mode == "primary" %}
+          <p style="margin-top:8px;">Primary mode — every call goes to Roster first. On the phone with the business line:</p>
+          <ul>
+            <li><strong>Verizon:</strong> dial <code>*72{{ client.inbound_number|replace("+1", "") }}</code> &middot; cancel with <code>*73</code></li>
+            <li><strong>AT&amp;T:</strong> dial <code>*21*{{ client.inbound_number }}#</code> &middot; cancel with <code>#21#</code></li>
+            <li><strong>T-Mobile:</strong> dial <code>**21*{{ client.inbound_number }}#</code> &middot; cancel with <code>##21#</code></li>
+          </ul>
+          {% else %}
+          <p style="margin-top:8px;">Backup mode — Roster only picks up what they miss. On the phone with the business line:</p>
+          <ul>
+            <li><strong>Verizon:</strong> dial <code>*71{{ client.inbound_number|replace("+1", "") }}</code> &middot; cancel with <code>*73</code></li>
+            <li><strong>AT&amp;T:</strong> dial <code>*61*{{ client.inbound_number }}#</code> &middot; cancel with <code>#61#</code></li>
+            <li><strong>T-Mobile:</strong> dial <code>**61*{{ client.inbound_number }}#</code> &middot; cancel with <code>##61#</code></li>
+          </ul>
+          {% endif %}
+          <p>Codes vary by carrier and plan — if one is rejected, the client's carrier support line has the right one. Confirm it worked by dialling their business number yourself and hearing Roster answer.</p>
+        </details>
+        {% elif client.twilio_number_sid %}
+        <p class="agent-tile-desc">Number bought and SMS-ready ({{ client.inbound_number }}), but voice registration with xAI didn't complete — see server logs.</p>
+        <form method="post" action="/clients/{{ client.id }}/retry-xai-registration" class="review-link-form">
+          <button class="btn btn-primary btn-small" type="submit">Retry xAI voice registration</button>
+        </form>
+        <p class="agent-tile-desc" style="margin-top:12px;">Or attach one manually: create the number in the xAI console, point its webhook at <code>/webhook/xai-incoming-call</code>, and paste it + its signing secret here.</p>
+        <form method="post" action="/clients/{{ client.id }}/attach-xai-number" class="review-link-form">
+          <input type="text" name="xai_phone_number" placeholder="xAI number, e.g. +15125550123" required>
+          <input type="text" name="xai_signing_secret" placeholder="Webhook signing secret" required>
+          <button class="btn btn-primary btn-small" type="submit">Attach xAI number</button>
+        </form>
+        {% else %}
+        {% if client.inbound_number %}
+        <p class="agent-tile-desc">Business line on file ({{ client.inbound_number }}), but no AI number is provisioned yet — buy one below to enable SMS and voice.</p>
+        {% else %}
+        <p class="agent-tile-desc">No number yet — buy one to enable SMS and voice for this client.</p>
+        {% endif %}
+        <form method="post" action="/clients/{{ client.id }}/provision-number" class="review-link-form"
+              onsubmit="this.querySelector('button').disabled = true;">
+          <input type="text" name="area_code" placeholder="Area code (optional)" maxlength="3">
+          <button class="btn btn-primary btn-small" type="submit">Buy &amp; wire up number</button>
+        </form>
+        <p class="agent-tile-desc" style="margin-top:12px;">Or attach an xAI voice number (no Twilio): create the number in the xAI console, point its webhook at <code>/webhook/xai-incoming-call</code>, and paste it + its signing secret here.</p>
+        <form method="post" action="/clients/{{ client.id }}/attach-xai-number" class="review-link-form">
+          <input type="text" name="xai_phone_number" placeholder="xAI number, e.g. +15125550123" required>
+          <input type="text" name="xai_signing_secret" placeholder="Webhook signing secret" required>
+          <button class="btn btn-primary btn-small" type="submit">Attach xAI number</button>
+        </form>
+        {% endif %}
+        {% if provision_error %}
+        <p class="job-notes">{{ provision_error }}</p>
+        {% endif %}
+        {# Billing state decides whether the spend cap can silence this client's
+           employees at all, so it belongs next to the cap reading, not on a
+           separate settings page. #}
+        <p class="job-notes">
+          Billing: <strong>{{ client.billing_state }}</strong>
+          · ${{ "%.2f"|format(client.trial_spend_cents / 100) }} spent
+          {% if client.billing_state == "paid" %}(uncapped){% endif %}
+        </p>
+        {% if client.billing_state != "paid" and client.trial_spend_cents >= client.trial_cap_cents %}
+        <p class="job-notes">⚠ Trial cap reached (${{ "%.2f"|format(client.trial_spend_cents / 100) }} spent, ${{ "%.2f"|format((client.trial_cap_cents + client.trial_soft_buffer_cents) / 100) }} hard stop) — <strong>this client's employees have stopped replying.</strong></p>
+        {% endif %}
+        {% if billing_error %}<p class="job-notes">{{ billing_error }}</p>{% endif %}
+        <form method="post" action="/clients/{{ client.id }}/billing-state">
+          {% if client.billing_state == "paid" %}
+          <input type="hidden" name="billing_state" value="trial">
+          <button class="btn btn-secondary btn-small" type="submit">Move back to trial</button>
+          {% else %}
+          <input type="hidden" name="billing_state" value="paid">
+          <button class="btn btn-primary btn-small" type="submit">Move to paid (remove cap)</button>
+          {% endif %}
+        </form>
+      </div>
+    </section>
+
+    <section class="agent-roster">
+      <h2 class="agent-roster-heading">Campaigns &amp; follow-up</h2>
+      <div class="agent-roster-grid">
+        {% for face in ["quote", "reactivation", "membership"] %}
+        <div class="agent-tile recovery-panel">
+          <div class="agent-tile-head">
+            <span class="agent-badge {{ 'agent-badge-active' if campaigns_by_face[face] else 'agent-badge-off' }}">
+              {{ face_display_names[face] }}{% if campaigns_by_face[face] %} &middot; {{ campaigns_by_face[face]|length }}{% endif %}
+            </span>
+            <a class="btn btn-primary btn-small" href="/clients/{{ client.id }}/recovery/new?face={{ face }}">+ New campaign</a>
+          </div>
+          {% for c in campaigns_by_face[face] %}
+          <div class="job-card">
+            <a href="/clients/{{ client.id }}/recovery/{{ c.id }}"><strong>{{ c.name }}</strong></a>
+          </div>
+          {% endfor %}
+          {% if not campaigns_by_face[face] %}<p class="empty">No {{ face_display_names[face] }} campaigns yet.</p>{% endif %}
+        </div>
+        {% endfor %}
+
+        <div class="agent-tile">
+          <div class="agent-tile-head">
+            <span class="agent-badge {{ 'agent-badge-active' if client.review_link else 'agent-badge-off' }}">
+              Reviews{% if client.review_link %} &middot; on{% endif %}
+            </span>
+          </div>
+          <p class="agent-tile-desc">Texts a review link the moment a job's marked done.</p>
+          <form method="post" action="/clients/{{ client.id }}/review-link" class="review-link-form">
+            <input type="url" name="review_link" placeholder="https://g.page/r/..." value="{{ client.review_link or '' }}">
+            <button class="btn btn-secondary btn-small" type="submit">Save</button>
+          </form>
+        </div>
+
+        <div class="agent-tile">
+          <div class="agent-tile-head">
+            <span class="agent-badge {{ 'agent-badge-active' if client.membership_plan else 'agent-badge-off' }}">
+              Membership{% if client.membership_plan %} &middot; on{% endif %}
+            </span>
+          </div>
+          <p class="agent-tile-desc">Offers the maintenance plan a week after a repair, to customers who don't have one. Quoted word for word — write it exactly as the owner would say it.</p>
+          <form method="post" action="/clients/{{ client.id }}/membership-plan" class="review-link-form">
+            <input type="text" name="membership_plan" placeholder="Comfort Club — $19/month, two tune-ups a year plus priority scheduling." value="{{ client.membership_plan or '' }}">
+            <button class="btn btn-secondary btn-small" type="submit">Save</button>
+          </form>
+        </div>
+
+        <div class="agent-tile">
+          <div class="agent-tile-head">
+            <span class="agent-badge {{ 'agent-badge-active' if client.referral_incentive else 'agent-badge-off' }}">
+              Lead-gen{% if client.referral_incentive %} &middot; on{% endif %}
+            </span>
+          </div>
+          <p class="agent-tile-desc">Asks happy customers to refer a friend, a few days after the job's done.</p>
+          <form method="post" action="/clients/{{ client.id }}/referral-incentive" class="review-link-form">
+            <input type="text" name="referral_incentive" placeholder="$25 off your next service" value="{{ client.referral_incentive or '' }}">
+            <button class="btn btn-secondary btn-small" type="submit">Save</button>
+          </form>
+          {% for lead in referral_leads %}
+          <div class="job-card">
+            {% if lead.referred_name or lead.referred_phone %}
+            <strong>{{ lead.referred_name or "Unknown name" }}</strong>
+            {% if lead.referred_phone %}<div>{{ lead.referred_phone }}</div>{% endif %}
+            {% else %}
+            <p class="job-notes">{{ lead.raw_reply_text }}</p>
+            {% endif %}
+          </div>
+          {% endfor %}
+          {% if not referral_leads %}<p class="empty">No referrals yet.</p>{% endif %}
+        </div>
+      </div>
+    </section>
+
+  </div>
+</details>
+
+<details class="console-fold is-danger">
+  <summary>Danger zone</summary>
+  <div class="console-fold-body">
+    <p class="agent-tile-desc">Permanently deletes this business and everything under it — customers, jobs, messages, campaigns, employees. No undo.</p>
+    <form method="post" action="/clients/{{ client.id }}/delete" class="review-link-form"
+          onsubmit="return confirm('Permanently delete {{ client.business_name }}? This cannot be undone.');">
+      <input type="text" name="confirm_name" placeholder="Type &quot;{{ client.business_name }}&quot; to confirm" required>
+      <button class="btn btn-danger btn-small" type="submit">Delete client</button>
+    </form>
+  </div>
+</details>
+
+{# A work-queue link pointing at #setup has to actually open the fold it
+   targets. Chrome auto-expands <details> for fragment navigation; Safari and
+   Firefox do not, so a queue item would scroll to a closed box and look
+   broken. Three lines rather than leaving that to browser roulette. #}
+<script>
+  function openTargetFold() {
+    if (!location.hash) return;
+    const el = document.getElementById(location.hash.slice(1));
+    if (el && el.tagName === "DETAILS") el.open = true;
+  }
+  addEventListener("hashchange", openTargetFold);
+  openTargetFold();
+</script>
 {% endblock %}

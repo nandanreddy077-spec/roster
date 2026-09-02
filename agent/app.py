@@ -520,6 +520,76 @@ def _founder_department_rows(employees: list) -> list:
     ]
 
 
+def _founder_action_queue(
+    client: Business, jobs: list, open_interests: list, checklist: list
+) -> list:
+    """What this client needs the founder to DO, at the top of the page.
+
+    The console used to open on a setup checklist and close, 378 lines later,
+    on the jobs waiting for a callback — so the one thing done daily lived
+    below three "save this text field" forms. Everything here is derived from
+    rows the route already loaded; nothing new is queried, and nothing is
+    invented (a client with a clean queue renders an empty list, not a
+    reassuring placeholder).
+
+    Ordered by what costs the most to leave alone: a silenced workforce, then
+    a customer waiting on a human, then a sales signal, then setup.
+    """
+    queue = []
+
+    capped = client.billing_state != "paid" and client.trial_spend_cents >= client.trial_cap_cents
+    if capped:
+        queue.append(
+            {
+                "severity": "critical",
+                "text": "Trial cap hit — this client's employees have stopped replying.",
+                "href": "#setup",
+            }
+        )
+
+    # A booking the customer has put a time on that nobody has answered. The
+    # customer is, right now, waiting to hear whether they have an
+    # appointment — the single most expensive thing on this page to miss.
+    waiting = [
+        j for j in jobs if j.preferred_window and j.booking_status not in ("confirmed", "cancelled")
+    ]
+    if waiting:
+        queue.append(
+            {
+                "severity": "high",
+                "text": (
+                    f"{len(waiting)} booking{'s' if len(waiting) != 1 else ''} "
+                    f"waiting on you to confirm a time"
+                ),
+                "href": "#jobs",
+            }
+        )
+
+    if open_interests:
+        queue.append(
+            {
+                "severity": "normal",
+                "text": (
+                    f"{len(open_interests)} expansion request"
+                    f"{'s' if len(open_interests) != 1 else ''} unhandled"
+                ),
+                "href": "#expansion",
+            }
+        )
+
+    todo = [step for step in checklist if not step["done"]]
+    if todo:
+        queue.append(
+            {
+                "severity": "normal",
+                "text": f"Setup incomplete — next: {todo[0]['label']}",
+                "href": "#setup",
+            }
+        )
+
+    return queue
+
+
 def _setup_checklist(client: Business, department_rows: list, real_job_count: int) -> list:
     """ "Is this shop actually live?" answered in one place, in the order the
     founder does the work, so setup stops being a memory game across five
@@ -598,6 +668,40 @@ def list_clients(request: Request):
         access_requests = session.exec(
             select(AccessRequest).order_by(AccessRequest.created_at.desc())
         ).all()
+        # What each client needs a human for. The list carried no attention
+        # signal at all before 2026-09-01, so "which shop is broken right
+        # now?" meant opening every card — the same problem the client page
+        # had, one level up. Two grouped queries, not one per client.
+        waiting_rows = session.exec(
+            select(Job.business_id, func.count(Job.id))
+            .where(
+                Job.preferred_window.is_not(None),
+                Job.booking_status.not_in(("confirmed", "cancelled")),
+                Job.completed_at.is_(None),
+            )
+            .group_by(Job.business_id)
+        ).all()
+        interest_rows = session.exec(
+            select(DepartmentInterest.business_id, func.count(DepartmentInterest.id))
+            .where(DepartmentInterest.actioned_at.is_(None))
+            .group_by(DepartmentInterest.business_id)
+        ).all()
+        waiting = dict(waiting_rows)
+        interests = dict(interest_rows)
+        # A silenced workforce outranks any queue length — it is the one state
+        # where the product is actively not working for a paying-ish client.
+        attention = {
+            c.id: {
+                "capped": c.billing_state != "paid" and c.trial_spend_cents >= c.trial_cap_cents,
+                "count": waiting.get(c.id, 0) + interests.get(c.id, 0),
+            }
+            for c in clients
+        }
+        # Needy clients first; ties keep the newest-first order they arrived in.
+        clients = sorted(
+            clients,
+            key=lambda c: (not attention[c.id]["capped"], -attention[c.id]["count"]),
+        )
     return templates.TemplateResponse(
         request,
         "clients.html",
@@ -606,6 +710,7 @@ def list_clients(request: Request):
             "recovery_counts": recovery_counts,
             "access_requests": access_requests,
             "staffed_departments": staffed_departments,
+            "attention": attention,
         },
     )
 
@@ -1394,6 +1499,7 @@ def client_detail(request: Request, client_id: int):
             "open_interests": open_interests,
             "pipeline_stages": PIPELINE_STAGES,
             "checklist": checklist,
+            "action_queue": _founder_action_queue(client, jobs, open_interests, checklist),
             "booking_timelines": booking_timelines,
             "access_link": access_link,
             "access_link_days": ACCESS_LINK_MAX_AGE_SECONDS // 86400,

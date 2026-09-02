@@ -46,27 +46,38 @@ templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
 PORTAL_CSS_VERSION = str(int((BASE_DIR / "static" / "portal.css").stat().st_mtime))
 templates.env.globals["portal_css_version"] = PORTAL_CSS_VERSION
 
-# The executive-view page's VISIBLE name. Provisional by founder decision
-# (blueprint §4a: "safe to build against, not safe to consider final"), so
-# routes, modules and template filenames stay `briefing` permanently and only
-# this constant changes when the name does. Registered as a Jinja global so
-# every template reads it without any route having to pass it — and
-# test_briefing_label.py fails if a template hardcodes the words instead.
-BRIEFING_LABEL = "The Briefing"
-templates.env.globals["briefing_label"] = BRIEFING_LABEL
+# Every customer-visible metric today is unwindowed —
+# metrics.department_outcomes and employee_outcomes both default `since=None`,
+# so the numbers are lifetime totals. A bare "14" with no time frame was the
+# single most-asked "what does this even mean?" on the old dashboard, so every
+# value renders its window next to it. One Jinja global rather than a per-route
+# kwarg: the honest answer is the same on every page, and it changes in one
+# place the day a metric grows a real window.
+METRIC_WINDOW = "All time"
+templates.env.globals["metric_window"] = METRIC_WINDOW
 
 # Navigation represents stable CUSTOMER concepts, never implementation
 # structure (founder design principle, 2026-07-29). These name things an owner
 # already thinks about — never "Employees", "Jobs", "Campaigns" or "Agents",
 # which are how the work is built, not how they think about their business.
 #
-# Expansion is deliberately absent: a permanent "grow your workforce" tab would
-# make the product read as a storefront. It appears contextually instead
-# (blueprint §5) — an Overview recommendation, an inactive department card, a
-# Briefing nudge.
+# THREE destinations since 2026-09-01, down from five (founder). Overview,
+# Departments and the Briefing were three renderings of the same department
+# cards — Overview and Departments literally shared one partial and the
+# Briefing hand-rolled a third copy — so an owner had no way to know which of
+# the three to open. That, not the styling, was what made the dashboard
+# confusing. Home absorbed the Briefing, the only one of the three that
+# answered a question ("does anything need me?"); Departments kept the grid;
+# Notifications became a drill-down reached from Home, the same shape as the
+# Employee and Expansion workspaces, rather than a permanent tab for a feed
+# that is empty most days. ARCHITECTURE.md invariant 5 records the amendment.
 #
-# Every visible label lives here so renaming one — including the provisional
-# Briefing name — never means editing templates.
+# Expansion stays deliberately absent: a permanent "grow your workforce" tab
+# would make the product read as a storefront. It appears contextually instead
+# (blueprint §5) — an inactive department card, a Home growth nudge.
+#
+# Every visible label AND its icon lives here, so restyling or renaming a
+# destination never means editing a template.
 # Where a logged-in owner lands, and where every action redirects back to. One
 # constant because the Phase 6 cutover found TWELVE hardcoded "/dashboard"
 # redirects, all of which had to move together — the next move should be one
@@ -74,12 +85,27 @@ templates.env.globals["briefing_label"] = BRIEFING_LABEL
 DASHBOARD_HOME = "/v2/dashboard"
 SETTINGS_HOME = "/v2/dashboard/settings"
 
+# `icon` is an SVG path `d`, drawn on a 24x24 stroke-only grid by
+# portal_base.html's nav_icon macro.
 NAV_ITEMS = (
-    {"key": "overview", "label": "Overview", "href": DASHBOARD_HOME},
-    {"key": "departments", "label": "Departments", "href": "/v2/dashboard/departments"},
-    {"key": "briefing", "label": BRIEFING_LABEL, "href": "/v2/dashboard/briefing"},
-    {"key": "notifications", "label": "Notifications", "href": "/v2/dashboard/notifications"},
-    {"key": "settings", "label": "Settings", "href": SETTINGS_HOME},
+    {
+        "key": "home",
+        "label": "Home",
+        "href": DASHBOARD_HOME,
+        "icon": "M3 10.5 12 3l9 7.5M5.5 9.5V20h13V9.5",
+    },
+    {
+        "key": "departments",
+        "label": "Departments",
+        "href": "/v2/dashboard/departments",
+        "icon": "M4 20V9l8-5 8 5v11M4 20h16M10 20v-5h4v5",
+    },
+    {
+        "key": "settings",
+        "label": "Settings",
+        "href": SETTINGS_HOME,
+        "icon": "M4 7h3M11 7h9M4 12h9M17 12h3M4 17h6M14 17h6M9 5v4M15 10v4M12 15v4",
+    },
 )
 templates.env.globals["nav_items"] = NAV_ITEMS
 
@@ -191,7 +217,14 @@ def login_submit(request: Request, email: str = Form(...), password: str = Form(
             return templates.TemplateResponse(
                 request,
                 "login.html",
-                {"error": "Invalid email or password.", "email": email},
+                {
+                    "error": "Invalid email or password.",
+                    "email": email,
+                    # Was omitted here, so a mistyped password silently removed
+                    # the Google button — the backup door for an owner whose
+                    # access link expired, gone at the one moment they need it.
+                    "google_enabled": google_enabled(),
+                },
                 status_code=400,
             )
         request.session["client_id"] = client.id
@@ -460,25 +493,35 @@ def _gateway_card(session, business_id: int, status) -> dict:
 
 
 @router.get("/v2/dashboard")
-def v2_overview(request: Request):
-    """Requires a session but NOT frontdesk_live: the old dashboard bounced
-    un-activated businesses into onboarding, and after Phase 6 there is no
-    onboarding wizard to bounce them to. They see honest empty states.
+def v2_home(request: Request):
+    """Where a logged-in owner lands. Requires a session but NOT
+    frontdesk_live: the old dashboard bounced un-activated businesses into
+    onboarding, and after Phase 6 there is no onboarding wizard to bounce them
+    to. They see honest empty states.
 
-    Navigation, not reporting: every card here is a gateway into its
-    Department Workspace, never the full outcomes list."""
+    Renders a SINGLE assembled BriefingWorkspace — a synthesis over the
+    Department/Expansion Workspaces already built, never a second independent
+    report. This route WAS `v2_overview`, which rendered its own grid of
+    gateway cards; the Briefing rendered a near-identical grid one page away,
+    and Departments rendered a third. Home is now the only page that answers
+    "does anything need me, and what did my workforce do?" (founder,
+    2026-09-01).
+
+    GET-only, and it never records interest: viewing a growth nudge must not
+    itself be an action taken on the owner's behalf (Phase 3's guard, upheld
+    the same way on the /expand GET route).
+    """
     with Session(engine) as session:
         business = _current_client(request, session)
         if business is None:
             return RedirectResponse("/login", status_code=303)
-        working = [s for s in _statuses(session, business.id) if s.state in _ACTIVE_STATES]
         return templates.TemplateResponse(
             request,
-            "dashboard_v2/overview.html",
+            "dashboard_v2/home.html",
             {
                 "business": business,
-                "active_nav": "overview",
-                "gateway_cards": [_gateway_card(session, business.id, s) for s in working],
+                "active_nav": "home",
+                "workspace": build_briefing_workspace(session, business.id),
             },
         )
 
@@ -640,21 +683,12 @@ def v2_request_expansion(request: Request, department_key: str):
 
 @router.get("/v2/dashboard/briefing")
 def v2_briefing(request: Request):
-    """Renders a SINGLE assembled BriefingWorkspace — a synthesis over the
-    Department/Expansion Workspaces already built, never a second independent
-    report. GET-only: viewing a growth nudge must never itself record
-    interest (Phase 3's guard, upheld here the same way it is on the /expand
-    GET route)."""
-    with Session(engine) as session:
-        business = _current_client(request, session)
-        if business is None:
-            return RedirectResponse("/login", status_code=303)
-        ws = build_briefing_workspace(session, business.id)
-        return templates.TemplateResponse(
-            request,
-            "dashboard_v2/briefing.html",
-            {"business": business, "active_nav": "briefing", "workspace": ws},
-        )
+    """The Briefing became Home on 2026-09-01 — it was the one of the three
+    overlapping pages worth keeping, so it moved to the front door rather than
+    being deleted. This redirect stays because the old URL is in owners' text
+    messages and browser history; a 404 there would read as the product
+    breaking, not as a menu getting shorter."""
+    return RedirectResponse(DASHBOARD_HOME, status_code=303)
 
 
 @router.get("/v2/dashboard/notifications")
@@ -670,7 +704,7 @@ def v2_notifications(request: Request):
         return templates.TemplateResponse(
             request,
             "dashboard_v2/notifications.html",
-            {"business": business, "active_nav": "notifications", "notifications": notifications},
+            {"business": business, "active_nav": "home", "notifications": notifications},
         )
 
 

@@ -1,284 +1,411 @@
-/* Customer portal — signup, login, onboarding, dashboard. Reuses the same
-   design tokens as hire.css/DESIGN.md so the portal reads as one continuous
-   surface with the landing page. */
-@import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&display=swap');
+/* ═══════════════════════════════════════════════════════════════════════════
+   Roster — customer portal (signup, login, onboarding, dashboard).
+
+   Runs Slate & Ember, the same locked palette as the landing page
+   (landing/styles-v2.css), so the brand no longer forks between the page an
+   owner is sold on and the product they log into. DESIGN.md's dashboard
+   colour section was amended 2026-09-01 to record this.
+
+   SEMANTICS — strict, inherited from the landing:
+     black  (--text)     information / authority
+     ember  (--accent)   Roster / action / attention — CTA, active nav,
+                          selected state, the thing that needs you. NEVER
+                          decoration.
+     green  (--success)  a successful outcome only — booked, working, done.
+     grey   (--muted)    secondary / inactive information
+   ═══════════════════════════════════════════════════════════════════════════ */
+@import url('https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700&display=swap');
 
 :root {
-  --bg: #F7F4EC;
-  --bg-alt: #F0EBDF;
-  --card: #FFFFFF;
-  --border: #E4DDCB;
-  --text: #1F1B16;
-  --text-dim: #6B6354;
-  --accent: #C2693D;
-  --accent-dim: #F1DDD0;
-  --accent-dark: #A2532F;
-  --ink: #17140F;
-  --proof: #3F6B4A;
-  --proof-dim: #DEE9E1;
-  --soon: #A39E8F;
-  --serif: "Fraunces", Georgia, "Iowan Old Style", "Times New Roman", serif;
+  /* ---- LOCKED PALETTE (mirrors landing/styles-v2.css) ---- */
+  --bg:           #F5F5F3;
+  --card:         #FFFFFF;
+  --border:       #DEDED9;
+  --text:         #1A1A17;
+  --muted:        #6B6B66;
+  --accent:       #B4451F;
+  --accent-soft:  #F5E8E2;
+  --success:      #28734F;
+  --success-soft: #E3EFE9;
+  --danger:       #A8331F;
+  --ink:          #1A1A17;
+  --shadow: 0 1px 2px rgba(26, 26, 23, .04), 0 10px 28px -16px rgba(26, 26, 23, .14);
+  /* ---- END PALETTE ---- */
+
+  /* Legacy aliases. Older pages (onboarding, activation, the v1 dashboard)
+     still reference these names inline; pointing them at the new palette
+     retones those pages without touching a dozen templates. */
+  --bg-alt:      #EDEDEA;
+  --text-dim:    #6B6B66;
+  --accent-dim:  #F5E8E2;
+  --accent-dark: #8E3517;
+  --proof:       #28734F;
+  --proof-dim:   #E3EFE9;
+  --soon:        #6B6B66;
+  --good:        #28734F;
+
+  --sans: "Hanken Grotesk", "Hanken Grotesk Fallback", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --serif: var(--sans);   /* kept as a name so nothing downstream churns */
+  --mono: ui-monospace, SFMono-Regular, "JetBrains Mono", Menlo, monospace;
+
+  --s1: 8px; --s2: 16px; --s3: 24px; --s4: 32px; --s5: 48px;
+  --r-sm: 8px; --r-md: 12px; --r-lg: 16px; --r-pill: 999px;
+  --sidebar: 232px;
+  --ease: cubic-bezier(.22, .61, .36, 1);
+}
+
+/* Hanken Grotesk sits close to Arial metrics — a light size-adjust on the
+   fallback keeps the webfont swap from shifting the layout. */
+@font-face {
+  font-family: "Hanken Grotesk Fallback";
+  src: local("Arial"), local("Helvetica Neue"), local("Roboto");
+  size-adjust: 99%;
 }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
+html { -webkit-text-size-adjust: 100%; }
 body {
   background: var(--bg);
   color: var(--text);
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-  line-height: 1.6;
+  font-family: var(--sans);
+  font-size: 15px;
+  line-height: 1.55;
   -webkit-font-smoothing: antialiased;
+  overflow-x: clip;              /* narrow-width overflow guard */
 }
-h1, h2, .logo { font-family: var(--serif); font-weight: 600; color: var(--ink); }
+h1, h2, h3, .logo { font-family: var(--sans); font-weight: 650; color: var(--ink); letter-spacing: -.017em; }
+a { color: var(--accent); }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
-.nav { background: var(--card); border-bottom: 1px solid var(--border); padding: 16px 24px; }
-.logo { font-size: 20px; text-decoration: none; color: var(--ink); }
+/* ── Auth / onboarding cards (signup, login, activation) ──────────────── */
+
+.nav { background: var(--card); border-bottom: 1px solid var(--border); padding: var(--s2) var(--s3); }
+.logo { font-size: 19px; text-decoration: none; color: var(--ink); font-weight: 700; letter-spacing: -.02em; }
 
 .portal-card {
   max-width: 420px;
-  margin: 48px auto;
+  margin: var(--s5) auto;
   background: var(--card);
   border: 1px solid var(--border);
-  border-radius: 12px;
-  padding: 32px;
+  border-radius: var(--r-lg);
+  padding: var(--s4);
 }
-.portal-card h2 { font-size: 24px; margin-bottom: 8px; }
-.portal-card .lede { color: var(--text-dim); margin-bottom: 24px; }
+.portal-card h2 { font-size: 22px; margin-bottom: var(--s1); }
+.portal-card .lede { color: var(--muted); margin-bottom: var(--s3); }
 
-.field { margin-bottom: 16px; }
-.field label { display: block; font-size: 14px; margin-bottom: 6px; color: var(--text-dim); }
-.field .hint { font-weight: 400; }
+.field { margin-bottom: var(--s2); }
+.field label { display: block; font-size: 13px; font-weight: 600; margin-bottom: 6px; color: var(--text); }
+.field .hint { font-weight: 400; color: var(--muted); }
 .field input, .field select, .field textarea {
   width: 100%;
   padding: 10px 12px;
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: var(--r-sm);
   font-size: 15px;
   font-family: inherit;
-  background: var(--bg);
+  background: var(--card);
   color: var(--text);
+  transition: border-color 160ms var(--ease), box-shadow 160ms var(--ease);
+}
+.field input:focus, .field select:focus, .field textarea:focus {
+  outline: none; border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
 }
 .field textarea { min-height: 90px; resize: vertical; }
 .field input[type="radio"] { width: auto; padding: 0; margin: 3px 10px 0 0; flex-shrink: 0; }
 .choice { display: flex; align-items: flex-start; font-size: 14px; color: var(--text); cursor: pointer; line-height: 1.45; }
-.choice strong { color: var(--text); }
 
 .btn {
   display: inline-block;
-  padding: 12px 20px;
-  border-radius: 10px;
-  border: none;
-  font-size: 15px;
+  padding: 11px 18px;
+  border-radius: var(--r-sm);
+  border: 1px solid transparent;
+  font-size: 14px;
   font-weight: 600;
+  font-family: inherit;
   cursor: pointer;
   text-decoration: none;
   text-align: center;
+  transition: background 160ms var(--ease), border-color 160ms var(--ease), color 160ms var(--ease);
 }
 .btn-primary { background: var(--accent); color: #fff; width: 100%; }
 .btn-primary:hover { background: var(--accent-dark); }
-.btn-secondary { background: var(--bg-alt); color: var(--text); border: 1px solid var(--border); }
+.btn-secondary { background: var(--card); color: var(--text); border-color: var(--border); }
+.btn-secondary:hover { border-color: var(--text); }
+.btn-small { padding: 7px 12px; font-size: 13px; }
 
-.err { color: #A8331F; font-size: 14px; margin-top: 12px; min-height: 1.2em; }
-.portal-foot { text-align: center; margin-top: 20px; font-size: 14px; color: var(--text-dim); }
+.err { color: var(--danger); font-size: 14px; margin-top: 12px; min-height: 1.2em; }
+.portal-foot { text-align: center; margin-top: 20px; font-size: 14px; color: var(--muted); }
 .portal-foot a { color: var(--accent); }
 
-/* Google sign-in — a neutral card button distinct from the rust primary CTA,
-   so it reads as an alternate door, not the main action. */
 .btn-google {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 10px;
-  width: 100%;
-  background: var(--card);
-  color: var(--text);
-  border: 1px solid var(--border);
+  display: flex; align-items: center; justify-content: center; gap: 10px;
+  width: 100%; background: var(--card); color: var(--text); border-color: var(--border);
 }
-.btn-google:hover { background: var(--bg-alt); }
+.btn-google:hover { background: var(--bg); }
 .or-divider {
-  display: flex;
-  align-items: center;
-  text-align: center;
-  color: var(--text-dim);
-  font-size: 13px;
-  margin: 16px 0;
+  display: flex; align-items: center; text-align: center;
+  color: var(--muted); font-size: 13px; margin: var(--s2) 0;
 }
-.or-divider::before, .or-divider::after {
-  content: "";
-  flex: 1;
-  border-bottom: 1px solid var(--border);
-}
+.or-divider::before, .or-divider::after { content: ""; flex: 1; border-bottom: 1px solid var(--border); }
 .or-divider span { padding: 0 12px; }
 
-/* ---- Department-first dashboard shell (Phase 5) --------------------------
-   DESIGN.md: existing tokens only, no new palette; dashboard type scale
-   (H1 28 / H2 18 / body 14 / small 12-13); 8px base unit; radius sm 6 / md 10
-   / lg 12; hover+focus motion only at 150-200ms; no dark mode. */
+/* ═══ Dashboard shell ══════════════════════════════════════════════════════
+   Three destinations, not five (founder, 2026-09-01). Overview, Departments
+   and the Briefing were three renderings of the same department cards, which
+   is what made the product feel like a maze — an owner had no way to know
+   which of the three to open. Home absorbed the Briefing (the only one of
+   the three that answered a question), Departments kept the grid, Settings
+   is unchanged. Notifications became a drill-down off Home, the same shape
+   as the Employee and Expansion workspaces.
 
-.portal-shell { padding-bottom: 72px; }               /* clears the mobile bar */
+   Desktop gets a left rail rather than a top bar: the category standard
+   (ServiceTitan, Jobber, Housecall Pro) and it keeps the destination list
+   visible while the owner is deep in a workspace. Phone keeps the
+   thumb-reachable bottom bar — three items now, so each is a wide target.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+.portal-shell { padding-bottom: 76px; }               /* clears the mobile bar */
 
 .portal-nav {
-  display: flex; align-items: center; gap: 24px; flex-wrap: wrap;
+  display: flex; align-items: center; gap: var(--s2); flex-wrap: wrap;
   background: var(--card); border-bottom: 1px solid var(--border);
-  padding: 16px 24px;
+  padding: 12px var(--s3);
 }
-.portal-nav-logo { margin-right: 8px; }
-.portal-nav-list { display: none; list-style: none; gap: 8px; flex: 1; }
+.portal-nav-logo { margin-right: var(--s1); }
+.portal-nav-list { display: none; list-style: none; gap: 4px; flex: 1; }
 .portal-nav-link {
-  display: block; padding: 8px 12px; border-radius: 10px;
-  font-size: 14px; color: var(--text-dim); text-decoration: none;
-  transition: background 160ms ease, color 160ms ease;
+  display: flex; align-items: center; gap: 10px;
+  padding: 9px 12px; border-radius: var(--r-sm);
+  font-size: 14px; font-weight: 500; color: var(--muted); text-decoration: none;
+  transition: background 160ms var(--ease), color 160ms var(--ease);
 }
-.portal-nav-link:hover, .portal-nav-link:focus-visible {
-  background: var(--bg-alt); color: var(--text);
-}
-.portal-nav-link.is-active { background: var(--accent-dim); color: var(--accent-dark); font-weight: 600; }
+.portal-nav-link:hover, .portal-nav-link:focus-visible { background: var(--bg); color: var(--text); }
+.portal-nav-link.is-active { background: var(--accent-soft); color: var(--accent); font-weight: 650; }
+.portal-nav-icon { flex: none; width: 18px; height: 18px; stroke: currentColor; fill: none; stroke-width: 1.6; }
 .portal-nav-logout { margin-left: auto; }
 
-.portal-main { max-width: 1040px; margin: 0 auto; padding: 32px 24px; }
-.portal-head { margin-bottom: 24px; }
-.portal-head h1 { font-size: 28px; }
-.portal-lede { color: var(--text-dim); font-size: 14px; margin-top: 4px; }
+.portal-main { max-width: 960px; margin: 0 auto; padding: var(--s4) var(--s3); }
+.portal-head { margin-bottom: var(--s3); }
+.portal-head h1 { font-size: 27px; line-height: 1.15; }
+.portal-lede { color: var(--muted); font-size: 15px; margin-top: 4px; max-width: 62ch; }
 
-.portal-card-wide { max-width: 100%; margin: 0 0 24px; }
-.portal-eyebrow {
-  font-size: 12px; letter-spacing: .08em; text-transform: uppercase;
-  color: var(--text-dim); margin-bottom: 8px;
-}
-.portal-empty { color: var(--text-dim); font-size: 14px; }
-.portal-dept-list { list-style: none; display: flex; flex-wrap: wrap; gap: 8px; }
-.portal-dept-list a {
-  display: block; padding: 8px 12px; border: 1px solid var(--border);
-  border-radius: 10px; font-size: 14px; color: var(--text); text-decoration: none;
-  transition: background 160ms ease;
-}
-.portal-dept-list a:hover, .portal-dept-list a:focus-visible { background: var(--bg-alt); }
-
-/* Thumb-reachable bar for the owner in a truck (platform PRD P1) rather than
-   a hamburger that hides the whole IA behind one tap. */
 .portal-tabbar {
   position: fixed; bottom: 0; left: 0; right: 0; z-index: 10;
   display: flex; background: var(--card); border-top: 1px solid var(--border);
+  padding-bottom: env(safe-area-inset-bottom);
 }
 .portal-tab {
-  flex: 1; min-height: 56px;                            /* large tap target */
-  display: flex; align-items: center; justify-content: center; text-align: center;
-  padding: 8px 4px; font-size: 12px; line-height: 1.25;
-  color: var(--text-dim); text-decoration: none;
-  transition: color 160ms ease;
+  flex: 1; min-height: 58px;                            /* large tap target */
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 3px; text-align: center;
+  padding: 8px 4px; font-size: 12px; font-weight: 500; line-height: 1.2;
+  color: var(--muted); text-decoration: none;
+  transition: color 160ms var(--ease);
 }
-/* The longest label ("The Briefing", itself provisional) wrapped to two lines
-   on a 375px phone, leaving the bar ragged and taller than the others. Scaled
-   down at the narrowest widths rather than truncating, so a future longer
-   label degrades the same way instead of being cut off. */
-@media (max-width: 430px) {
-  .portal-tab { font-size: 11px; padding: 8px 2px; }
-}
-.portal-tab.is-active { color: var(--accent-dark); font-weight: 600; }
+.portal-tab .portal-nav-icon { width: 20px; height: 20px; }
+.portal-tab.is-active { color: var(--accent); font-weight: 650; }
 
-@media (min-width: 768px) {
-  .portal-nav-list { display: flex; }
+/* ── Left rail (desktop) ─────────────────────────────────────────────────
+   Same markup as the phone bar; only the layout differs, so a nav item can
+   never exist in one place and not the other. */
+@media (min-width: 900px) {
+  .portal-nav {
+    position: fixed; top: 0; bottom: 0; left: 0; width: var(--sidebar);
+    flex-direction: column; align-items: stretch; gap: var(--s3);
+    border-bottom: none; border-right: 1px solid var(--border);
+    padding: var(--s3) var(--s2);
+    overflow-y: auto;
+  }
+  .portal-nav-logo { margin: 0 0 0 12px; font-size: 20px; }
+  .portal-nav-list { display: flex; flex-direction: column; flex: 1; }
+  .portal-nav-logout { margin: 0; }
+  .portal-nav-logout .btn { width: 100%; }
   .portal-tabbar { display: none; }
-  .portal-shell { padding-bottom: 0; }
+  .portal-shell { padding-bottom: 0; padding-left: var(--sidebar); }
+  .portal-main { padding: var(--s5) var(--s4); }
 }
 
-/* Department cards + outcome strips. DESIGN.md: existing tokens, dashboard
-   type scale, 8px rhythm, radius lg 12 on cards. */
-.portal-dept-grid { display: grid; grid-template-columns: 1fr; gap: 16px; }
-.portal-dept-card { max-width: 100%; margin: 0; }
+
+/* ── Cards ───────────────────────────────────────────────────────────────── */
+
+.portal-card-wide {
+  max-width: 100%; margin: 0 0 var(--s2);
+  padding: var(--s3);
+  border-radius: var(--r-md);
+}
+.portal-eyebrow {
+  font-size: 11px; letter-spacing: .1em; text-transform: uppercase;
+  font-weight: 700; color: var(--muted); margin-bottom: 6px;
+}
+.portal-empty { color: var(--muted); font-size: 14px; }
+
+.portal-section-title {
+  font-size: 13px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase;
+  color: var(--muted); margin: var(--s4) 0 12px;
+}
+.portal-section-title:first-child { margin-top: 0; }
+
+/* ── Status pills ────────────────────────────────────────────────────────
+   Green means an outcome actually happened. Ember means something wants the
+   owner. Grey means inactive. Nothing else earns colour. */
+.portal-state {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 12px; font-weight: 650; white-space: nowrap;
+  color: var(--muted); background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--r-pill); padding: 3px 10px;
+}
+.portal-state::before {
+  content: ""; width: 6px; height: 6px; border-radius: 50%;
+  background: currentColor; flex: none;
+}
+.portal-state.is-working { color: var(--success); background: var(--success-soft); border-color: transparent; }
+.portal-state.is-attention { color: var(--accent); background: var(--accent-soft); border-color: transparent; }
+
+/* ── Home: the attention block ───────────────────────────────────────────
+   The one thing the old dashboard never had — a page that opens by saying
+   what wants the owner, instead of restating numbers they already saw. The
+   view model already sorts highlights into attention / working_well /
+   growth; the old Briefing template flattened all three into one list, so
+   "someone escalated to you" looked identical to "3 jobs booked". */
+.portal-attention {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--accent);
+  border-radius: var(--r-md);
+  padding: var(--s3);
+  margin-bottom: var(--s2);
+}
+.portal-attention .portal-eyebrow { color: var(--accent); }
+.portal-attention-list { list-style: none; }
+.portal-attention-list li { border-top: 1px solid var(--border); }
+.portal-attention-list li:first-child { border-top: none; }
+.portal-attention-list a {
+  display: flex; align-items: center; justify-content: space-between; gap: var(--s2);
+  padding: 11px 0; font-size: 15px; font-weight: 500;
+  color: var(--text); text-decoration: none;
+}
+.portal-attention-list a::after { content: "→"; color: var(--accent); flex: none; }
+/* Outside the alert block the same rows are suggestions, not things that want
+   the owner — so they keep the affordance and give up the ember. */
+.portal-card > .portal-attention-list a { font-weight: 400; }
+.portal-card > .portal-attention-list a::after { color: var(--muted); }
+.portal-attention-list a:hover, .portal-attention-list a:focus-visible { color: var(--accent); }
+
+.portal-allclear {
+  display: flex; align-items: center; gap: 10px;
+  background: var(--success-soft); color: var(--success);
+  border-radius: var(--r-md); padding: 14px var(--s3);
+  font-size: 15px; font-weight: 550; margin-bottom: var(--s2);
+}
+
+/* ── Department cards ────────────────────────────────────────────────────── */
+
+.portal-dept-grid { display: grid; grid-template-columns: 1fr; gap: var(--s2); }
+.portal-dept-card, .portal-gateway-card, .portal-employee-card {
+  max-width: 100%; margin: 0; height: 100%;
+  padding: var(--s3); border-radius: var(--r-md);
+}
 .portal-dept-head {
-  display: flex; align-items: baseline; justify-content: space-between;
+  display: flex; align-items: center; justify-content: space-between;
   gap: 12px; flex-wrap: wrap;
 }
-.portal-dept-head h2 { font-size: 18px; }
-.portal-state {
-  font-size: 12px; font-weight: 600; white-space: nowrap;
-  color: var(--text-dim); background: var(--bg-alt);
-  border-radius: 20px; padding: 3px 10px;
-}
-.portal-state.is-working { color: var(--proof); background: var(--proof-dim); }
-.portal-dept-mission { color: var(--text-dim); font-size: 14px; margin-top: 4px; }
+.portal-dept-head h2 { font-size: 17px; }
+.portal-dept-mission { color: var(--muted); font-size: 14px; margin-top: 6px; }
 
-/* Outcomes lead; who did the work is secondary (blueprint §2 hierarchy). */
-.portal-outcomes { list-style: none; display: flex; flex-wrap: wrap; gap: 24px; margin-top: 16px; }
+/* Outcomes lead; who did the work is secondary (blueprint §2 hierarchy).
+   Every value carries its own time frame — the single most common "what does
+   this number even mean?" on the old dashboard was a bare 14 with no window.
+   These metrics are unwindowed (metrics.department_outcomes defaults
+   since=None), so the caption says exactly that rather than implying a week
+   nobody measured. */
+.portal-outcomes { list-style: none; display: flex; flex-wrap: wrap; gap: var(--s3); margin-top: var(--s2); }
 .portal-outcomes li { display: flex; flex-direction: column; }
-.portal-outcome-value { font-family: var(--serif); font-size: 28px; color: var(--ink); line-height: 1.1; }
-.portal-outcome-label { font-size: 12px; color: var(--text-dim); }
-.portal-dept-team { font-size: 13px; color: var(--text-dim); margin-top: 16px; }
-
-.portal-dept-edu { margin-top: 16px; }
-.portal-dept-edu dt {
-  font-size: 12px; letter-spacing: .08em; text-transform: uppercase;
-  color: var(--text-dim); margin-top: 12px;
+.portal-outcome-value {
+  font-family: var(--mono); font-variant-numeric: tabular-nums;
+  font-size: 30px; font-weight: 600; color: var(--ink); line-height: 1.05;
+  letter-spacing: -.02em;
 }
-.portal-dept-edu dd { font-size: 14px; margin-top: 2px; }
+.portal-outcome-label { font-size: 13px; color: var(--text); font-weight: 550; margin-top: 4px; }
+.portal-outcome-window { font-size: 11px; color: var(--muted); letter-spacing: .04em; text-transform: uppercase; }
+.portal-outcome-window-strip { margin-top: 18px; }
+.portal-outcome-window-strip + .portal-outcomes { margin-top: 6px; }
+/* A metric this department has never done yet. Still shown — dropping it
+   would hide what the workforce covers — but it stops competing with the
+   numbers that actually happened. */
+.portal-outcomes li.is-zero .portal-outcome-value { font-size: 19px; color: var(--muted); font-weight: 500; }
+.portal-outcomes li.is-zero .portal-outcome-label { color: var(--muted); font-weight: 400; }
 
-@media (min-width: 768px) {
+.portal-dept-edu { margin-top: var(--s2); }
+.portal-dept-edu dt {
+  font-size: 11px; letter-spacing: .1em; text-transform: uppercase; font-weight: 700;
+  color: var(--muted); margin-top: 14px;
+}
+.portal-dept-edu dd { font-size: 14px; margin-top: 3px; }
+
+@media (min-width: 700px) {
   .portal-dept-grid { grid-template-columns: 1fr 1fr; }
 }
 
-/* Department Workspace: section titles, employee grid, timeline. DESIGN.md:
-   existing tokens, dashboard type scale, 8px rhythm. */
-.portal-section-title { font-size: 18px; margin: 32px 0 12px; }
-.portal-employee-grid { display: grid; grid-template-columns: 1fr; gap: 16px; }
-.portal-employee-card { max-width: 100%; margin: 0; }
+/* ── Employees + activity ────────────────────────────────────────────────── */
+
+.portal-employee-grid { display: grid; grid-template-columns: 1fr; gap: var(--s2); }
 .portal-employee-card h3 { font-size: 16px; }
-.portal-outcomes-compact { gap: 16px; margin-top: 10px; }
-.portal-outcomes-compact .portal-outcome-value { font-size: 20px; }
-.portal-activity-preview {
-  list-style: none; margin-top: 12px; font-size: 13px; color: var(--text-dim);
-}
-.portal-activity-preview li { padding: 4px 0; border-top: 1px solid var(--border); }
+.portal-outcomes-compact { gap: var(--s3); margin-top: 12px; }
+.portal-outcomes-compact .portal-outcome-value { font-size: 22px; }
+
+.portal-activity-preview { list-style: none; margin-top: 12px; font-size: 14px; color: var(--muted); }
+.portal-activity-preview li { padding: 8px 0; border-top: 1px solid var(--border); }
 .portal-activity-preview li:first-child { border-top: none; }
-.portal-activity-preview li a {
-  color: var(--text); text-decoration: none; font-size: 14px;
-}
-.portal-activity-preview li a:hover, .portal-activity-preview li a:focus-visible {
-  color: var(--accent);
-}
+.portal-activity-preview li a { color: var(--text); text-decoration: none; }
+.portal-activity-preview li a:hover, .portal-activity-preview li a:focus-visible { color: var(--accent); }
 
 .portal-timeline { list-style: none; }
 .portal-timeline li {
-  padding: 10px 0; border-top: 1px solid var(--border); font-size: 14px;
+  display: flex; gap: var(--s2); flex-wrap: wrap;
+  padding: 11px 0; border-top: 1px solid var(--border); font-size: 14px;
 }
 .portal-timeline li:first-child { border-top: none; }
 .portal-timeline-when {
-  display: inline-block; min-width: 140px; color: var(--text-dim); font-size: 12px;
+  flex: none; min-width: 132px;
+  font-family: var(--mono); font-variant-numeric: tabular-nums;
+  color: var(--muted); font-size: 12px; padding-top: 2px;
 }
 
-@media (min-width: 768px) {
+@media (min-width: 700px) {
   .portal-employee-grid { grid-template-columns: 1fr 1fr; }
 }
 
 .back-link {
-  display: inline-block; font-size: 14px; color: var(--text-dim);
-  text-decoration: none; margin-bottom: 4px;
+  display: inline-block; font-size: 14px; font-weight: 500;
+  color: var(--muted); text-decoration: none; margin-bottom: 6px;
 }
-.back-link:hover, .back-link:focus-visible { color: var(--text); }
+.back-link:hover, .back-link:focus-visible { color: var(--accent); }
 
-.portal-employee-card-link {
+/* Whole-card links. The lift is the only motion in the dashboard — this
+   audience wants speed, not choreography (DESIGN.md Motion). */
+.portal-employee-card-link, .portal-gateway-card-link {
   display: block; text-decoration: none; color: inherit;
-  border-radius: 12px; transition: box-shadow 160ms ease, transform 160ms ease;
+  border-radius: var(--r-md);
+  transition: box-shadow 160ms var(--ease), transform 160ms var(--ease);
 }
-.portal-employee-card-link:hover, .portal-employee-card-link:focus-visible {
-  box-shadow: 0 2px 10px rgba(31, 27, 22, 0.08);
-}
-
-/* Gateway cards (Overview, Departments grid) — navigation, not reporting.
-   DESIGN.md: existing tokens, dashboard type scale, 8px rhythm. */
-.portal-gateway-card-link {
-  display: block; text-decoration: none; color: inherit;
-  border-radius: 12px; transition: box-shadow 160ms ease;
-}
+.portal-employee-card-link:hover, .portal-employee-card-link:focus-visible,
 .portal-gateway-card-link:hover, .portal-gateway-card-link:focus-visible {
-  box-shadow: 0 2px 10px rgba(31, 27, 22, 0.08);
+  box-shadow: var(--shadow); transform: translateY(-1px);
 }
-.portal-gateway-card { max-width: 100%; margin: 0; }
+@media (prefers-reduced-motion: reduce) {
+  .portal-employee-card-link, .portal-gateway-card-link { transition: none; }
+  .portal-employee-card-link:hover, .portal-gateway-card-link:hover { transform: none; }
+}
 
-/* Settings — the only page an owner changes anything from. The save button
-   sits inline with its field rather than spanning the card: full-width
-   .btn-primary is for the one action a page exists for (sign in, activate),
-   and two of those stacked read as a wizard the owner is being marched
-   through, not two small independent edits. */
+/* ── Settings ────────────────────────────────────────────────────────────── */
+
 .settings-form { display: flex; align-items: flex-start; gap: 12px; flex-wrap: wrap; }
 .settings-form .field { margin-bottom: 0; flex: 1 1 260px; }
-.portal-saved { color: var(--good, #4B7A5B); font-size: 14px; margin-bottom: 16px; }
+.settings-form .btn { margin-top: 26px; }
+.portal-saved {
+  background: var(--success-soft); color: var(--success);
+  border-radius: var(--r-sm); padding: 10px 14px;
+  font-size: 14px; font-weight: 550; margin-bottom: var(--s2);
+}

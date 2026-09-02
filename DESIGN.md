@@ -52,7 +52,11 @@ to `employees.REGISTRY`, and unstaffed roles marked as such.
   both surfaces — fast, neutral, no webfont cost for body copy. Landing page and
   dashboard body text stay visually related but the landing page runs slightly
   larger (17px vs 15px) since it's read, not scanned.
-- **UI/Labels (dashboard):** same system sans stack, smaller sizes, no serif.
+- **Dashboards (updated 2026-09-01):** Hanken Grotesk, the same face as the
+  landing, loaded from Google Fonts with an Arial-metric `size-adjust` fallback.
+  Body 15px, no serif. `--serif` survives as a variable name in both stylesheets
+  (pointing at the grotesque) so nothing downstream churned — same trick the
+  landing used.
 - **Data (landing, added 2026-08-27):** `--mono: "JetBrains Mono", ui-monospace, Menlo, monospace`
   with `tabular-nums`. Pinned (not left to the OS) because `$117,000` at ~56px is
   the loudest type on the page. **Usage rule — mono only where values genuinely align in a
@@ -65,17 +69,24 @@ to `employees.REGISTRY`, and unstaffed roles marked as such.
   Display `clamp(40px,5.4vw,60px)`/1.02/-0.033em · Section `clamp(28px,3.2vw,38px)`/1.08/-0.028em
   · Subhead 19px/1.3/-0.014em · Body 17px/1.6 · Micro 13px. Plus one eyebrow
   (11px/700/0.15em caps, sans).
-- **Scale (dashboard):** H1 28px, H2 18px, H3 16px, body 14px, small 12–13px (existing).
-- **Loading:** `<link>` to Google Fonts (Fraunces) on the landing page only — the
-  dashboard keeps its existing serif fallback stack (internal tool, no webfont cost
-  justified).
+- **Scale (dashboard):** H1 27–28px, section labels 13px/700 caps, card H2 17px,
+  H3 16px, body 15px, small 12–13px. Metric values run **mono with
+  `tabular-nums`** at 30px (22px compact, 19px when zero) — a dashboard column of
+  counts is exactly the "values genuinely align in a column" case the usage rule
+  above carves out. Section headers are small caps labels, not headings competing
+  with the page H1.
+- **Loading:** `<link>`/`@import` to Google Fonts on all three surfaces now. The
+  dashboards previously skipped the webfont on cost grounds; a single shared face
+  across the surface an owner is sold on and the one they log into was judged
+  worth one request.
 
 ## Color
 
-**The landing page (`index-v2.html` / `styles-v2.css`) runs "Slate & Ember" (locked)
-as of 2026-08-28.** The dashboard and pre-v2 pages still use the warm-ivory/rust
-system below — the two surfaces have forked on purpose (see the Decisions Log
-entry for why the warm system was retired on the landing).
+**Every surface runs "Slate & Ember" as of 2026-09-01.** The landing page
+(`index-v2.html` / `styles-v2.css`) locked it 2026-08-28; the customer dashboard
+(`portal.css`) and founder console (`styles.css`) adopted the same `:root` block
+in the dashboard redesign. The warm-ivory/rust system is retired everywhere and
+kept below only as the record of what it was.
 
 ### Landing — Slate & Ember (locked 2026-08-28)
 
@@ -114,15 +125,42 @@ and nowhere else.
   blue) were rejected for chasing distinctiveness through colour and reading
   AI-generated / construction-SaaS.
 
-### Dashboard + pre-v2 pages — warm ivory/rust (unchanged)
+### Dashboard + founder console — Slate & Ember (unified 2026-09-01)
+
+**Both product surfaces now run the landing page's locked palette**, ending the
+three-way fork. `agent/static/portal.css` (customer dashboard, signup, login,
+onboarding) and `agent/static/styles.css` (founder console) each carry the same
+`:root` block as `landing/styles-v2.css`, plus a short list of *legacy aliases*
+(`--text-dim`, `--accent-dim`, `--good`, `--bad`, …) pointing at the new values,
+so the older templates' inline styles retone without a sweep through a dozen
+files. Type is Hanken Grotesk on both, matching the landing.
+
+The colour semantics are the landing's, enforced the same way: **ember = action
+or attention** (the "Needs you" block, the active nav item, the one CTA on a
+card), **green = an outcome that actually happened** (Working, Completed,
+booked), **red = broken or destructive** (trial cap hit, delete), **grey =
+inactive**. Ember is never decoration — if two things on a screen are ember,
+one of them is wrong.
+
+Two dashboard-specific additions, neither a new colour:
+- **Every metric states its time frame.** `portal.METRIC_WINDOW` renders next to
+  each value. `metrics.department_outcomes` defaults `since=None`, so the honest
+  caption is "All time" — never an invented week (invariant 10 applies to a
+  metric's *window* as much as to its value).
+- **A metric a department has never done yet is muted by size, not by contrast.**
+  A near-invisible grey would have failed WCAG on a zero that is still real
+  information; `.is-zero` drops the value to 19px at `--muted` instead.
+
+**Dark mode:** still not implemented on either surface — this audience does not
+expect it and the dashboards are used in daylight; revisit if requested.
+
+### Superseded — warm ivory/rust (retired on the dashboards 2026-09-01)
 - `--bg: #F7F4EC` · `--bg-alt: #F0EBDF` · `--card: #FFFFFF` · `--border: #E4DDCB`
 - `--text: #221B12` · `--text-dim: #6B6354`
 - `--accent: #B24E2A` · `--accent-dim: #F0D7C7` · `--accent-dark: #8A3D1E` (white on it 7.6:1)
 - Landing-only semantic additions that shipped with the old system: `--urgency: #A8331F`,
   `--proof: #3F6B4A`. Superseded on the landing by Slate & Ember's `--accent`/`--success`.
 - **Dashboard-only (existing, unchanged):** `--good`, `--soon`, `--bad` status colors.
-- **Dark mode:** not implemented on either surface — this audience does not expect
-  it and the dashboard is an internal tool used in daylight; revisit if requested.
 
 ## Spacing
 - **Base unit:** 8px (both surfaces, matches existing dashboard rhythm).
@@ -185,6 +223,10 @@ and nowhere else.
 ## Decisions Log
 | Date | Decision | Rationale |
 |------|----------|-----------|
+| 2026-09-01 | **Both dashboards redesigned; customer nav collapsed 5 destinations → 3.** Overview and the Briefing deleted, Home (the old Briefing) is the front door, Notifications demoted to a drill-down. | The founder's complaint was "the dashboard is so confusing," and the cause was structural, not visual: Overview, Departments and the Briefing rendered the same department cards — two of them from one shared partial — so no page answered a question the others didn't. ARCHITECTURE.md invariant 5 amended to record it. |
+| 2026-09-01 | **Founder console reorganised work-first; all setup folded.** `/clients/{id}` opens on a derived action queue (bookings awaiting a confirmed time, unhandled expansion requests, trial cap hit, next setup step); provisioning, access, departments, campaigns and the danger zone moved behind two `<details>`. `/clients` sorts by what needs a human and badges it. | The page was a flat 378-line scroll where the daily job — a customer waiting to hear if they have an appointment — sat below three "save this text field" forms. No route or control was removed. |
+| 2026-09-01 | **Slate & Ember adopted on both dashboards; warm ivory/rust retired everywhere.** | The 2026-08-28 fork was deliberate but produced three palettes across three surfaces. One `:root` block, legacy variable names aliased so old inline styles retone for free. |
+| 2026-09-01 | **Every dashboard metric renders its time frame; zero-value metrics recede by size, not contrast.** | A bare count with no window was the most common "what does this even mean?" — and `metrics` defaults `since=None`, so the honest caption is "All time", never an invented week. A department page showing seven zeros at the same weight as its two real numbers is unreadable; a near-invisible grey would have failed WCAG on information that is still real. |
 | 2026-07-02 | Initial design system created | `/design-consultation`, based on existing dashboard tokens + competitor research (Rosie, ServiceTitan, Housecall Pro, Jobber) + user's memorable-thing brief ("all three": loss aversion, trust, identity) |
 | 2026-07-05 | Landing repositioned to "Employment Offer" (hiring frame) | User-approved brainstorm (spec: `docs/superpowers/specs/2026-07-05-landing-repositioning-design.md`): hero sells hiring AI employees; new motifs within existing tokens — ledger sheet with dotted leaders for industry math, employee-number badge cards for the roster, dark "open req" statement section, commission-deal pricing comparison, founding-roster sign-up slots, perforated tear dividers. Palette/type unchanged. |
 | 2026-07-05 | Explicit trade targeting restored | Research (Avoca per-vertical pages; niche-language conversion data): hero eyebrow "AI employees for the trades," sub names HVAC/plumbing, "Built for the trades" grid restored (HVAC/Plumbing "Staffing now" with trade-specific pain copy, others "Ready when you are" — never "coming soon"), founding offer names the trades, title/OG tags name HVAC & plumbing for text-message link previews. |
