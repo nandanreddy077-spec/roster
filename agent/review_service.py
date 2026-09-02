@@ -8,6 +8,7 @@ import logging
 from datetime import datetime, timedelta
 from typing import List, Optional
 
+import optout
 from channels import get_channel
 from db_models import ORIGIN_ESCALATION, Business, Job, ReviewReply
 from employee_outcome import CUSTOMER_FALLBACK_MESSAGE, report_employee_blocked, report_if_failed
@@ -105,6 +106,10 @@ def send_due_review_requests(session: Session) -> List[Job]:
                 business_name=client.business_name,
                 review_link=client.review_link,
             )
+            # Nobody who asked us to stop gets a proactive text, no matter which
+            # employee is running. One check, one record — see optout.py.
+            if optout.is_opted_out(session, client.id, job.callback_number):
+                continue
             sms_channel.send(
                 from_number=client.inbound_number or "", to_number=job.callback_number, body=text
             )
@@ -167,6 +172,10 @@ def send_due_review_followups(session: Session) -> List[Job]:
                 business_name=client.business_name,
                 review_link=client.review_link,
             )
+            # Nobody who asked us to stop gets a proactive text, no matter which
+            # employee is running. One check, one record — see optout.py.
+            if optout.is_opted_out(session, client.id, job.callback_number):
+                continue
             sms_channel.send(
                 from_number=client.inbound_number or "", to_number=job.callback_number, body=text
             )

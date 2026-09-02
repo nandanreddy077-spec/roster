@@ -39,6 +39,7 @@ _sentry_enabled = configure_sentry(os.environ)
 logger.info("sentry configured" if _sentry_enabled else "sentry not configured (no SENTRY_DSN)")
 
 import booking_manager
+import optout
 from auth import ACCESS_LINK_MAX_AGE_SECONDS, make_access_token, resolve_session_secret
 from booking_manager import (
     find_active_owner_proposal,
@@ -83,6 +84,7 @@ from fastapi.templating import Jinja2Templates
 from locks import conversation_lock
 from membership_service import find_active_membership_offer, handle_membership_reply
 from notifications import is_test_thread
+from optout import is_start, is_stop
 from portal import router as portal_router
 from provisioning import (
     ProvisioningError,
@@ -1522,6 +1524,33 @@ def _is_owner(client: Business, from_number: str) -> bool:
     return normalize_phone(from_number) == normalize_phone(client.escalation_phone)
 
 
+# One wording for both, so the promise made when someone opts out is the exact
+# thing that happens when they opt back in.
+UNSUBSCRIBE_CONFIRMATION = (
+    "You've been unsubscribed and won't receive further messages. Reply START to resume."
+)
+RESUBSCRIBE_CONFIRMATION = "You're resubscribed — we'll be in touch. Reply STOP to opt out again."
+
+
+def _settle_open_sequences(session, client: Business, from_number: str, body: str) -> None:
+    """Close any live outbound sequence for this customer, so an unsubscribed
+    person stops appearing as work in progress. Best-effort: the opt-out is
+    already recorded and is the part that matters."""
+    try:
+        recovery_job = find_active_recovery_job(session, client.id, from_number)
+        if recovery_job is not None:
+            handle_recovery_reply(session, client, recovery_job, body)
+        offer = find_active_membership_offer(session, client.id, from_number)
+        if offer is not None:
+            handle_membership_reply(session, client, offer, body)
+    except Exception as e:
+        logger.error(
+            "failed to settle sequences on opt-out",
+            exc_info=e,
+            extra={"business_id": client.id},
+        )
+
+
 def _process_inbound_sms(
     from_number: str, to_number: str, body: str, message_sid: str | None = None
 ) -> str | None:
@@ -1540,6 +1569,26 @@ def _process_inbound_sms(
         # customer at any other, and this is not a customer conversation.
         if _is_owner(client, from_number):
             return handle_owner_sms(session, client, body)
+        # STOP AND START ARE DECIDED HERE, ONCE, FOR EVERY EMPLOYEE.
+        #
+        # Before 2026-09-01 only two of the six handlers below checked STOP,
+        # and even those settled just the one sequence being replied to — so a
+        # customer who unsubscribed from a quote follow-up still got a review
+        # ask, then a referral ask, then a membership offer, each from an
+        # employee that had no idea. Recording it above the cascade is what
+        # makes "you won't receive further messages" true rather than a claim
+        # about one campaign.
+        #
+        # Short-circuits deliberately: a person who just said STOP must not be
+        # handed to a model for a conversational reply. Active sequences are
+        # settled first so they stop showing as live work in the console.
+        if is_stop(body):
+            optout.record_opt_out(session, client.id, from_number)
+            _settle_open_sequences(session, client, from_number, body)
+            return UNSUBSCRIBE_CONFIRMATION
+        if is_start(body):
+            optout.record_opt_in(session, client.id, from_number)
+            return RESUBSCRIBE_CONFIRMATION
         # Serialize per conversation: a rapid double-text from one customer
         # must not run two interleaved agent turns (corrupts history ordering).
         with conversation_lock(client.id, from_number):

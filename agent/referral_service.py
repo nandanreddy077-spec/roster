@@ -8,6 +8,7 @@ import logging
 from datetime import datetime, timedelta
 from typing import List, Optional
 
+import optout
 from channels import get_channel
 from db_models import Business, Job, ReferralLead
 from employee_outcome import CUSTOMER_FALLBACK_MESSAGE, report_employee_blocked, report_if_failed
@@ -72,6 +73,10 @@ def send_due_referral_asks(session: Session) -> List[Job]:
             )
             continue
 
+        # Nobody who asked us to stop gets a proactive text, no matter which
+        # employee is running. One check, one record — see optout.py.
+        if optout.is_opted_out(session, client.id, job.callback_number):
+            continue
         try:
             text = render_referral_template(
                 REFERRAL_MESSAGE_TEMPLATE,
