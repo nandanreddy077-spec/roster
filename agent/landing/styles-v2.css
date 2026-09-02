@@ -492,6 +492,12 @@ a.logo { display: inline-flex; align-items: center; min-height: 44px; }
 .footer-links { display: flex; gap: 2px; align-items: center; }
 .footer-links a { padding: 0 8px; }
 .footer-legal, .footer-legal span { color: var(--muted); }
+.footer-sms {
+  flex-basis: 100%; margin: 0 0 var(--s2); max-width: 70ch;
+  font-size: 12px; line-height: 1.6; color: var(--muted);
+}
+.footer-sms a { color: var(--muted); text-decoration: underline; }
+.footer-sms a:hover { color: var(--text); }
 
 a:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 2px; }
 

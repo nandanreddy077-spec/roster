@@ -436,6 +436,14 @@ def privacy_page():
     return FileResponse(LANDING_DIR / "privacy.html", media_type="text/html")
 
 
+@app.get("/messaging")
+def messaging_page():
+    # The A2P 10DLC campaign submission points its opt-in/CTA URL here; carriers
+    # (errors 30907/30909) require the registered site to describe the SMS
+    # program with STOP/HELP/rates disclosures and link the legal pages.
+    return FileResponse(LANDING_DIR / "messaging.html", media_type="text/html")
+
+
 # Nothing was pointing crawlers at the site or telling them what not to index
 # (/clients is credentialed but a Disallow keeps it out of results entirely;
 # /preview is a duplicate alias of "/"). Two evergreen pages exist today.
