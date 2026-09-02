@@ -39,6 +39,7 @@ _sentry_enabled = configure_sentry(os.environ)
 logger.info("sentry configured" if _sentry_enabled else "sentry not configured (no SENTRY_DSN)")
 
 import booking_manager
+import optout
 from auth import ACCESS_LINK_MAX_AGE_SECONDS, make_access_token, resolve_session_secret
 from booking_manager import (
     find_active_owner_proposal,
@@ -83,6 +84,7 @@ from fastapi.templating import Jinja2Templates
 from locks import conversation_lock
 from membership_service import find_active_membership_offer, handle_membership_reply
 from notifications import is_test_thread
+from optout import is_start, is_stop
 from portal import router as portal_router
 from provisioning import (
     ProvisioningError,
@@ -434,6 +436,14 @@ def privacy_page():
     return FileResponse(LANDING_DIR / "privacy.html", media_type="text/html")
 
 
+@app.get("/messaging")
+def messaging_page():
+    # The A2P 10DLC campaign submission points its opt-in/CTA URL here; carriers
+    # (errors 30907/30909) require the registered site to describe the SMS
+    # program with STOP/HELP/rates disclosures and link the legal pages.
+    return FileResponse(LANDING_DIR / "messaging.html", media_type="text/html")
+
+
 # Nothing was pointing crawlers at the site or telling them what not to index
 # (/clients is credentialed but a Disallow keeps it out of results entirely;
 # /preview is a duplicate alias of "/"). Two evergreen pages exist today.
@@ -518,6 +528,76 @@ def _founder_department_rows(employees: list) -> list:
     ]
 
 
+def _founder_action_queue(
+    client: Business, jobs: list, open_interests: list, checklist: list
+) -> list:
+    """What this client needs the founder to DO, at the top of the page.
+
+    The console used to open on a setup checklist and close, 378 lines later,
+    on the jobs waiting for a callback — so the one thing done daily lived
+    below three "save this text field" forms. Everything here is derived from
+    rows the route already loaded; nothing new is queried, and nothing is
+    invented (a client with a clean queue renders an empty list, not a
+    reassuring placeholder).
+
+    Ordered by what costs the most to leave alone: a silenced workforce, then
+    a customer waiting on a human, then a sales signal, then setup.
+    """
+    queue = []
+
+    capped = client.billing_state != "paid" and client.trial_spend_cents >= client.trial_cap_cents
+    if capped:
+        queue.append(
+            {
+                "severity": "critical",
+                "text": "Trial cap hit — this client's employees have stopped replying.",
+                "href": "#setup",
+            }
+        )
+
+    # A booking the customer has put a time on that nobody has answered. The
+    # customer is, right now, waiting to hear whether they have an
+    # appointment — the single most expensive thing on this page to miss.
+    waiting = [
+        j for j in jobs if j.preferred_window and j.booking_status not in ("confirmed", "cancelled")
+    ]
+    if waiting:
+        queue.append(
+            {
+                "severity": "high",
+                "text": (
+                    f"{len(waiting)} booking{'s' if len(waiting) != 1 else ''} "
+                    f"waiting on you to confirm a time"
+                ),
+                "href": "#jobs",
+            }
+        )
+
+    if open_interests:
+        queue.append(
+            {
+                "severity": "normal",
+                "text": (
+                    f"{len(open_interests)} expansion request"
+                    f"{'s' if len(open_interests) != 1 else ''} unhandled"
+                ),
+                "href": "#expansion",
+            }
+        )
+
+    todo = [step for step in checklist if not step["done"]]
+    if todo:
+        queue.append(
+            {
+                "severity": "normal",
+                "text": f"Setup incomplete — next: {todo[0]['label']}",
+                "href": "#setup",
+            }
+        )
+
+    return queue
+
+
 def _setup_checklist(client: Business, department_rows: list, real_job_count: int) -> list:
     """ "Is this shop actually live?" answered in one place, in the order the
     founder does the work, so setup stops being a memory game across five
@@ -596,6 +676,40 @@ def list_clients(request: Request):
         access_requests = session.exec(
             select(AccessRequest).order_by(AccessRequest.created_at.desc())
         ).all()
+        # What each client needs a human for. The list carried no attention
+        # signal at all before 2026-09-01, so "which shop is broken right
+        # now?" meant opening every card — the same problem the client page
+        # had, one level up. Two grouped queries, not one per client.
+        waiting_rows = session.exec(
+            select(Job.business_id, func.count(Job.id))
+            .where(
+                Job.preferred_window.is_not(None),
+                Job.booking_status.not_in(("confirmed", "cancelled")),
+                Job.completed_at.is_(None),
+            )
+            .group_by(Job.business_id)
+        ).all()
+        interest_rows = session.exec(
+            select(DepartmentInterest.business_id, func.count(DepartmentInterest.id))
+            .where(DepartmentInterest.actioned_at.is_(None))
+            .group_by(DepartmentInterest.business_id)
+        ).all()
+        waiting = dict(waiting_rows)
+        interests = dict(interest_rows)
+        # A silenced workforce outranks any queue length — it is the one state
+        # where the product is actively not working for a paying-ish client.
+        attention = {
+            c.id: {
+                "capped": c.billing_state != "paid" and c.trial_spend_cents >= c.trial_cap_cents,
+                "count": waiting.get(c.id, 0) + interests.get(c.id, 0),
+            }
+            for c in clients
+        }
+        # Needy clients first; ties keep the newest-first order they arrived in.
+        clients = sorted(
+            clients,
+            key=lambda c: (not attention[c.id]["capped"], -attention[c.id]["count"]),
+        )
     return templates.TemplateResponse(
         request,
         "clients.html",
@@ -604,6 +718,7 @@ def list_clients(request: Request):
             "recovery_counts": recovery_counts,
             "access_requests": access_requests,
             "staffed_departments": staffed_departments,
+            "attention": attention,
         },
     )
 
@@ -994,10 +1109,24 @@ def confirm_job(client_id: int, job_id: int):
     now the single writer — and, critically, TEXTS THE CUSTOMER. Before that
     this route set a column and redirected, so a customer who had been told
     "the office will confirm and text you back" never heard from Roster
-    again."""
+    again.
+
+    A booking with no time on it is refused rather than confirmed (2026-09-01)
+    — see booking_manager.confirm. The template already hides the button in
+    that case, so reaching this branch means a stale page or a hand-rolled
+    POST; either way the owner gets told what to do instead of the customer
+    getting a confirmation with no time in it."""
     with Session(engine) as session:
         client, job = _booking_target(session, client_id, job_id)
-        booking_manager.confirm(session, client, job)
+        try:
+            booking_manager.confirm(session, client, job)
+        except booking_manager.NothingToConfirm:
+            return RedirectResponse(
+                f"/clients/{client_id}?booking_error="
+                f"Booking %23{job_id} has no time on it yet — suggest a time first, "
+                "then confirm it.#jobs",
+                status_code=303,
+            )
     return RedirectResponse(f"/clients/{client_id}", status_code=303)
 
 
@@ -1378,6 +1507,7 @@ def client_detail(request: Request, client_id: int):
             "open_interests": open_interests,
             "pipeline_stages": PIPELINE_STAGES,
             "checklist": checklist,
+            "action_queue": _founder_action_queue(client, jobs, open_interests, checklist),
             "booking_timelines": booking_timelines,
             "access_link": access_link,
             "access_link_days": ACCESS_LINK_MAX_AGE_SECONDS // 86400,
@@ -1386,6 +1516,7 @@ def client_detail(request: Request, client_id: int):
             "access_error": request.query_params.get("access_error"),
             "stage_error": request.query_params.get("stage_error"),
             "billing_error": request.query_params.get("billing_error"),
+            "booking_error": request.query_params.get("booking_error"),
         },
     )
 
@@ -1522,6 +1653,33 @@ def _is_owner(client: Business, from_number: str) -> bool:
     return normalize_phone(from_number) == normalize_phone(client.escalation_phone)
 
 
+# One wording for both, so the promise made when someone opts out is the exact
+# thing that happens when they opt back in.
+UNSUBSCRIBE_CONFIRMATION = (
+    "You've been unsubscribed and won't receive further messages. Reply START to resume."
+)
+RESUBSCRIBE_CONFIRMATION = "You're resubscribed — we'll be in touch. Reply STOP to opt out again."
+
+
+def _settle_open_sequences(session, client: Business, from_number: str, body: str) -> None:
+    """Close any live outbound sequence for this customer, so an unsubscribed
+    person stops appearing as work in progress. Best-effort: the opt-out is
+    already recorded and is the part that matters."""
+    try:
+        recovery_job = find_active_recovery_job(session, client.id, from_number)
+        if recovery_job is not None:
+            handle_recovery_reply(session, client, recovery_job, body)
+        offer = find_active_membership_offer(session, client.id, from_number)
+        if offer is not None:
+            handle_membership_reply(session, client, offer, body)
+    except Exception as e:
+        logger.error(
+            "failed to settle sequences on opt-out",
+            exc_info=e,
+            extra={"business_id": client.id},
+        )
+
+
 def _process_inbound_sms(
     from_number: str, to_number: str, body: str, message_sid: str | None = None
 ) -> str | None:
@@ -1540,6 +1698,26 @@ def _process_inbound_sms(
         # customer at any other, and this is not a customer conversation.
         if _is_owner(client, from_number):
             return handle_owner_sms(session, client, body)
+        # STOP AND START ARE DECIDED HERE, ONCE, FOR EVERY EMPLOYEE.
+        #
+        # Before 2026-09-01 only two of the six handlers below checked STOP,
+        # and even those settled just the one sequence being replied to — so a
+        # customer who unsubscribed from a quote follow-up still got a review
+        # ask, then a referral ask, then a membership offer, each from an
+        # employee that had no idea. Recording it above the cascade is what
+        # makes "you won't receive further messages" true rather than a claim
+        # about one campaign.
+        #
+        # Short-circuits deliberately: a person who just said STOP must not be
+        # handed to a model for a conversational reply. Active sequences are
+        # settled first so they stop showing as live work in the console.
+        if is_stop(body):
+            optout.record_opt_out(session, client.id, from_number)
+            _settle_open_sequences(session, client, from_number, body)
+            return UNSUBSCRIBE_CONFIRMATION
+        if is_start(body):
+            optout.record_opt_in(session, client.id, from_number)
+            return RESUBSCRIBE_CONFIRMATION
         # Serialize per conversation: a rapid double-text from one customer
         # must not run two interleaved agent turns (corrupts history ordering).
         with conversation_lock(client.id, from_number):

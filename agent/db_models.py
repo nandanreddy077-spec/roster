@@ -182,6 +182,17 @@ class Customer(SQLModel, table=True):
     # brand-new lead (Sprint 2, 2026-07-29 conversation-quality audit). No
     # founder-console field to set it yet — out of this sprint's scope.
     plan_notes: Optional[str] = None
+    # When this person told us to stop texting them. Set once, on the FIRST
+    # STOP from this number, and never cleared except by an explicit START.
+    #
+    # It lives on Customer, not on the campaign, because that is the scope the
+    # promise actually has: before 2026-09-01 "unsubscribed" only ever settled
+    # the one sequence the customer happened to be replying to, so someone who
+    # texted STOP to a quote follow-up still received a review ask, a referral
+    # ask and a membership offer afterwards. Business-scoped by the same rule
+    # as everything else here — opting out of one shop is not opting out of
+    # another.
+    opted_out_at: Optional[datetime] = None
     tags_json: str = "[]"
     first_seen_at: datetime = Field(default_factory=datetime.utcnow)
     created_at: datetime = Field(default_factory=datetime.utcnow)

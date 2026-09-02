@@ -126,7 +126,28 @@ def render_slot_language(status: str, slot_text: str) -> str:
 def render_confirmed_language(slot_text: str) -> str:
     """The message a customer gets when the owner has genuinely confirmed.
     Callers must have already moved the booking to BOOKING_CONFIRMED — this
-    function trusts its caller, which is why booking_manager is the only one."""
+    function trusts its caller for the STATUS, which is why booking_manager is
+    the only one.
+
+    It does not trust the caller for the TIME. Refusing a blank `slot_text` is
+    the guard added 2026-09-01: booking_manager.confirm() used to fall back to
+    `window or "your visit"`, so a booking nobody had put a time on produced
+    the confirmation sentence below with "your visit" substituted for the
+    time — a customer told they were confirmed, for nothing in particular.
+
+    A confirmation with no time in it is the same failure this module was
+    written to stop, one step further along. The earlier bug claimed a time
+    nobody had checked; this one claims an agreement about a time that does
+    not exist, and the customer cannot even tell what they are supposedly
+    agreeing to. There is no honest way to phrase it, so there is no fallback
+    string — the caller has to have a time or it has nothing to confirm.
+    """
+    if not slot_text or not slot_text.strip():
+        raise BookingLanguageError(
+            "render_confirmed_language() was given no appointment time. "
+            "There is no honest way to tell a customer they are confirmed for "
+            "nothing in particular — propose a time first, then confirm it."
+        )
     return (
         f"Good news — you're confirmed for {slot_text}. "
         "See you then! Reply here if anything changes."

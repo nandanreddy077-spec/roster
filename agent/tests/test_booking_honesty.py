@@ -231,7 +231,15 @@ def test_confirm_route_is_idempotent(test_engine, monkeypatch):
         s.add(biz)
         s.commit()
         s.refresh(biz)
-        job = Job(business_id=biz.id, service_type="drain clear", urgency="routine")
+        # A window is required to confirm at all (booking_manager.confirm
+        # raises NothingToConfirm without one) — this test is about the SECOND
+        # click being a no-op, not about the guard.
+        job = Job(
+            business_id=biz.id,
+            service_type="drain clear",
+            urgency="routine",
+            preferred_window="Tuesday 8am-12pm",
+        )
         s.add(job)
         s.commit()
         s.refresh(job)
@@ -358,3 +366,259 @@ def test_dashboard_shows_confirmed_badge_only_for_a_genuinely_confirmed_job(
     proposed_section = html[html.index("proposed-job") : html.index("proposed-job") + 800]
     assert "✅ Confirmed" not in requested_section
     assert "✅ Confirmed" not in proposed_section
+
+
+# ---- a confirmation must name a time ---------------------------------------
+#
+# Found 2026-09-01. booking_manager.confirm() passed `window or "your visit"`
+# into the confirmation template, so confirming a booking nobody had proposed
+# a time for texted the customer a confirmation naming no time at all. This is
+# the same class of failure the module was written to stop, one step further
+# along: the original bug claimed a time nobody had checked, this one claimed
+# an agreement about a time that did not exist, and the customer could not
+# even tell what they were supposedly agreeing to.
+
+
+def test_a_confirmation_with_no_time_is_refused_at_the_language_layer():
+    """The structural half of the fix: there is no fallback string, so no
+    future caller can produce one by passing an empty window."""
+    from booking_language import render_confirmed_language
+
+    for blank in ("", "   ", None):
+        with pytest.raises(BookingLanguageError):
+            render_confirmed_language(blank)
+
+
+def test_a_real_confirmation_still_names_its_time():
+    from booking_language import render_confirmed_language
+
+    assert "Thursday 9am-12pm" in render_confirmed_language("Thursday 9am-12pm")
+
+
+def test_confirming_a_booking_with_no_time_changes_nothing_and_sends_nothing(
+    test_engine, monkeypatch
+):
+    """The guard runs BEFORE the claim. Ordering matters: the state change
+    commits first and is never rolled back, so a guard that ran after it would
+    leave a booking marked confirmed with no time and no message — strictly
+    worse than the bug it was catching."""
+    import booking_manager
+    from db_models import Business, Job
+    from sqlmodel import Session
+
+    sent = []
+    monkeypatch.setattr(
+        booking_manager,
+        "sms_channel",
+        type("Spy", (), {"send": lambda self, **kw: sent.append(kw)})(),
+    )
+    with Session(test_engine) as s:
+        biz = Business(business_name="Kestrel", trade="plumbing", inbound_number="+15125557777")
+        s.add(biz)
+        s.commit()
+        s.refresh(biz)
+        job = Job(
+            business_id=biz.id,
+            service_type="drain clear",
+            urgency="routine",
+            callback_number="+15125550001",
+        )
+        s.add(job)
+        s.commit()
+        s.refresh(job)
+
+        with pytest.raises(booking_manager.NothingToConfirm):
+            booking_manager.confirm(s, biz, job)
+
+        s.refresh(job)
+        assert job.booking_status == BOOKING_REQUESTED
+        assert job.confirmed_at is None
+    assert sent == [], "a customer was texted about a confirmation that did not happen"
+
+
+def test_the_confirm_route_tells_the_owner_instead_of_texting_the_customer(
+    test_engine, monkeypatch
+):
+    """A stale page or hand-rolled POST reaches the route with no window. The
+    owner gets told what to do; the customer hears nothing."""
+    from db_models import Business, Job
+    from sqlmodel import Session
+
+    client, app_module = _founder_client()
+    monkeypatch.setattr(app_module, "engine", test_engine)
+    with Session(test_engine) as s:
+        biz = Business(business_name="Kestrel", trade="plumbing")
+        s.add(biz)
+        s.commit()
+        s.refresh(biz)
+        job = Job(business_id=biz.id, service_type="drain clear", urgency="routine")
+        s.add(job)
+        s.commit()
+        s.refresh(job)
+        bid, jid = biz.id, job.id
+
+    r = client.post(f"/clients/{bid}/jobs/{jid}/confirm", follow_redirects=False)
+
+    assert r.status_code == 303
+    assert "booking_error" in r.headers["location"]
+    with Session(test_engine) as s:
+        assert s.get(Job, jid).booking_status == BOOKING_REQUESTED
+
+
+def test_the_console_offers_a_time_rather_than_a_confirm_when_there_is_none(
+    test_engine, monkeypatch
+):
+    """No dead controls: the button whose route now refuses must not render.
+    Offering a time is the real next action, so it takes its place."""
+    from db_models import Business, Job
+    from sqlmodel import Session
+
+    client, app_module = _founder_client()
+    monkeypatch.setattr(app_module, "engine", test_engine)
+    with Session(test_engine) as s:
+        biz = Business(business_name="Kestrel", trade="plumbing")
+        s.add(biz)
+        s.commit()
+        s.refresh(biz)
+        s.add(Job(business_id=biz.id, service_type="drain clear", urgency="routine"))
+        s.commit()
+        bid = biz.id
+
+    body = client.get(f"/clients/{bid}").text
+
+    assert "I've confirmed this time" not in body
+    assert "Offer this time" in body
+
+
+def test_the_owner_sms_path_asks_for_a_time_rather_than_confirming_nothing(test_engine):
+    """`Y12` on a booking with no time. The state-machine message would be
+    both wrong (the transition is legal) and useless."""
+    import booking_manager
+    from db_models import Business, Job
+    from sqlmodel import Session
+
+    with Session(test_engine) as s:
+        biz = Business(business_name="Kestrel", trade="plumbing", escalation_phone="+15125559999")
+        s.add(biz)
+        s.commit()
+        s.refresh(biz)
+        job = Job(business_id=biz.id, service_type="drain clear", urgency="routine")
+        s.add(job)
+        s.commit()
+        s.refresh(job)
+
+        reply = booking_manager.handle_owner_sms(s, biz, f"Y{job.id}")
+
+        assert "nothing to confirm" in reply.lower()
+        s.refresh(job)
+        assert job.booking_status == BOOKING_REQUESTED
+
+
+# ---- a settled booking's time is not a detail to merge ----------------------
+#
+# Found 2026-09-01. book_job's 24h dedup window matches any job with
+# completed_at unset, so a CONFIRMED job is a valid merge target: the customer
+# texts again about the same service, mentions another time, the model calls
+# log_job, and preferred_window was overwritten in place while booking_status
+# stayed `confirmed`. The console then showed a confirmed time nobody had
+# checked — and a different one from the time the customer had been texted.
+
+
+def _settled_job(session, status, window="Thursday 9am-12pm"):
+    from db_models import Business, Job
+
+    biz = Business(business_name="Kestrel", trade="plumbing")
+    session.add(biz)
+    session.commit()
+    session.refresh(biz)
+    job = Job(
+        business_id=biz.id,
+        customer_phone="+15125550001",
+        service_type="Drain cleaning",
+        urgency="routine",
+        preferred_window=window,
+        booking_status=status,
+    )
+    session.add(job)
+    session.commit()
+    session.refresh(job)
+    return biz, job
+
+
+@pytest.mark.parametrize("status", ["confirmed", "cancelled"])
+def test_a_later_log_job_cannot_rewrite_a_settled_bookings_time(session, status):
+    from bookings import book_job
+
+    biz, job = _settled_job(session, status)
+
+    merged, created = book_job(
+        session,
+        biz,
+        "+15125550001",
+        "+15125550001",
+        {"service_type": "Drain cleaning", "preferred_window": "Friday 2pm-6pm"},
+    )
+
+    assert created is False, "should still be the same booking, not a duplicate"
+    assert merged.id == job.id
+    assert merged.preferred_window == "Thursday 9am-12pm"
+
+
+def test_the_customers_new_preference_is_not_dropped_on_the_floor(session):
+    """Refusing to rewrite the booking must not lose what the customer said —
+    the owner needs to know they asked, it just isn't a fact about the time."""
+    from bookings import book_job
+
+    biz, _ = _settled_job(session, BOOKING_CONFIRMED)
+
+    merged, _ = book_job(
+        session,
+        biz,
+        "+15125550001",
+        "+15125550001",
+        {"service_type": "Drain cleaning", "preferred_window": "Friday 2pm-6pm"},
+    )
+
+    assert "Friday 2pm-6pm" in (merged.notes or "")
+
+
+def test_an_unsettled_bookings_time_still_merges_normally(session):
+    """The fix must not freeze a booking nobody has committed to yet — a
+    customer refining their preference before anyone answers is the ordinary
+    case this merge exists for."""
+    from bookings import book_job
+
+    biz, _ = _settled_job(session, BOOKING_REQUESTED)
+
+    merged, _ = book_job(
+        session,
+        biz,
+        "+15125550001",
+        "+15125550001",
+        {"service_type": "Drain cleaning", "preferred_window": "Friday 2pm-6pm"},
+    )
+
+    assert merged.preferred_window == "Friday 2pm-6pm"
+
+
+def test_other_details_still_merge_into_a_settled_booking(session):
+    """Only the TIME is protected. A corrected address or callback number on a
+    confirmed job is exactly what the owner needs before the truck rolls."""
+    from bookings import book_job
+
+    biz, _ = _settled_job(session, BOOKING_CONFIRMED)
+
+    merged, _ = book_job(
+        session,
+        biz,
+        "+15125550001",
+        "+15125550001",
+        {
+            "service_type": "Drain cleaning",
+            "address": "42 Oak St",
+            "callback_number": "+15125550777",
+        },
+    )
+
+    assert merged.address == "42 Oak St"
+    assert merged.callback_number == "+15125550777"

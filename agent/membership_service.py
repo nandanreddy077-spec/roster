@@ -22,6 +22,7 @@ import logging
 from datetime import datetime, timedelta
 from typing import List, Optional
 
+import optout
 from channels import STOP_KEYWORDS, get_channel
 from db_models import Business, Customer, Job, JobQualification, MembershipOffer
 from employee_outcome import CUSTOMER_FALLBACK_MESSAGE, report_employee_blocked, report_if_failed
@@ -209,6 +210,10 @@ def send_due_membership_offers(session: Session) -> List[MembershipOffer]:
             continue
         session.refresh(offer)
 
+        # Nobody who asked us to stop gets a proactive text, no matter which
+        # employee is running. One check, one record — see optout.py.
+        if optout.is_opted_out(session, client.id, job.callback_number):
+            continue
         try:
             text = render_membership_template(
                 MEMBERSHIP_OFFER_TEMPLATE,
@@ -285,6 +290,10 @@ def send_due_membership_followups(session: Session) -> List[MembershipOffer]:
             continue  # another tick got here first
         session.refresh(offer)
 
+        # Nobody who asked us to stop gets a proactive text, no matter which
+        # employee is running. One check, one record — see optout.py.
+        if optout.is_opted_out(session, client.id, offer.customer_phone):
+            continue
         try:
             job = session.get(Job, offer.source_job_id)
             text = render_membership_template(

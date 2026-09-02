@@ -39,6 +39,9 @@ pitch-deck/
 archive/
 *leads*.csv
 pipeline.csv
+# Exploration notes + prospect lists (roster_uk_icp.csv, companies.json). Same
+# rule as above: real company/contact data, this repo is public.
+research/
 
 # Scratch git worktree living inside the repo — never commit it as a submodule
 basecheck/

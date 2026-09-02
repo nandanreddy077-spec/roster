@@ -1,271 +1,342 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   Roster — founder console (/clients, /clients/{id}).
+
+   Runs Slate & Ember, the same locked palette as the landing page and the
+   customer portal, so the brand stops forking three ways across surfaces
+   (founder, 2026-09-01; DESIGN.md's dashboard colour section amended to
+   record it).
+
+   SEMANTICS — strict:
+     black  (--text)     information / authority
+     ember  (--accent)   action / attention — the work queue, CTAs, live state
+     green  (--success)  something that actually happened / is on
+     red    (--danger)   a client is broken or something is destructive
+     grey   (--muted)    secondary / inactive / off
+   ═══════════════════════════════════════════════════════════════════════════ */
+@import url('https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700&display=swap');
+
 :root {
-  --bg: #F7F4EC;
-  --bg-alt: #F0EBDF;
-  --card: #FFFFFF;
-  --border: #E4DDCB;
-  --text: #1F1B16;
-  --text-dim: #6B6354;
-  --accent: #C2693D;
-  --accent-dim: #F1DDD0;
-  --good: #4B7A5B;
-  --soon: #A39E8F;
-  --bad: #B0473E;
+  --bg:           #F5F5F3;
+  --card:         #FFFFFF;
+  --border:       #DEDED9;
+  --text:         #1A1A17;
+  --muted:        #6B6B66;
+  --accent:       #B4451F;
+  --accent-soft:  #F5E8E2;
+  --accent-dark:  #8E3517;
+  --success:      #28734F;
+  --success-soft: #E3EFE9;
+  --danger:       #A8331F;
+  --danger-soft:  #F6E4E1;
+  --shadow: 0 1px 2px rgba(26, 26, 23, .04), 0 10px 28px -16px rgba(26, 26, 23, .14);
+
+  /* Legacy aliases — inline styles across the older templates still name
+     these, so pointing them at the new palette retones those pages without
+     a sweep through a dozen files. */
+  --bg-alt:     #EDEDEA;
+  --text-dim:   #6B6B66;
+  --accent-dim: #F5E8E2;
+  --good:       #28734F;
+  --soon:       #6B6B66;
+  --bad:        #A8331F;
+
+  --sans: "Hanken Grotesk", "Hanken Grotesk Fallback", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --mono: ui-monospace, SFMono-Regular, "JetBrains Mono", Menlo, monospace;
+
+  --s1: 8px; --s2: 16px; --s3: 24px; --s4: 32px; --s5: 48px;
+  --r-sm: 8px; --r-md: 12px; --r-lg: 16px; --r-pill: 999px;
+  --ease: cubic-bezier(.22, .61, .36, 1);
+}
+
+@font-face {
+  font-family: "Hanken Grotesk Fallback";
+  src: local("Arial"), local("Helvetica Neue"), local("Roboto");
+  size-adjust: 99%;
 }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
+html { -webkit-text-size-adjust: 100%; }
 
 body {
   background: var(--bg);
   color: var(--text);
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-family: var(--sans);
+  font-size: 15px;
   line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  overflow-x: clip;              /* narrow-width overflow guard */
 }
 
-h1, h2, h3, .logo { font-family: Georgia, "Iowan Old Style", "Times New Roman", serif; }
-
+h1, h2, h3, .logo { font-family: var(--sans); font-weight: 650; letter-spacing: -.017em; }
 a { color: var(--accent); text-decoration: none; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
-/* Nav */
-.nav {
-  background: rgba(247, 244, 236, 0.9);
-  border-bottom: 1px solid var(--border);
-}
+/* ── Nav ─────────────────────────────────────────────────────────────────── */
+.nav { background: var(--card); border-bottom: 1px solid var(--border); }
 .nav-inner {
-  max-width: 1040px;
-  margin: 0 auto;
-  padding: 0 24px;
-  height: 64px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
+  max-width: 1180px; margin: 0 auto; padding: 0 var(--s3);
+  min-height: 60px;
+  display: flex; align-items: center; justify-content: space-between;
+  gap: var(--s2); flex-wrap: wrap;                    /* narrow-width guard */
 }
-.logo { font-weight: 700; font-size: 18px; color: var(--text); }
+.logo { font-weight: 700; font-size: 19px; color: var(--text); letter-spacing: -.02em; }
 .nav-cta {
-  border: 1px solid var(--border);
-  padding: 8px 14px;
-  border-radius: 8px;
-  font-size: 14px;
-  color: var(--text);
+  border: 1px solid var(--border); padding: 8px 14px;
+  border-radius: var(--r-sm); font-size: 14px; font-weight: 550; color: var(--text);
+  transition: border-color 160ms var(--ease), color 160ms var(--ease);
 }
-.nav-cta:hover { border-color: var(--accent); }
+.nav-cta:hover { border-color: var(--accent); color: var(--accent); }
 
-.page { max-width: 1040px; margin: 0 auto; padding: 48px 24px; }
-.page h1 { font-size: 28px; margin-bottom: 8px; }
-.back-link { font-size: 14px; }
+.page { max-width: 1180px; margin: 0 auto; padding: var(--s4) var(--s3) var(--s5); }
+.page h1 { font-size: 28px; margin-bottom: 4px; line-height: 1.15; }
+.back-link { font-size: 14px; font-weight: 500; color: var(--muted); }
+.back-link:hover { color: var(--accent); }
+.empty { color: var(--muted); font-size: 14px; }
+
 .trade-tag {
   display: inline-block;
-  background: var(--accent-dim);
-  color: var(--accent);
-  font-size: 12px;
-  font-weight: 600;
-  padding: 3px 10px;
-  border-radius: 6px;
-  margin: 8px 0 24px;
+  background: var(--bg-alt); color: var(--muted);
+  font-size: 12px; font-weight: 650;
+  padding: 3px 10px; border-radius: var(--r-pill);
 }
-.empty { color: var(--text-dim); }
 
-/* Client list */
-.client-list { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-top: 24px; }
-.client-card {
-  background: var(--card);
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  padding: 20px;
-  box-shadow: 0 1px 2px rgba(31, 27, 22, 0.04);
+/* ── Client list ─────────────────────────────────────────────────────────
+   Ordered by what wants the founder, not alphabetically — the list used to
+   carry no attention signal at all, so "which shop is broken right now?"
+   meant opening all of them. */
+.client-list {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: var(--s2); margin-top: var(--s3);
 }
-.client-card h3 { color: var(--text); font-size: 17px; margin-bottom: 8px; }
+.client-card {
+  display: block;
+  background: var(--card); border: 1px solid var(--border);
+  border-radius: var(--r-md); padding: var(--s3);
+  transition: box-shadow 160ms var(--ease), transform 160ms var(--ease);
+}
+a.client-card:hover, a.client-card:focus-visible {
+  box-shadow: var(--shadow); transform: translateY(-1px);
+}
+.client-card h3 { color: var(--text); font-size: 17px; margin-bottom: var(--s1); }
+.client-card-head {
+  display: flex; align-items: flex-start; justify-content: space-between;
+  gap: var(--s1); flex-wrap: wrap;
+}
+/* One ember count, or nothing. A zero badge is noise on a healthy client. */
+.client-flag {
+  display: inline-flex; align-items: center; gap: 6px; flex: none;
+  background: var(--accent-soft); color: var(--accent);
+  font-size: 12px; font-weight: 700;
+  padding: 3px 10px; border-radius: var(--r-pill);
+}
+.client-flag.is-critical { background: var(--danger-soft); color: var(--danger); }
 
 .agent-badges { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
 .agent-badge {
   display: inline-block;
-  font-size: 11px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.03em;
-  padding: 3px 9px;
-  border-radius: 6px;
+  font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em;
+  padding: 3px 9px; border-radius: var(--r-sm);
+  background: var(--bg-alt); color: var(--muted);
 }
-.agent-badge-active { background: rgba(75, 122, 91, 0.12); color: var(--good); }
-.agent-badge-off { background: var(--bg-alt); color: var(--text-dim); }
+.agent-badge-active { background: var(--success-soft); color: var(--success); }
+.agent-badge-off { background: var(--bg-alt); color: var(--muted); }
 
-/* Form */
-.form {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-  max-width: 480px;
-  margin-top: 24px;
+/* ── Forms ───────────────────────────────────────────────────────────────── */
+.form { display: flex; flex-direction: column; gap: var(--s2); max-width: 480px; margin-top: var(--s3); }
+.form label { display: flex; flex-direction: column; gap: 6px; font-size: 13px; color: var(--text); font-weight: 600; }
+.form input, .form textarea, .chat-form input, .review-link-form input, .job-card input {
+  font-family: inherit; font-size: 14px; color: var(--text);
+  background: var(--card); border: 1px solid var(--border);
+  border-radius: var(--r-sm); padding: 9px 11px; resize: vertical;
+  transition: border-color 160ms var(--ease), box-shadow 160ms var(--ease);
 }
-.form label {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  font-size: 13px;
-  color: var(--text-dim);
-  font-weight: 600;
+.form input:focus, .form textarea:focus, .chat-form input:focus,
+.review-link-form input:focus, .job-card input:focus {
+  outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft);
 }
-.form input, .form textarea {
-  font-family: inherit;
-  font-size: 14px;
-  color: var(--text);
-  background: var(--card);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 10px 12px;
-  resize: vertical;
-}
-.form input:focus, .form textarea:focus, .chat-form input:focus { outline: 2px solid var(--accent-dim); border-color: var(--accent); }
 
 .btn {
-  display: inline-block;
-  padding: 10px 20px;
-  border-radius: 10px;
-  font-size: 14px;
-  font-weight: 600;
-  border: none;
-  cursor: pointer;
+  display: inline-block; padding: 9px 16px;
+  border-radius: var(--r-sm); border: 1px solid transparent;
+  font-size: 14px; font-weight: 600; font-family: inherit;
+  cursor: pointer; text-align: center;
+  transition: background 160ms var(--ease), border-color 160ms var(--ease), color 160ms var(--ease);
 }
 .btn-primary { background: var(--accent); color: #fff; }
-.btn-primary:hover { opacity: 0.88; }
-.btn-danger { background: var(--bad); color: #fff; }
-.btn-danger:hover { opacity: 0.88; }
+.btn-primary:hover { background: var(--accent-dark); }
+.btn-secondary { background: var(--card); color: var(--text); border-color: var(--border); }
+.btn-secondary:hover { border-color: var(--text); }
+.btn-danger { background: var(--danger); color: #fff; }
+.btn-danger:hover { filter: brightness(.92); }
+.btn-small { padding: 6px 12px; font-size: 13px; }
 
-/* Detail layout */
-.detail-grid {
-  display: grid;
-  grid-template-columns: 2fr 1fr;
-  gap: 24px;
-  margin-top: 24px;
-}
-.chat-panel, .jobs-panel {
+/* ── The work queue ──────────────────────────────────────────────────────
+   The founder console's whole reorganisation, in one block. This page used
+   to open on a setup checklist and reach the bookings a customer is waiting
+   on 300 lines later, underneath three "save this text field" forms. Now
+   what needs doing is first and everything one-time is behind a <details>. */
+.console-queue {
   background: var(--card);
   border: 1px solid var(--border);
-  border-radius: 12px;
-  padding: 20px;
+  border-left: 3px solid var(--accent);
+  border-radius: var(--r-md);
+  padding: var(--s3);
+  margin: var(--s3) 0;
 }
-.chat-panel h2, .jobs-panel h2 { font-size: 16px; margin-bottom: 14px; }
+.console-queue.is-critical { border-left-color: var(--danger); }
+.console-queue-eyebrow {
+  font-size: 11px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase;
+  color: var(--accent); margin-bottom: 4px;
+}
+.console-queue.is-critical .console-queue-eyebrow { color: var(--danger); }
+.console-queue-list { list-style: none; }
+.console-queue-list li { border-top: 1px solid var(--border); }
+.console-queue-list li:first-child { border-top: none; }
+.console-queue-list a {
+  display: flex; align-items: center; justify-content: space-between; gap: var(--s2);
+  padding: 11px 0; font-size: 15px; font-weight: 550; color: var(--text);
+}
+.console-queue-list a::after { content: "→"; color: var(--accent); flex: none; }
+.console-queue-list a:hover { color: var(--accent); }
+.console-queue-list li.is-critical a { color: var(--danger); }
+.console-queue-list li.is-critical a::after { color: var(--danger); }
+
+.console-allclear {
+  display: flex; align-items: center; gap: 10px;
+  background: var(--success-soft); color: var(--success);
+  border-radius: var(--r-md); padding: 13px var(--s3);
+  font-size: 15px; font-weight: 550; margin: var(--s3) 0;
+}
+
+.console-allclear.is-error { background: var(--danger-soft); color: var(--danger); }
+
+/* Section headers, so the page reads as three zones (work / verify / setup)
+   rather than ten equal-weight panels. */
+.console-section { margin-top: var(--s4); }
+.console-section > h2 {
+  font-size: 13px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase;
+  color: var(--muted); margin-bottom: 12px;
+}
+
+/* Everything one-time lives in here. Closed by default: the founder opens a
+   client to do today's work, not to re-read the carrier forwarding codes. */
+.console-fold {
+  background: var(--card); border: 1px solid var(--border);
+  border-radius: var(--r-md); margin-top: var(--s3);
+}
+.console-fold > summary {
+  cursor: pointer; list-style: none;
+  padding: 14px var(--s3);
+  font-size: 15px; font-weight: 650;
+  display: flex; align-items: center; gap: var(--s1);
+}
+.console-fold > summary::-webkit-details-marker { display: none; }
+.console-fold > summary::before {
+  content: "▸"; color: var(--muted); font-size: 12px; transition: transform 160ms var(--ease);
+}
+.console-fold[open] > summary::before { transform: rotate(90deg); }
+.console-fold > summary:hover { color: var(--accent); }
+.console-fold > summary .console-fold-hint { font-weight: 400; color: var(--muted); font-size: 13px; }
+.console-fold-body { padding: 0 var(--s3) var(--s3); border-top: 1px solid var(--border); padding-top: var(--s3); }
+.console-fold.is-danger { border-color: var(--danger); }
+.console-fold.is-danger > summary { color: var(--danger); }
+
+/* ── Detail layout ───────────────────────────────────────────────────────── */
+.detail-grid { display: grid; grid-template-columns: 1fr; gap: var(--s2); }
+.chat-panel, .jobs-panel {
+  background: var(--card); border: 1px solid var(--border);
+  border-radius: var(--r-md); padding: var(--s3);
+}
+.chat-panel h2, .jobs-panel h2 { font-size: 16px; margin-bottom: 12px; }
 
 .chat-log {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  max-height: 420px;
-  overflow-y: auto;
-  margin-bottom: 16px;
+  display: flex; flex-direction: column; gap: 10px;
+  max-height: 380px; overflow-y: auto; margin-bottom: var(--s2);
 }
-.chat-bubble {
-  padding: 10px 14px;
-  border-radius: 12px;
-  font-size: 14px;
-  max-width: 80%;
-}
+.chat-bubble { padding: 9px 13px; border-radius: var(--r-md); font-size: 14px; max-width: 80%; }
 .chat-bubble.user { background: var(--bg-alt); align-self: flex-start; }
-.chat-bubble.assistant { background: var(--accent-dim); align-self: flex-end; }
+.chat-bubble.assistant { background: var(--accent-soft); align-self: flex-end; }
+.chat-form { display: flex; gap: var(--s1); flex-wrap: wrap; }
+.chat-form input { flex: 1 1 200px; }
 
-.chat-form { display: flex; gap: 8px; }
-.chat-form input {
-  flex: 1;
-  font-size: 14px;
-  padding: 10px 12px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  font-family: inherit;
-}
-
+/* ── Job cards ───────────────────────────────────────────────────────────
+   A booking, and every control that can settle it. The grid means the queue
+   is scannable instead of a single 40-item column. */
+.job-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: var(--s2); }
 .job-card {
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  padding: 14px;
-  margin-bottom: 12px;
-  font-size: 13px;
+  background: var(--card);
+  border: 1px solid var(--border); border-radius: var(--r-md);
+  padding: var(--s2); font-size: 13px;
 }
-.job-card strong { display: block; font-size: 14px; margin: 4px 0; }
-.job-notes { color: var(--text-dim); margin-top: 6px; }
+.job-card + .job-card { margin-top: var(--s2); }
+.job-grid .job-card + .job-card { margin-top: 0; }
+/* A booking with a time nobody has answered: a customer is waiting on a
+   human right now, so it is the one thing on the page allowed to be loud. */
+.job-card.is-waiting { border-left: 3px solid var(--accent); }
+.job-card strong { display: block; font-size: 15px; margin: 4px 0; }
+.job-card form { display: flex; gap: 6px; flex-wrap: wrap; margin-top: var(--s1); }
+.job-card input { flex: 1 1 160px; min-width: 0; }
+.job-notes { color: var(--muted); margin-top: 6px; }
 .job-urgency {
   display: inline-block;
-  font-size: 11px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.03em;
-  padding: 2px 8px;
-  border-radius: 6px;
-  background: var(--bg-alt);
-  color: var(--text-dim);
+  font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em;
+  padding: 2px 8px; border-radius: var(--r-sm);
+  background: var(--bg-alt); color: var(--muted);
 }
-.job-urgency.emergency { background: rgba(176, 71, 62, 0.12); color: var(--bad); }
-.job-urgency.same_day { background: rgba(194, 105, 61, 0.12); color: var(--accent); }
-.job-urgency.routine { background: rgba(75, 122, 91, 0.12); color: var(--good); }
+.job-urgency.emergency { background: var(--danger-soft); color: var(--danger); }
+.job-urgency.same_day { background: var(--accent-soft); color: var(--accent); }
+.job-urgency.routine { background: var(--success-soft); color: var(--success); }
+.job-urgency.status-pending { background: var(--bg-alt); color: var(--muted); }
+.job-urgency.status-awaiting_slot { background: var(--accent-soft); color: var(--accent); }
+.job-urgency.status-booked { background: var(--success-soft); color: var(--success); }
+.job-urgency.status-declined { background: var(--danger-soft); color: var(--danger); }
+.job-urgency.status-no_response { background: var(--bg-alt); color: var(--muted); }
 
-.recovery-panel .btn { margin-bottom: 14px; }
+.booking-timeline { margin-top: var(--s1); font-size: 12px; color: var(--muted); }
+.booking-timeline summary { cursor: pointer; }
+.booking-timeline ol { margin: 6px 0 0 18px; }
+.booking-timeline strong { display: inline; font-family: var(--mono); font-size: 11px; }
 
-/* Agent roster (client detail) — one tile per agent type, scales as more agents ship */
-.agent-roster { margin-top: 24px; }
-.agent-roster-heading { font-size: 16px; margin-bottom: 14px; }
-.agent-roster-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-  gap: 16px;
+/* ── Tiles (departments, configuration) ──────────────────────────────────── */
+.agent-roster { margin-top: var(--s3); }
+.agent-roster-heading {
+  font-size: 13px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase;
+  color: var(--muted); margin-bottom: 12px;
 }
+.agent-roster-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: var(--s2); }
 .agent-tile {
-  background: var(--card);
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  padding: 16px;
+  background: var(--card); border: 1px solid var(--border);
+  border-radius: var(--r-md); padding: var(--s2);
 }
+.console-fold-body .agent-tile { background: var(--bg); }
 .agent-tile-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-bottom: 10px;
+  display: flex; align-items: center; justify-content: space-between;
+  flex-wrap: wrap; gap: var(--s1); margin-bottom: 10px;
 }
-.agent-tile-desc { color: var(--text-dim); font-size: 13px; }
+.agent-tile-desc { color: var(--muted); font-size: 13px; }
+.agent-tile-desc code { font-family: var(--mono); font-size: 12px; background: var(--bg-alt); padding: 1px 5px; border-radius: 4px; }
+.recovery-panel .btn { margin-bottom: 12px; }
 
-.btn-small { padding: 6px 12px; font-size: 12px; border-radius: 8px; }
+.review-link-form { display: flex; gap: var(--s1); margin-top: 10px; flex-wrap: wrap; }
+.review-link-form input { flex: 1 1 180px; min-width: 0; font-size: 13px; }
 
-.job-urgency.status-pending { background: var(--bg-alt); color: var(--text-dim); }
-.job-urgency.status-awaiting_slot { background: rgba(194, 105, 61, 0.12); color: var(--accent); }
-.job-urgency.status-booked { background: rgba(75, 122, 91, 0.12); color: var(--good); }
-.job-urgency.status-declined { background: rgba(176, 71, 62, 0.12); color: var(--bad); }
-.job-urgency.status-no_response { background: var(--bg-alt); color: var(--soon); }
-
-.btn-secondary { background: transparent; color: var(--text); border: 1px solid var(--border); }
-.btn-secondary:hover { border-color: var(--accent); color: var(--accent); }
-
-.review-link-form { display: flex; gap: 8px; margin-top: 10px; }
-.review-link-form input {
-  flex: 1;
-  font-size: 13px;
-  padding: 8px 10px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  font-family: inherit;
-}
-
-@media (max-width: 720px) {
-  .client-list { grid-template-columns: 1fr; }
-  .detail-grid { grid-template-columns: 1fr; }
-}
-
-/* Setup checklist (founder client page). Derived state only — a done item is
-   a fact on the row, never a "marked complete" flag, so the list is safe to
-   read as the answer to "is this shop live?". */
-.setup-checklist { list-style: none; padding: 0; margin: 0; }
-.setup-checklist li { padding: 8px 0; border-bottom: 1px solid var(--border); }
+.setup-checklist { list-style: none; }
+.setup-checklist li { padding: 9px 0; border-bottom: 1px solid var(--border); }
 .setup-checklist li:last-child { border-bottom: none; }
-.setup-checklist li.is-done > strong { color: var(--good); }
-.setup-checklist li.is-todo > strong { color: var(--text-dim); }
+.setup-checklist li.is-done > strong { color: var(--success); font-weight: 550; }
+.setup-checklist li.is-todo > strong { color: var(--text); }
 
-/* The access link is meant to be selected and pasted into a text message, so
-   it gets a full-width monospace field rather than wrapping prose. */
+/* Meant to be selected and pasted into a text message, so it gets a
+   full-width monospace field rather than wrapping prose. */
 .access-link-field {
-  width: 100%;
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 12px;
-  padding: 8px 10px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: var(--bg-alt);
-  color: var(--text);
+  width: 100%; font-family: var(--mono); font-size: 12px;
+  padding: 8px 10px; border: 1px solid var(--border);
+  border-radius: var(--r-sm); background: var(--bg-alt); color: var(--text);
+}
+
+@media (min-width: 900px) {
+  .detail-grid { grid-template-columns: 3fr 2fr; }
+}
+@media (prefers-reduced-motion: reduce) {
+  a.client-card:hover { transform: none; }
 }

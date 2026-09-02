@@ -271,6 +271,9 @@ def test_the_timeline_only_shows_this_jobs_events(test_engine):
             service_type="Furnace",
             urgency="routine",
             callback_number="+15125550002",
+            # Confirmable: this test is about timeline scoping, and a
+            # windowless job can no longer be confirmed at all.
+            preferred_window="Wednesday 1pm-5pm",
         )
         session.add(second)
         session.commit()

@@ -40,7 +40,7 @@ from booking_language import (
     render_confirmed_language,
     render_owner_proposed_language,
 )
-from channels import get_channel
+from channels import get_channel, normalize_phone
 from db_models import (
     BOOKING_CANCELLED,
     BOOKING_CONFIRMED,
@@ -99,6 +99,15 @@ class IllegalTransition(ValueError):
     """A caller asked for a move the state machine does not allow."""
 
 
+class NothingToConfirm(ValueError):
+    """confirm() was called on a booking that has no time in it.
+
+    Not an IllegalTransition — REQUESTED → CONFIRMED is a legal move; the
+    problem is that there is nothing to confirm. Separate so callers can say
+    something useful ("propose a time first") instead of the state-machine
+    message, which would be both wrong and baffling."""
+
+
 @dataclass(frozen=True)
 class BookingResult:
     """`applied` is False when the booking was ALREADY in the target state —
@@ -117,8 +126,16 @@ def _sources_for(target: str) -> list:
 def _customer_number(job: Job) -> Optional[str]:
     """Where to text this customer. callback_number first: a voice booking's
     customer_phone is the synthetic `xai-voice:{call_id}` thread, and texting
-    that would reach nobody."""
-    number = job.callback_number or job.customer_phone
+    that would reach nobody.
+
+    Normalized on the way out as well as on the way in (bookings._normalized).
+    Belt and braces on purpose: rows written before that fix still hold
+    transcribed shapes like "(512) 555-0149", and Twilio resolves a number
+    with no `+` against the SENDER's country — so an un-normalized destination
+    does not fail loudly, it delivers a booking confirmation to a stranger and
+    reports success.
+    """
+    number = normalize_phone(job.callback_number or job.customer_phone or "")
     if not number or is_test_thread(number):
         return None
     return number
@@ -199,9 +216,30 @@ def confirm(session: Session, business: Business, job: Job) -> BookingResult:
     This is the ONLY path to BOOKING_CONFIRMED in the codebase, and the only
     caller of render_confirmed_language — nothing automated may reach it,
     because nothing automated has checked a real technician's calendar.
+
+    Raises NothingToConfirm when the booking has no window. That check comes
+    BEFORE the claim, deliberately: the state change commits first and is
+    never rolled back (see the ORDERING note in the module docstring), so a
+    guard that ran after it would leave a booking marked CONFIRMED with no
+    time and no message — strictly worse than the bug it was catching.
+
+    The bug this replaced (found 2026-09-01): the window was passed as
+    `window or "your visit"`, so confirming a booking nobody had proposed a
+    time for sent the customer a confirmation naming no time at all — just
+    "your visit". The customer had no way to know when anyone was coming, and
+    every reason to think a time had been agreed. There is no honest
+    confirmation without a time, so this refuses instead of inventing one:
+    the owner proposes a window first, then confirms it. The exact wording is
+    deliberately not quoted here — test_booking_honesty.py's repo-wide audit
+    scans literal source text, and it is right to fail on a source file that
+    contains the phrase for any reason, docstrings included.
     """
     window = job.preferred_window or ""
     name = job.customer_name or ""
+    if not window.strip():
+        raise NothingToConfirm(
+            f"job {job.id} has no proposed time — there is nothing to confirm yet"
+        )
     if not _claim(session, job, BOOKING_CONFIRMED, confirmed_at=datetime.utcnow()):
         return BookingResult(False, BOOKING_CONFIRMED, customer_name=name)
 
@@ -212,7 +250,7 @@ def confirm(session: Session, business: Business, job: Job) -> BookingResult:
         {"job_id": job.id, "window": window},
         f"booking.confirmed:{job.id}",
     )
-    notified = _notify_customer(business, job, render_confirmed_language(window or "your visit"))
+    notified = _notify_customer(business, job, render_confirmed_language(window))
     if notified:
         _publish(
             session,
@@ -545,6 +583,15 @@ def handle_owner_sms(session: Session, business: Business, text: str) -> str:
             if result.customer_notified:
                 return f"Sent — {who} has been asked about {command.window}."
             return f"⚠️ Updated #{job.id}, but we couldn't reach {who} by text."
+    except NothingToConfirm:
+        # "Y12" on a booking nobody has put a time on. Answering with the
+        # state-machine message would be wrong (the transition is legal) and
+        # useless; the owner needs the next action, which is to offer a time.
+        return (
+            f"#{job.id} doesn't have a time on it yet, so there's nothing to "
+            f"confirm. Text a time like '{job.id} Friday 8am-12pm' and I'll "
+            "ask them if it works."
+        )
     except IllegalTransition:
         return (
             f"#{job.id} is {job.booking_status} and can't be changed that way. "

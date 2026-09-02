@@ -9,13 +9,47 @@ from typing import Optional
 import bcrypt
 from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 
+# bcrypt refuses anything longer and RAISES rather than truncating (it changed
+# to raise in 4.0). Both functions below took whatever the form posted straight
+# to the C call, so a 73-byte password turned the login page into an unhandled
+# 500 — for a wrong guess, a password-manager blob, or a pasted paragraph.
+# Handled here, in the one module that owns credentials, rather than at each
+# call site: a guard per caller leaves whichever caller is added next broken.
+_BCRYPT_MAX_BYTES = 72
+
 
 def hash_password(password: str) -> str:
-    return bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
+    return bcrypt.hashpw(_bcrypt_bytes(password), bcrypt.gensalt()).decode("utf-8")
 
 
 def verify_password(password: str, password_hash: str) -> bool:
-    return bcrypt.checkpw(password.encode("utf-8"), password_hash.encode("utf-8"))
+    """False for a wrong password — and for anything malformed. Never raises:
+    an attacker (or a password manager) must not be able to turn a login
+    attempt into a 500."""
+    try:
+        return bcrypt.checkpw(_bcrypt_bytes(password), password_hash.encode("utf-8"))
+    except (ValueError, TypeError):
+        return False
+
+
+def _bcrypt_bytes(password: str) -> bytes:
+    """Truncate to bcrypt's byte limit.
+
+    Truncation, not rejection: it is what bcrypt itself did for its whole
+    history and what other implementations still do, so a hash made under the
+    old behaviour keeps verifying. Rejecting long passwords outright would
+    lock those accounts out.
+
+    The cut is at a byte offset and may land mid-character in a multi-byte
+    sequence. That is fine and deliberate — bcrypt hashes bytes, never text,
+    so a split character is just bytes like any other, and it is what the
+    original C implementation does. Re-encoding to a character boundary would
+    produce a DIFFERENT byte string and break exactly the compatibility this
+    function exists to keep."""
+    raw = (password or "").encode("utf-8")
+    if len(raw) <= _BCRYPT_MAX_BYTES:
+        return raw
+    return raw[:_BCRYPT_MAX_BYTES]
 
 
 def resolve_session_secret(environ) -> str:

@@ -9,6 +9,7 @@ import logging
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
+import optout
 from booking_language import render_slot_language
 from bookings import book_job
 from calendar_provider import get_calendar_provider
@@ -298,6 +299,10 @@ def tick(session: Session) -> List[RecoveryJob]:
                 days_since=job.days_since or "",
                 renewal_date=job.anchor_date or "",
             )
+            # Nobody who asked us to stop gets a proactive text, no matter which
+            # employee is running. One check, one record — see optout.py.
+            if optout.is_opted_out(session, client.id, job.customer_phone):
+                continue
             sms_channel.send(
                 from_number=client.inbound_number or "", to_number=job.customer_phone, body=text
             )

@@ -1,15 +1,18 @@
 {% extends "portal_base.html" %}
-{% block heading %}Notifications{% endblock %}
+{% block heading %}Every alert{% endblock %}
 {% block subhead %}
-<p class="portal-lede">Every alert Roster has sent you, newest first.</p>
+<a class="back-link" href="/v2/dashboard">&larr; Home</a>
+<p class="portal-lede">Everything Roster has sent you, newest first.</p>
 {% endblock %}
 
 {% block content %}
+{# A drill-down off Home since 2026-09-01, not a nav destination — a feed
+   that is empty most days does not earn a permanent tab. #}
 <section class="portal-card portal-card-wide">
   {% if notifications %}
   <ul class="portal-timeline">
     {% for n in notifications %}
-    <li><span class="portal-timeline-when">{{ n.created_at.strftime('%b %d, %I:%M %p') }}</span>{{ notification_kind_labels[n.kind] }}: {{ n.message }}</li>
+    <li><span class="portal-timeline-when">{{ n.created_at.strftime('%b %d, %I:%M %p') }}</span><span>{{ notification_kind_labels[n.kind] }}: {{ n.message }}</span></li>
     {% endfor %}
   </ul>
   {% else %}

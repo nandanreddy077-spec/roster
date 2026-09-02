@@ -430,7 +430,8 @@ def build_briefing_workspace(
             f"{len(department_rows)} department{'s' if len(department_rows) != 1 else ''} working"
         )
         summary += (
-            f", {attention_count} thing{'s' if attention_count != 1 else ''} need your attention."
+            f", {attention_count} thing{'s' if attention_count != 1 else ''} "
+            f"{'need' if attention_count != 1 else 'needs'} your attention."
             if attention_count
             else ", nothing urgent."
         )
