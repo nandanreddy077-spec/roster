@@ -996,10 +996,24 @@ def confirm_job(client_id: int, job_id: int):
     now the single writer — and, critically, TEXTS THE CUSTOMER. Before that
     this route set a column and redirected, so a customer who had been told
     "the office will confirm and text you back" never heard from Roster
-    again."""
+    again.
+
+    A booking with no time on it is refused rather than confirmed (2026-09-01)
+    — see booking_manager.confirm. The template already hides the button in
+    that case, so reaching this branch means a stale page or a hand-rolled
+    POST; either way the owner gets told what to do instead of the customer
+    getting a confirmation with no time in it."""
     with Session(engine) as session:
         client, job = _booking_target(session, client_id, job_id)
-        booking_manager.confirm(session, client, job)
+        try:
+            booking_manager.confirm(session, client, job)
+        except booking_manager.NothingToConfirm:
+            return RedirectResponse(
+                f"/clients/{client_id}?booking_error="
+                f"Booking %23{job_id} has no time on it yet — suggest a time first, "
+                "then confirm it.#jobs",
+                status_code=303,
+            )
     return RedirectResponse(f"/clients/{client_id}", status_code=303)
 
 
@@ -1388,6 +1402,7 @@ def client_detail(request: Request, client_id: int):
             "access_error": request.query_params.get("access_error"),
             "stage_error": request.query_params.get("stage_error"),
             "billing_error": request.query_params.get("billing_error"),
+            "booking_error": request.query_params.get("booking_error"),
         },
     )
 

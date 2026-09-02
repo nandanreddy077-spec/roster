@@ -15,7 +15,10 @@ from datetime import datetime, timedelta
 from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 from typing import Any, Dict, Optional, Tuple
 
+from channels import normalize_phone
 from db_models import (
+    BOOKING_CANCELLED,
+    BOOKING_CONFIRMED,
     BOOKING_REQUESTED,
     ORIGIN_ESCALATION,
     ORIGIN_INBOUND,
@@ -63,6 +66,38 @@ def parse_money_cents(raw: str) -> Optional[int]:
     if amount <= 0 or amount > MAX_JOB_VALUE_DOLLARS:
         return None
     return int((amount * 100).quantize(Decimal("1"), rounding=ROUND_HALF_UP))
+
+
+# Fields whose stored value must be canonical, not whatever shape the model
+# transcribed. Only callback_number today; a list because the next one will
+# want the same treatment and a bare `if field == ...` invites a second copy.
+_NORMALIZED_FIELDS = {"callback_number": normalize_phone}
+
+
+def _normalized(field: str, value):
+    """Coerce a field to its canonical form on the way in (found 2026-09-01).
+
+    callback_number was stored exactly as the model produced it — for a voice
+    booking that is a transcription of a spoken number, so "(512) 555-0149"
+    rather than "+15125550149". Two consequences, both live:
+
+      1. FIVE lookups match this column with `==` against a Twilio `From`,
+         which is always E.164: find_active_owner_proposal,
+         find_active_review_ask, find_active_referral_ask,
+         memory.build_customer_context, and lead_qualifier's phone check. All
+         of them silently missed, so a customer answering the owner's proposed
+         window fell through the whole cascade into Frontdesk, which treated
+         it as a brand-new conversation.
+      2. It is also the OUTBOUND destination (booking_manager._customer_number).
+         Twilio resolves a number with no `+` against the sender's country —
+         the precise failure normalize_phone was written for, where an owner's
+         alerts reached a stranger and Twilio reported success.
+
+    Normalizing here rather than at each reader is the root-cause fix: this is
+    the one door every callback_number comes through.
+    """
+    coerce = _NORMALIZED_FIELDS.get(field)
+    return coerce(value) if coerce else value
 
 
 def _publish_job_booked(session: Session, job: Job, customer_id: Optional[int]) -> None:
@@ -147,10 +182,32 @@ def book_job(
     )
 
     if match is not None:
-        for field in ("customer_name", "address", "notes", "callback_number", "preferred_window"):
+        # A SETTLED booking's time is not a detail to merge (found 2026-09-01).
+        # The dedup window is 24h and matches any job with completed_at unset,
+        # so a confirmed job is a merge target: the customer texts again about
+        # the same service, mentions another time, the model calls log_job, and
+        # preferred_window was overwritten in place. The row still read
+        # `confirmed`, so the console showed the booking as settled against a
+        # time nobody had checked — a different time from the one the customer
+        # had actually been texted. (Wording kept indirect on purpose:
+        # test_booking_honesty.py's audit scans literal source text.)
+        # Same reasoning as booking_status just below: a later detail-merge may
+        # not quietly rewrite what a human already committed to.
+        settled = match.booking_status in (BOOKING_CONFIRMED, BOOKING_CANCELLED)
+        mergeable = ["customer_name", "address", "notes", "callback_number"]
+        if not settled:
+            mergeable.append("preferred_window")
+        for field in mergeable:
             value = args.get(field)
             if value:
-                setattr(match, field, value)
+                setattr(match, field, _normalized(field, value))
+        # The new preference is still real information the owner needs — it is
+        # just not a fact about the booking. Keep it where they will see it
+        # rather than dropping it on the floor.
+        asked = (args.get("preferred_window") or "").strip()
+        if settled and asked and asked != (match.preferred_window or "").strip():
+            note = f"Customer later asked about {asked} (booking is {match.booking_status})."
+            match.notes = f"{match.notes}\n{note}" if match.notes else note
         if args.get("urgency"):
             match.urgency = args["urgency"]
         if args.get("is_estimate"):
@@ -170,7 +227,7 @@ def book_job(
         service_type=service_type,
         urgency=args.get("urgency") or "routine",
         address=args.get("address"),
-        callback_number=args.get("callback_number") or caller_number,
+        callback_number=normalize_phone(args.get("callback_number") or caller_number),
         notes=args.get("notes"),
         preferred_window=args.get("preferred_window"),
         is_estimate=bool(args.get("is_estimate")),
