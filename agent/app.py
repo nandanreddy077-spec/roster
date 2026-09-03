@@ -40,6 +40,7 @@ logger.info("sentry configured" if _sentry_enabled else "sentry not configured (
 
 import booking_manager
 import optout
+import ratelimit
 from auth import ACCESS_LINK_MAX_AGE_SECONDS, make_access_token, resolve_session_secret
 from booking_manager import (
     find_active_owner_proposal,
@@ -736,11 +737,16 @@ def list_clients(request: Request):
 # phone-number CTAs for now.
 @app.post("/request-access")
 def request_access(
+    request: Request,
     name: str = Form(...),
     phone: str = Form(...),
     trade: str = Form(""),
     business_name: str = Form(""),
 ):
+    # Public, unauthenticated, writes a row (P1-6). Throttle per IP so a script
+    # can't fill the table — 5/hour is generous for a real person.
+    if not ratelimit.allow(f"request-access:{ratelimit.client_ip(request)}", 5, 3600):
+        return RedirectResponse("/thanks", status_code=303)  # look identical to success
     with Session(engine) as session:
         session.add(
             AccessRequest(
