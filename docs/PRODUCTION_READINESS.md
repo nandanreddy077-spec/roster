@@ -40,8 +40,8 @@ opens, so several "self-serve" items are P1 not P2.
 | ID | Finding | Where | Fix |
 |---|---|---|---|
 | **P0-1** | **Concurrent double-buy of Twilio numbers.** `provision_number` checks `if client.twilio_number_sid` then calls `buy_twilio_number()`. Two in-flight requests (double-click; FastAPI runs sync handlers in a threadpool even at `--workers 1`) both read `None`, both buy. **FIXED (commit `3122a57`):** `provisioning.claim_provisioning()` — atomic conditional UPDATE before the purchase; failed purchase releases the claim; a 10-min-stale claim with no SID is re-claimable (crash recovery). New column `Business.provisioning_started_at`. | done | |
-| **P0-2** | **Orphan number on a crash between purchase and DB commit.** `buy_twilio_number()` returns → process dies → `twilio_number_sid` never persisted. Roster now pays for a number no row points at, and nothing detects it. | `app.py:921-926`, `activation.py` | The P0-1 claim makes this *reconcilable* (a stuck `provisioning_started_at` with no SID is the signal). Add a documented manual reconcile procedure (§7). Not auto-reconcile — disproportionate for 10-20 customers. |
-| **P0-3** | **Customer data is not durable.** SQLite lives on the Railway volume; the volume dies with the service on a bad migration or a platform incident, and `backup.py` writes its snapshots *to the same volume*. Bookings, conversations, and Twilio identifiers would be unrecoverable. | `db.py`, `backup.py`, `railway.toml` | Harden + verify `migrate_to_postgres.py`, document the cutover. **Human action: provision Railway Postgres, set `DATABASE_URL`.** Code prepared here; cutover is a human step. |
+| **P0-2** | **Orphan number on a crash between purchase and DB commit.** `buy_twilio_number()` returns → process dies → `twilio_number_sid` never persisted. Roster pays for a number no row points at. **MITIGATED (commit `<p0-1>` + docs):** the P0-1 claim makes it reconcilable — a `provisioning_started_at` set with no SID for >10 min is the signal. Documented manual reconcile in §7 (check the Twilio console for an unattached number bought around that timestamp; attach or release it). Not auto-reconcile — disproportionate for 10-20 customers. | done (mitigation) | |
+| **P0-3** | **Customer data is not durable.** SQLite on the Railway volume; volume loss = data loss, and `backup.py` writes to the same volume. **CODE READY:** `migrate_to_postgres.py` reviewed (schema-drift-safe by construction — copies model columns only, FK order, resets identity sequences); `tests/test_migrate_to_postgres.py` added (runs against real Postgres via `ROSTER_TEST_DATABASE_URL`, skips otherwise); cutover documented step-by-step in §5. **HUMAN ACTION: provision Railway Postgres, run the cutover.** | code ready · **human action** | |
 
 ### P1 — before self-serve opens / before customer count grows
 
@@ -49,8 +49,8 @@ opens, so several "self-serve" items are P1 not P2.
 |---|---|---|---|
 | **P1-1** | **No backend provisioning precondition.** `provision_number` would buy for any business id. Founder-only today (HTTP-Basic), so no customer can reach it — but the self-serve wizard will call the same path. **FIXED (commit `<p1-1>`):** `Business.payment_method_verified_at` + `provisioning_unlocked_at`; `provisioning.provisioning_allowed()`; `provision_number` refuses without one; `POST /clients/{id}/unlock-provisioning` is the founder override; console button added. `activate_frontdesk`'s own buy is unchanged (no live caller — gated as part of the self-serve wizard split). | done | |
 | **P1-2** | **One business's failure aborts the whole scheduler tick.** `runner.dispatch_tick` looped businesses with no per-business `try`; `enroll_completed_estimates` looped jobs with no per-job `try`; `recovery_tick.run` chained all phases in one `try`. A single bad row skipped every later business *and* every later tick phase. **FIXED (commit `<p1-2>`):** per-iteration `try/except` (log + rollback + continue) in `dispatch_tick` and `enroll_completed_estimates`; `recovery_tick.run` now runs each phase in its own session/try and records which phases failed on the heartbeat (`/health` sees a partial tick), without re-raising. | done | |
-| **P1-3** | **`FOUNDER_ALERT_PHONE` unset.** A paying customer hits the $20 trial cap → their AI employees go silent → `trial_cap._notify_founder_cap_reached` no-ops. The owner is told; the founder is not. | env | **Human action: set `FOUNDER_ALERT_PHONE`.** |
-| **P1-4** | **No error monitoring.** `SENTRY_DSN` unset → `configure_sentry` no-ops. A provisioning failure, a tick crash, an unhandled 500 is visible only by grepping Railway logs. | env | Code is ready (`sentry_config.py`, `sentry-sdk` installed). **Human action: create a Sentry project, set `SENTRY_DSN`.** Verify background-job + provisioning failures are captured. |
+| **P1-3** | **`FOUNDER_ALERT_PHONE` unset.** A paying customer hits the $20 trial cap → employees go silent → `trial_cap._notify_founder_cap_reached` no-ops. Owner is told; founder is not. | env | **HUMAN ACTION: `railway variables set FOUNDER_ALERT_PHONE=+1…` then redeploy.** No code change needed — `trial_cap` already reads it. |
+| **P1-4** | **No error monitoring.** `SENTRY_DSN` unset → `configure_sentry` no-ops. A provisioning failure, a tick-phase crash (now recorded on the heartbeat by P1-2), an unhandled 500 — visible only by grepping Railway logs. | env | Code ready (`sentry_config.py`, `sentry-sdk` installed, `LoggingIntegration` captures `logger.error`/`logger.exception` from boot). **HUMAN ACTION: create a Sentry project, `railway variables set SENTRY_DSN=…`, redeploy.** |
 | **P1-5** | **SMS "configured" is not distinguished from "deliverable".** The app behaved as if SMS worked whenever a messaging service SID was set, but a message from a number whose A2P campaign isn't approved is carrier-filtered silently. **FIXED (commit `<p1-5>`):** `Business.sms_delivery_status` (`not_configured` / `pending_campaign` / `active`); `channels.sms_deliverable()` holds proactive sends **only** in `pending_campaign` (missed-call text-back, Quote Chaser, Reviews, Referral, Membership — checked before each claim so a held send goes out later, not lost); `provision_number` sets `pending_campaign`; `POST /clients/{id}/sms-delivery-status` is the founder control (a future automated A2P-status callback replaces it); console shows the state. Voice and owner alerts are unaffected. **Twilio message status-callback ingestion is P2** — this is the campaign-level gate, not per-message delivery receipts. | done | |
 | **P1-6** | **No rate limiting on `/login`.** Brute force against a customer password is unthrottled. Low impact today (≈0 password accounts — owners use access links), real once self-serve creates password accounts. | `portal.py` | Lightweight per-IP + per-account throttle. `/request-access` and `/signup` too when self-serve opens. |
 | **P1-7** | **Backups share the DB's failure domain.** Covered by P0-3's Postgres move (Railway Postgres has managed daily backups + PITR). Until then, document that a volume loss is unrecoverable. | `backup.py` | Postgres migration; interim note in §6. |
@@ -105,31 +105,171 @@ Currently missing in production: `DATABASE_URL`, `SENTRY_DSN`, `FOUNDER_ALERT_PH
 
 ## 3. Deployment procedure
 
-_(filled as the pass proceeds)_
+Railway auto-deploys `main` (root directory `agent/`, NIXPACKS,
+`pip install -r requirements.txt`, `uvicorn app:app --workers 1`).
+`healthcheckPath = /health`; `restartPolicyType = ON_FAILURE`, max 3 retries.
+
+1. Merge the PR to `main` (or push). Railway starts a build.
+2. Watch it: `railway deployment list` (or the Railway dashboard). Build +
+   deploy is ~2-3 min.
+3. Migrations run automatically at import (`init_db()` in `app.py` — the DDL
+   `ALTER TABLE … ADD COLUMN` statements in `db._migrate_add_columns` are
+   idempotent and serialized by a cross-process lock).
+4. Verify (see §16 smoke test): `curl -s https://rosterhires.com/health` →
+   `status: ok`; `curl -s -o /dev/null -w '%{http_code}' https://rosterhires.com/`
+   → 200.
+5. If `/health` returns 503, the database is unreachable — check the Railway
+   deploy logs and the volume mount.
+
+**Env var changes need a redeploy to take effect** (`railway variables set …`
+then trigger a deploy — `railway up` or a dashboard redeploy).
 
 ## 4. Rollback procedure
 
-_(filled as the pass proceeds)_
+The application has no destructive migrations — every schema change is an
+additive `ADD COLUMN`, so an older image runs against a newer database
+(it just ignores the extra columns). Rollback is therefore safe:
+
+1. **Railway dashboard → the service → Deployments →** pick the last known-good
+   deployment **→ Redeploy.** This re-runs that image; no data change.
+2. Or `git revert <bad commit>` on `main` and let the auto-deploy roll forward
+   to the reverted state (preferred — keeps history honest).
+3. Data written by the bad version stays (additive schema, no drops). If a bad
+   version wrote *wrong* data, that's a data-repair task, not a rollback —
+   restore from a backup snapshot (§6) into a scratch DB, diff, fix forward.
+
+There is no blue/green or canary. For 10-20 customers a ~30 s restart window
+on redeploy is acceptable; revisit if it isn't.
 
 ## 5. Database migration procedure (SQLite → Postgres)
 
-_(hardened + documented in Step 2 of this pass — see `runbook.md` "Migrating to Postgres" for the current version)_
+**Not done in production. `DATABASE_URL` is unset → SQLite on the volume.**
+This is P0-3 (customer data is not durable). The migration tool
+(`migrate_to_postgres.py`) is built and its data-copy + verification is
+covered by `tests/test_migrate_to_postgres.py` (which runs against a real
+Postgres when `ROSTER_TEST_DATABASE_URL` is set, skips otherwise).
+
+**Cutover (human action, ~1 hour, one brief restart):**
+
+1. **Provision Postgres on Railway** (add a Postgres service to the project),
+   copy its connection string.
+2. **Take a fresh backup first**, always (§6).
+3. **Pull the live SQLite DB:**
+   ```bash
+   railway ssh -- base64 /data/roster.db > prod.b64
+   base64 -d -i prod.b64 -o prod-roster.db
+   ```
+4. **Migrate into a SCRATCH Postgres first** (never straight at the one Railway
+   will use):
+   ```bash
+   DATABASE_URL=postgresql://…scratch… agent/.venv/bin/python agent/migrate_to_postgres.py prod-roster.db
+   ```
+   It refuses a non-empty target, copies every table in FK order, resets every
+   identity sequence past the copied ids, and verifies row counts + sequences
+   before returning. `MigrationError` = do not cut over.
+5. **Run the suite against that scratch Postgres:**
+   ```bash
+   ROSTER_TEST_DATABASE_URL=postgresql://…scratch… agent/.venv/bin/pytest -q
+   ```
+   All green (including the 5 `test_migrate_to_postgres.py` cases that were
+   skipping) = the app works on Postgres.
+6. **Migrate into the real Railway Postgres** (repeat step 4 with its URL,
+   against a fresh pull).
+7. **Set `DATABASE_URL`** in Railway → **redeploy.** The app now uses Postgres;
+   `--workers 1` can be raised in `railway.toml` (Postgres handles concurrent
+   writers and `locks.py` becomes a real cross-process `pg_advisory_lock`).
+8. Verify `/health` → `database.ok: true`; confirm a booking/login works.
+9. Keep the SQLite volume for a few days as a fallback, then remove it.
 
 ## 6. Backup & restore
 
-_(filled as the pass proceeds)_
+**Backups (`backup.py`, runs every scheduler tick):** SQLite `.backup()` API
+(not `cp` — WAL-safe), immediately reopened + integrity-checked + row-count
+matched against the source. A snapshot that fails verification is **deleted**
+("a backup nobody restored is not a backup"). Kept in
+`$ROSTER_DATA_DIR/backups/` (i.e. `/data/backups/`), last ~14 retained.
+`/health` reports the newest snapshot's age.
+
+**KNOWN GAP (P1-7):** backups are on the same Railway volume as the database.
+A volume loss loses both. The Postgres cutover (§5) closes this — Railway
+Postgres has managed daily backups + point-in-time recovery. **Until then, a
+volume loss is unrecoverable.** Interim mitigation: `railway ssh -- base64
+/data/backups/<newest>.db` periodically and keep a copy off-platform.
+
+**Restore (SQLite, current):**
+1. Stop taking writes (scale the service to 0, or accept the last few minutes
+   are lost).
+2. `railway ssh` in; `cp /data/backups/<chosen>.db /data/roster.db`.
+3. Restart the service. `init_db()` re-runs the idempotent migrations.
+4. Verify `/health` and spot-check recent bookings.
+
+**Restore has never been drilled (P2-5).** Do one dry run against a scratch
+copy before relying on it.
+
+**What data can be lost:** anything written since the last snapshot (≤ one
+tick interval, default 1 h) plus anything in the WAL not yet checkpointed.
+Acceptable for the pilot; the Postgres move with PITR reduces it to seconds.
 
 ## 7. Twilio provisioning lifecycle & recovery
 
-_(filled as the pass proceeds — depends on the P0-1 claim landing first)_
+**States** (read from columns, not one enum — auditable by construction):
+
+| Signal | Meaning |
+|---|---|
+| `twilio_number_sid` unset | no number bought |
+| `provisioning_started_at` set, `twilio_number_sid` unset | a purchase is **in progress** (or, if > 10 min old, **abandoned** — a process died mid-purchase) |
+| `twilio_number_sid` set, `xai_signing_secret` unset | number bought, SMS-ready, voice not registered — retry via `retry-xai-registration` |
+| `twilio_number_sid` + `xai_signing_secret` set, `voice_provisioning_error` unset | fully wired |
+| `voice_provisioning_error` set | last voice attempt failed (retry safe) |
+| `sms_delivery_status` | `not_configured` → `pending_campaign` (on purchase) → `active` (founder marks it when the A2P campaign clears) |
+
+**Preconditions (both enforced in `provision_number`, backend):**
+- `provisioning_allowed()` — `payment_method_verified_at` OR
+  `provisioning_unlocked_at` (founder override, `POST /clients/{id}/unlock-provisioning`).
+- `claim_provisioning()` — atomic claim so two concurrent requests can't both buy.
+
+**Recovery — a customer's provisioning looks stuck:**
+1. Check `/clients/{id}` — the console shows the state and any error.
+2. **`provisioning_started_at` set, no `twilio_number_sid`, > 10 min old:** a
+   process died mid-purchase. The claim is now re-claimable. **Before
+   re-clicking "Buy", check for an orphan number:** Twilio console → Phone
+   Numbers → Active Numbers → look for a number bought around that timestamp
+   that isn't attached to any business. If found: either attach it manually
+   (set `inbound_number` + `twilio_number_sid` on the row via `railway ssh`
+   `python`) or **release it** in the Twilio console (stops the ~$1/mo charge).
+   Then the "Buy" button is safe to use.
+3. **`twilio_number_sid` set, voice failing:** click "Retry xAI voice
+   registration" (buys nothing). If it 409s ("already registered … secret
+   unrecoverable"), that number is bricked for voice — provision a different
+   one (see `provisioning.provision_voice`'s docstring).
 
 ## 8. Monitoring
 
-_(filled as the pass proceeds)_
+- **`/health`** (Railway healthcheck + a human mid-incident): `database`
+  (hard, 503), `scheduler` heartbeat / `backups` age / `owner_alerts`
+  undelivered count (soft, 200 with detail).
+- **Structured JSON logs** on stdout, captured by Railway. `logger.exception`
+  / `logger.error` for every handled failure boundary. Search the Railway log
+  viewer or `railway logs`.
+- **Sentry** — code ready (`sentry_config.py`, `sentry-sdk` installed),
+  **`SENTRY_DSN` not set** (P1-4). Set it to capture unhandled exceptions +
+  the tick-phase failures now recorded on the heartbeat. `LoggingIntegration`
+  attaches after `configure_logging()` so `logger.error` from boot onward is
+  captured.
+- **Trial-cap events** — the owner is texted; the founder is texted **only if
+  `FOUNDER_ALERT_PHONE` is set** (P1-3, currently unset).
 
 ## 9. Common failures & incident response
 
-_(filled as the pass proceeds)_
+| Symptom | Likely cause | Action |
+|---|---|---|
+| `/health` 503 | DB unreachable (volume unmounted, disk full, Postgres down) | Railway deploy logs; check the volume; restart |
+| `/health` `scheduler.ok: false`, stale heartbeat | tick crashed or hung; `last_tick_error` names the phase (P1-2) | read logs for that phase; a bad row is now skipped automatically, so a *persistent* failure is a code bug |
+| Owner reports "no text when a job was booked" | A2P campaign not `active` for that business, OR the owner's number is wrong | check `sms_delivery_status`; check `escalation_phone` is E.164; `/health` `owner_alerts.undelivered` |
+| Customer's employees "went silent" | trial cap crossed | `/clients/{id}` shows it; move to paid (`billing-state`) or the cap resets on trial re-entry |
+| Voice call reaches silence | xAI registration / trunk broken | `GET /clients/{id}/voice-preflight` checks all 4 links |
+| Two Twilio numbers for one business | (pre-P0-1) — shouldn't recur | release the spare in the Twilio console |
+| Duplicate booking / duplicate reply | shouldn't happen — `WebhookDelivery` dedup + `book_job` upsert | capture the `MessageSid`/`CallSid`, check `webhookdelivery` |
 
 ## 10. Currently production-ready vs external-dependency-pending
 
