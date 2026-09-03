@@ -313,7 +313,14 @@ def test_the_guard_covers_every_function_the_scheduler_drives():
 
     import recovery_tick
 
-    driven = set(re.findall(r"(\w+)\(session\)", inspect.getsource(recovery_tick.run)))
+    src = inspect.getsource(recovery_tick.run)
+    # recovery_tick.run drives every phase through a `_phase("Name", fn)`
+    # helper (each phase isolated — see P1-2). Match that form; also keep the
+    # older `fn(session)` form in case a future edit calls one directly.
+    driven = set(re.findall(r'_phase\(\s*"[^"]+",\s*(\w+)\)', src)) | set(
+        re.findall(r"(\w+)\(session\)", src)
+    )
+    driven.discard("fn")  # the _phase helper's own parameter, not a tick worker
     covered = {name for _, name in TICK_FUNCTIONS}
 
     missing = driven - covered

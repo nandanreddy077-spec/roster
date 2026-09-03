@@ -61,50 +61,47 @@ def run():
     except Exception as e:  # noqa: BLE001 — a backup must never break the tick
         logger.error("backup failed", exc_info=e)
 
-    try:
-        with Session(engine) as session:
-            qualified = qualify_new_jobs(session)
-            logger.info("Lead Qualifier tick", extra={"qualified": len(qualified)})
-            planned = recommend_dispatch(session)
-            logger.info("Dispatcher tick", extra={"planned": len(planned)})
-            enrolled = enroll_completed_estimates(session)
-            logger.info("Quote Chaser tick", extra={"enrolled": len(enrolled)})
-            # Enrollment/qualification/dispatch never contact a customer directly,
-            # so only the calls below — the ones that actually send a text — are
-            # gated on send_hours_ok. A skipped send is picked up next tick.
-            if send_hours_ok():
-                sent = tick(session)
-                logger.info("Recovery tick sent", extra={"sent": len(sent)})
-                referral_sent = send_due_referral_asks(session)
-                logger.info("Referrals tick sent", extra={"sent": len(referral_sent)})
-                review_sent = send_due_review_requests(session)
-                logger.info("Reviews tick sent", extra={"sent": len(review_sent)})
-                review_followup_sent = send_due_review_followups(session)
-                logger.info(
-                    "Review follow-ups tick sent", extra={"sent": len(review_followup_sent)}
-                )
-                # Last on purpose: the membership offer is the latest touch in the
-                # post-completion sequence (day 7, after the review ask on day 1,
-                # the referral ask on day 4 and the review nudge around day 5 —
-                # see membership_engine.MEMBERSHIP_OFFER_DELAY_DAYS).
-                membership_sent = send_due_membership_offers(session)
-                logger.info("Membership Agent tick sent", extra={"sent": len(membership_sent)})
-                membership_followup_sent = send_due_membership_followups(session)
-                logger.info(
-                    "Membership follow-ups tick sent",
-                    extra={"sent": len(membership_followup_sent)},
-                )
-            else:
-                logger.info(
-                    "outside send hours (9am-8pm local, every mainland US timezone) — "
-                    "skipping Recovery/Referral/Reviews/Membership sends this tick"
-                )
-    except Exception as e:
-        # Recorded, then re-raised: scheduler.py's own try/except still logs
-        # and keeps the loop alive exactly as before. The heartbeat exists so
-        # /health can see a failed tick too, not just a missing one.
-        _record_heartbeat(ok=False, error=f"{type(e).__name__}: {e}")
-        raise
+    # Each phase runs independently (docs/PRODUCTION_READINESS.md P1-2). Before
+    # this, one phase raising skipped every LATER phase in the same tick — so a
+    # bug in Lead Qualifier silenced Reviews, Referral and Membership for an
+    # hour until the next tick. Now a phase failure is recorded and the rest
+    # still run; the heartbeat carries which phases failed so /health and
+    # Sentry see a partial tick, not a clean one.
+    failures: list[str] = []
+
+    def _phase(name: str, fn) -> None:
+        try:
+            with Session(engine) as session:
+                produced = fn(session)
+            logger.info(f"{name} tick", extra={"produced": len(produced) if produced else 0})
+        except Exception as e:  # noqa: BLE001 — one phase must not take down the tick
+            logger.exception(f"{name} tick phase failed", extra={"phase": name})
+            failures.append(f"{name}: {type(e).__name__}: {e}")
+
+    _phase("Lead Qualifier", qualify_new_jobs)
+    _phase("Dispatcher", recommend_dispatch)
+    _phase("Quote Chaser enrollment", enroll_completed_estimates)
+
+    # Enrollment/qualification/dispatch never contact a customer directly, so
+    # only the sends below are gated on send_hours_ok. A skipped send is picked
+    # up next tick.
+    if send_hours_ok():
+        _phase("Recovery sends", tick)
+        _phase("Referrals", send_due_referral_asks)
+        _phase("Reviews", send_due_review_requests)
+        _phase("Review follow-ups", send_due_review_followups)
+        # Last on purpose: the membership offer is the latest touch in the
+        # post-completion sequence (see membership_engine.MEMBERSHIP_OFFER_DELAY_DAYS).
+        _phase("Membership offers", send_due_membership_offers)
+        _phase("Membership follow-ups", send_due_membership_followups)
+    else:
+        logger.info(
+            "outside send hours (9am-8pm local, every mainland US timezone) — "
+            "skipping Recovery/Referral/Reviews/Membership sends this tick"
+        )
+
+    if failures:
+        _record_heartbeat(ok=False, error=" | ".join(failures))
     else:
         _record_heartbeat(ok=True, error=None)
 
