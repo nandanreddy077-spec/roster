@@ -8,9 +8,21 @@ restarting fixes neither and risks a restart loop over noise)."""
 from datetime import datetime, timedelta
 
 import app as app_module
-from db_models import SchedulerHeartbeat
+from db_models import Business, OwnerNotification, SchedulerHeartbeat
 from fastapi.testclient import TestClient
 from sqlmodel import Session
+
+
+def _business_id(session: Session) -> int:
+    """A real business row. OwnerNotification.business_id is a FK — Postgres
+    enforces it (SQLite doesn't by default), so a test that inserts an
+    OwnerNotification needs a parent, not a hardcoded id=1."""
+    b = Business(business_name="Kestrel", trade="HVAC")
+    session.add(b)
+    session.commit()
+    session.refresh(b)
+    assert b.id is not None
+    return b.id
 
 
 def test_health_is_public_no_auth_required(test_engine, monkeypatch):
@@ -119,12 +131,15 @@ def test_undelivered_owner_alerts_are_reported(test_engine, monkeypatch):
     recorded and never arrived — and the failure of the alarm channel was
     itself unalarmed."""
     monkeypatch.setattr(app_module, "engine", test_engine)
-    from db_models import OwnerNotification
-
     with Session(test_engine) as session:
+        bid = _business_id(session)
         session.add(
             OwnerNotification(
-                business_id=1, kind="escalation", source="alert_owner", message="m", delivered=False
+                business_id=bid,
+                kind="escalation",
+                source="alert_owner",
+                message="m",
+                delivered=False,
             )
         )
         session.commit()
@@ -137,12 +152,15 @@ def test_undelivered_owner_alerts_are_reported(test_engine, monkeypatch):
 
 def test_delivered_owner_alerts_do_not_trip_the_check(test_engine, monkeypatch):
     monkeypatch.setattr(app_module, "engine", test_engine)
-    from db_models import OwnerNotification
-
     with Session(test_engine) as session:
+        bid = _business_id(session)
         session.add(
             OwnerNotification(
-                business_id=1, kind="escalation", source="alert_owner", message="m", delivered=True
+                business_id=bid,
+                kind="escalation",
+                source="alert_owner",
+                message="m",
+                delivered=True,
             )
         )
         session.commit()
@@ -156,12 +174,15 @@ def test_undelivered_alerts_do_not_take_the_service_down(test_engine, monkeypatc
     """A soft signal, like scheduler/backups: worth a human's attention, but
     restarting the container would not deliver a single missed text."""
     monkeypatch.setattr(app_module, "engine", test_engine)
-    from db_models import OwnerNotification
-
     with Session(test_engine) as session:
+        bid = _business_id(session)
         session.add(
             OwnerNotification(
-                business_id=1, kind="escalation", source="alert_owner", message="m", delivered=False
+                business_id=bid,
+                kind="escalation",
+                source="alert_owner",
+                message="m",
+                delivered=False,
             )
         )
         session.commit()

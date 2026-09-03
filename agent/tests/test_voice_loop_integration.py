@@ -1448,6 +1448,15 @@ def tracking_connector_for(ws):
 
 TINY_TIMEOUT = 0.05
 
+# For the two "timeout AFTER <work>" tests below: they assert that work
+# committed BEFORE the cutoff (a booking, an escalation page) survives it. That
+# work goes through `await asyncio.to_thread(...)`, whose scheduling latency
+# under a loaded threadpool (the full suite, CI) can exceed 50ms — so those
+# tests raced their own setup. This value keeps them fast while giving the
+# pre-timeout work reliable headroom; the timeout still fires because the fake
+# WS hangs forever afterwards.
+TIMEOUT_AFTER_WORK = 0.5
+
 
 def test_a_normal_call_under_the_limit_is_unaffected(test_engine):
     """The new wrapping must not change ordinary behavior at all."""
@@ -1554,7 +1563,7 @@ def test_timeout_after_a_booking_preserves_the_booked_job(test_engine, monkeypat
             lambda: Session(test_engine),
             connect=tracking_connector_for(ws),
             trace=trace,
-            max_duration_seconds=TINY_TIMEOUT,
+            max_duration_seconds=TIMEOUT_AFTER_WORK,
         )
     )
 
@@ -1590,7 +1599,7 @@ def test_timeout_after_an_escalation_still_notifies_once_more_honestly(test_engi
             lambda: Session(test_engine),
             connect=tracking_connector_for(ws),
             trace=trace,
-            max_duration_seconds=TINY_TIMEOUT,
+            max_duration_seconds=TIMEOUT_AFTER_WORK,
         )
     )
 
