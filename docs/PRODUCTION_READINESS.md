@@ -271,16 +271,47 @@ Acceptable for the pilot; the Postgres move with PITR reduces it to seconds.
 | Two Twilio numbers for one business | (pre-P0-1) — shouldn't recur | release the spare in the Twilio console |
 | Duplicate booking / duplicate reply | shouldn't happen — `WebhookDelivery` dedup + `book_job` upsert | capture the `MessageSid`/`CallSid`, check `webhookdelivery` |
 
-## 10. Currently production-ready vs external-dependency-pending
+## 10. Post-deploy smoke test
+
+Run after every deploy. Read-only — no destructive production actions.
+
+```bash
+BASE=https://rosterhires.com
+curl -s $BASE/health | python3 -m json.tool      # status: ok; database.ok: true
+curl -s -o /dev/null -w '%{http_code}\n' $BASE/           # 200
+curl -s -o /dev/null -w '%{http_code}\n' $BASE/messaging  # 200
+curl -s -o /dev/null -w '%{http_code}\n' $BASE/clients    # 401 (auth required — good)
+railway deployment list | head -3                 # newest is SUCCESS
+railway logs | tail -20                           # no tracebacks since boot
+```
+
+Then, in a browser: log into `/clients` (Basic auth), open a client, confirm
+the page renders and the action queue + setup checklist look right. If a test
+client exists, send it a dashboard test-chat message and confirm a reply.
+
+`/health` body fields to eyeball: `scheduler.age_seconds` < 7200,
+`backups.age_seconds` < ~90000, `owner_alerts.undelivered` == 0.
+
+## 11. Currently production-ready vs external-dependency-pending
 
 **Production-ready now:**
-- Voice receptionist (inbound calls, triage, booking capture, hangup)
-- The conversation engine and booking flow (verified by tests + the dashboard test-chat)
-- Founder-driven onboarding via `/clients/*`
+- Voice receptionist (inbound calls, triage, booking capture, clean hangup)
+- The conversation engine + booking flow (tests + the dashboard test-chat)
+- Founder-driven onboarding via `/clients/*` — with the P0-1/P1-1 provisioning
+  guards (no concurrent double-buy, no purchase without a payment/unlock gate)
 - Webhook authentication + idempotency
+- Scheduler resilience — one business/phase failure no longer aborts the tick (P1-2)
+- SMS is honestly held, not filtered into the void, until a campaign is approved (P1-5)
+- Login + public-form abuse throttling (P1-6)
 - Health checks, structured logging, the verified backup job
 
 **External dependency pending — NOT ready:**
-- **Outbound SMS** — blocked on per-customer A2P 10DLC campaign approval (Twilio/TCR, ~3-5 business days per customer once registered). This includes the missed-call text-back, owner alerts by SMS, and every retention agent. Voice does not depend on it.
-- **Durable storage** — pending the Postgres cutover (human action).
+- **Outbound SMS** — blocked on per-customer A2P 10DLC campaign approval
+  (Twilio/TCR, ~3-5 business days per customer once registered). Missed-call
+  text-back, owner alerts by SMS, every retention agent. **Voice does not
+  depend on it** — voice-first onboarding works today.
+- **Durable storage** — pending the Postgres cutover (§5, human action).
 - **Error monitoring** — pending `SENTRY_DSN` (human action).
+- **Founder trial-cap SMS** — pending `FOUNDER_ALERT_PHONE` (human action).
+- **Self-serve signup** — not built. The provisioning backend guards are in
+  place for when it is (Phase 1a plan). `SELF_SERVE_SIGNUP` stays unset.
