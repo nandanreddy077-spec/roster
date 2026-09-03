@@ -5,6 +5,8 @@ hardcoded active for every business, and the other tiles derived 'active' from
 unrelated config fields (a review link being set, a campaign existing). The
 founder has never had a real deployment view — see audit B1."""
 
+from datetime import datetime
+
 import app as app_module
 from conftest import DASH_AUTH
 from db_models import Business, Employee
@@ -523,7 +525,11 @@ def test_provisioning_a_number_twice_does_not_buy_a_second_one(test_engine, monk
     )
     monkeypatch.setattr(provisioning_module, "attach_number_to_xai_trunk", lambda sid, n: None)
     with Session(test_engine) as s:
-        bid = _business(s).id
+        b = _business(s)
+        b.provisioning_unlocked_at = datetime.utcnow()  # founder-provisioned → unlocked
+        s.add(b)
+        s.commit()
+        bid = b.id
     client = TestClient(app_module.app, headers=DASH_AUTH)
 
     client.post(f"/clients/{bid}/provision-number", data={"area_code": "512"})

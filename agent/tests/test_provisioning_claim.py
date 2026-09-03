@@ -85,7 +85,7 @@ def test_provision_number_buys_once_across_repeated_posts(monkeypatch, test_engi
     monkeypatch.setattr(app_module, "buy_twilio_number", _buy)
     monkeypatch.setattr(app_module, "provision_voice", lambda *a, **k: None)
 
-    bid = provisioned_business(test_engine)
+    bid = provisioned_business(test_engine, provisioning_unlocked_at=datetime.utcnow())
     client = TestClient(app_module.app)
     for _ in range(4):
         client.post(
@@ -117,7 +117,7 @@ def test_a_failed_purchase_releases_the_claim_for_retry(monkeypatch, test_engine
     monkeypatch.setattr(app_module, "buy_twilio_number", _flaky_buy)
     monkeypatch.setattr(app_module, "provision_voice", lambda *a, **k: None)
 
-    bid = provisioned_business(test_engine)
+    bid = provisioned_business(test_engine, provisioning_unlocked_at=datetime.utcnow())
     client = TestClient(app_module.app)
 
     r1 = client.post(

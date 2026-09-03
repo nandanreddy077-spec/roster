@@ -91,6 +91,7 @@ from provisioning import (
     buy_twilio_number,
     claim_provisioning,
     provision_voice,
+    provisioning_allowed,
     public_base_url,
     release_provisioning_claim,
     verify_voice_wiring,
@@ -920,6 +921,20 @@ def provision_number(client_id: int, area_code: str = Form("")):
             return RedirectResponse(
                 f"/clients/{client_id}?provision_error={quote(already)}", status_code=303
             )
+        # THE payment gate (P1-1). Roster spends real money here, so no path
+        # may reach buy_twilio_number for a business that has neither a verified
+        # payment method nor a founder unlock. Founder-only route today, but the
+        # self-serve wizard will call the same buy path — the gate lives here,
+        # in the backend, not in a template.
+        if not provisioning_allowed(client):
+            msg = (
+                f"{client.business_name or 'This business'} has no verified payment "
+                "method. Click 'Unlock provisioning' first (free first-cohort), or "
+                "wait until a card is on file."
+            )
+            return RedirectResponse(
+                f"/clients/{client_id}?provision_error={quote(msg)}", status_code=303
+            )
         # THE concurrent-double-buy guard (P0-1). Two requests in flight at
         # once (a double-click; FastAPI runs sync handlers in a threadpool even
         # at --workers 1) both pass the read-check above. This atomic claim
@@ -1253,6 +1268,26 @@ def set_pipeline_stage(client_id: int, stage: str = Form(...)):
 
         redirect_url += f"?stage_error={quote(error)}"
     return RedirectResponse(redirect_url, status_code=303)
+
+
+@app.post("/clients/{client_id}/unlock-provisioning")
+def unlock_provisioning(client_id: int):
+    """Founder override: allow a Twilio number to be bought for a business with
+    no card on file — the free hand-onboarded first cohort
+    (docs/PRODUCTION_READINESS.md P1-1, self-serve spec §3).
+
+    Idempotent: re-clicking keeps the ORIGINAL timestamp, because "when did a
+    human decide to spend money on this shop" is the fact the audit trail needs.
+    """
+    with Session(engine) as session:
+        client = session.get(Business, client_id)
+        if client is None:
+            raise HTTPException(status_code=404, detail="No such client")
+        if client.provisioning_unlocked_at is None:
+            client.provisioning_unlocked_at = datetime.utcnow()
+            session.add(client)
+            session.commit()
+    return RedirectResponse(f"/clients/{client_id}", status_code=303)
 
 
 @app.post("/clients/{client_id}/billing-state")

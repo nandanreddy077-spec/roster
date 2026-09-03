@@ -321,10 +321,21 @@
         {% else %}
         <p class="agent-tile-desc">No number yet — buy one to enable SMS and voice for this client.</p>
         {% endif %}
+        {% if not client.payment_method_verified_at and not client.provisioning_unlocked_at %}
+        <p class="job-notes">🔒 No payment method on file. Buying a number is blocked until you unlock it (free first-cohort) or a card is verified.</p>
+        <form method="post" action="/clients/{{ client.id }}/unlock-provisioning" class="review-link-form">
+          <button class="btn btn-small" type="submit">Unlock provisioning</button>
+        </form>
+        {% elif client.provisioning_unlocked_at %}
+        <p class="job-notes">Provisioning unlocked {{ client.provisioning_unlocked_at.strftime('%Y-%m-%d') }} (founder override).</p>
+        {% endif %}
         <form method="post" action="/clients/{{ client.id }}/provision-number" class="review-link-form"
               onsubmit="this.querySelector('button').disabled = true;">
           <input type="text" name="area_code" placeholder="Area code (optional)" maxlength="3">
-          <button class="btn btn-primary btn-small" type="submit">Buy &amp; wire up number</button>
+          <button class="btn btn-primary btn-small" type="submit"
+                  {% if not client.payment_method_verified_at and not client.provisioning_unlocked_at %}disabled{% endif %}>
+            Buy &amp; wire up number
+          </button>
         </form>
         <p class="agent-tile-desc" style="margin-top:12px;">Or attach an xAI voice number (no Twilio): create the number in the xAI console, point its webhook at <code>/webhook/xai-incoming-call</code>, and paste it + its signing secret here.</p>
         <form method="post" action="/clients/{{ client.id }}/attach-xai-number" class="review-link-form">

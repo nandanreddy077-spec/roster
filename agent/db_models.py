@@ -116,6 +116,17 @@ class Business(SQLModel, table=True):
     # the signal to reconcile against Twilio's number list (see
     # docs/PRODUCTION_READINESS.md §7).
     provisioning_started_at: Optional[datetime] = None
+    # Whether Roster is allowed to SPEND MONEY buying this business a Twilio
+    # number. provisioning.provisioning_allowed() is True once EITHER is set:
+    #   payment_method_verified_at — a card is on file (Stripe, later).
+    #   provisioning_unlocked_at   — a founder override, set from the console
+    #                                for the free hand-onboarded first cohort.
+    # Self-serve /signup was closed on 2026-08-06 precisely because the wizard
+    # bought a number for anyone; this is the backend gate that lets it reopen
+    # (docs/PRODUCTION_READINESS.md P1-1, self-serve spec §3). Frontend gating
+    # is not sufficient — every purchase path checks this.
+    payment_method_verified_at: Optional[datetime] = None
+    provisioning_unlocked_at: Optional[datetime] = None
     review_link: Optional[str] = (
         None  # owner's Google/Yelp review URL; unset until they provide one
     )

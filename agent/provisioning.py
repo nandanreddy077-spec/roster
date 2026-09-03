@@ -57,6 +57,25 @@ class ProvisioningError(Exception):
     pass
 
 
+def provisioning_allowed(business) -> bool:
+    """Whether Roster may spend money buying this business a Twilio number.
+
+    True once EITHER a payment method is verified (Stripe, later) OR a founder
+    has explicitly unlocked it from the console (the free hand-onboarded first
+    cohort). Self-serve /signup was closed on 2026-08-06 because the wizard
+    bought a number for anyone; this is the backend gate that lets it reopen
+    (docs/PRODUCTION_READINESS.md P1-1). Every purchase path — provision_number,
+    retry_xai_registration, and the self-serve activation flow — checks it.
+
+    Duck-typed on the two attributes so it unit-tests with a bare object and
+    never needs the row loaded from a particular session.
+    """
+    return (
+        getattr(business, "payment_method_verified_at", None) is not None
+        or getattr(business, "provisioning_unlocked_at", None) is not None
+    )
+
+
 def claim_provisioning(session: Session, business_id: int) -> bool:
     """Atomically claim the right to buy a Twilio number for this business.
 
