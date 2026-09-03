@@ -106,6 +106,16 @@ class Business(SQLModel, table=True):
     twilio_number_sid: Optional[str] = (
         None  # Twilio's SID for the purchased number, needed to later attach it to a SIP trunk
     )
+    # When a purchase of a Twilio number for this business was CLAIMED — set by
+    # an atomic conditional UPDATE before buy_twilio_number() runs, so two
+    # concurrent provision requests (a double-click; FastAPI runs sync handlers
+    # in a threadpool even at --workers 1) can't both buy. Cleared on a failed
+    # purchase so a retry can re-claim. A claim older than
+    # provisioning._PROVISIONING_CLAIM_TTL with still no twilio_number_sid is
+    # treated as abandoned (the process died mid-purchase) — re-claimable, and
+    # the signal to reconcile against Twilio's number list (see
+    # docs/PRODUCTION_READINESS.md §7).
+    provisioning_started_at: Optional[datetime] = None
     review_link: Optional[str] = (
         None  # owner's Google/Yelp review URL; unset until they provide one
     )

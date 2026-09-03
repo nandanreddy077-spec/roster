@@ -89,8 +89,10 @@ from portal import router as portal_router
 from provisioning import (
     ProvisioningError,
     buy_twilio_number,
+    claim_provisioning,
     provision_voice,
     public_base_url,
+    release_provisioning_claim,
     verify_voice_wiring,
 )
 from recovery_engine import FACE_DISPLAY_NAMES
@@ -899,17 +901,17 @@ def provision_number(client_id: int, area_code: str = Form("")):
     (e.g. missing XAI_API_KEY or an xAI-side error), the Twilio half is kept —
     SMS agents work immediately — and the error is reported so voice can be
     retried later, rather than losing the purchased number."""
+    from urllib.parse import quote
+
     error = None
     with Session(engine) as session:
         client = session.get(Business, client_id)
-        # This route BUYS a number every time it runs. POST-redirect-GET stops
-        # a refresh from re-submitting, but not a double-click while the first
-        # request is still in flight — that bought two numbers, and the spare
-        # was never released. Refuse when one is already on file; the xAI half
-        # is retried via retry-xai-registration, which buys nothing.
-        if client is not None and client.twilio_number_sid:
-            from urllib.parse import quote
-
+        if client is None:
+            raise HTTPException(status_code=404, detail="No such client")
+        # Already has a number — the friendly answer for a sequential repeat
+        # (a refresh past POST-redirect-GET, or a click after the first one
+        # finished). The xAI half is retried via retry-xai-registration.
+        if client.twilio_number_sid:
             already = (
                 f"{client.business_name or 'This business'} already has "
                 f"{client.inbound_number or 'a number'} — not buying another. "
@@ -918,8 +920,25 @@ def provision_number(client_id: int, area_code: str = Form("")):
             return RedirectResponse(
                 f"/clients/{client_id}?provision_error={quote(already)}", status_code=303
             )
+        # THE concurrent-double-buy guard (P0-1). Two requests in flight at
+        # once (a double-click; FastAPI runs sync handlers in a threadpool even
+        # at --workers 1) both pass the read-check above. This atomic claim
+        # lets exactly one of them proceed to buy_twilio_number.
+        if not claim_provisioning(session, client_id):
+            return RedirectResponse(
+                f"/clients/{client_id}?provision_error="
+                + quote(
+                    "A number purchase for this business is already in progress. "
+                    "Refresh in a minute — if it's still stuck, see the runbook's "
+                    "provisioning recovery steps."
+                ),
+                status_code=303,
+            )
         try:
             purchase = buy_twilio_number(area_code.strip() or None)
+            # Re-fetch: the claim UPDATE committed and expired every instance
+            # in this session.
+            client = session.get(Business, client_id)
             client.inbound_number = purchase["phone_number"]
             client.twilio_number_sid = purchase["sid"]
             session.add(client)
@@ -934,7 +953,18 @@ def provision_number(client_id: int, area_code: str = Form("")):
                     f"registration with xAI didn't complete: {voice_error}"
                 )
         except ProvisioningError as e:
+            # The purchase failed — no number on file. Release the claim so a
+            # retry can re-claim immediately rather than waiting out the TTL.
+            release_provisioning_claim(session, client_id)
             error = str(e)
+        except Exception:
+            # Anything unexpected between the claim and the SID commit: release
+            # the claim (scoped to twilio_number_sid IS NULL, so a purchase that
+            # DID land is left claimed and reconcilable) and re-raise so the
+            # error is not swallowed. A crash before this line is covered by the
+            # claim TTL instead.
+            release_provisioning_claim(session, client_id)
+            raise
 
     redirect_url = f"/clients/{client_id}"
     if error:
