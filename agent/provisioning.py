@@ -64,8 +64,10 @@ def provisioning_allowed(business) -> bool:
     has explicitly unlocked it from the console (the free hand-onboarded first
     cohort). Self-serve /signup was closed on 2026-08-06 because the wizard
     bought a number for anyone; this is the backend gate that lets it reopen
-    (docs/PRODUCTION_READINESS.md P1-1). Every purchase path — provision_number,
-    retry_xai_registration, and the self-serve activation flow — checks it.
+    (docs/PRODUCTION_READINESS.md P1-1). Checked by every path that BUYS a
+    number: provision_number today, the self-serve activation flow next.
+    (retry_xai_registration is not gated — it buys nothing, only finishes
+    wiring a number already paid for.)
 
     Duck-typed on the two attributes so it unit-tests with a bare object and
     never needs the row loaded from a particular session.
