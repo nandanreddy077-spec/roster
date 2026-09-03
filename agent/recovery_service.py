@@ -13,7 +13,7 @@ import optout
 from booking_language import render_slot_language
 from bookings import book_job
 from calendar_provider import get_calendar_provider
-from channels import STOP_KEYWORDS, get_channel
+from channels import STOP_KEYWORDS, get_channel, sms_deliverable
 from db_models import (
     BOOKING_PROPOSED,
     ORIGIN_QUOTE_RECOVERY,
@@ -132,55 +132,64 @@ def enroll_completed_estimates(session: Session) -> List[RecoveryJob]:
     for job in jobs:
         if not job.callback_number:
             continue
-        # The deployment invariant, at the point where automatic enrollment
-        # begins (see runner.dispatch_tick). This is the ONLY place a campaign
-        # gets created without a human asking for one: create_campaign is a
-        # founder action and is consent by definition, but auto-enrollment has
-        # no action behind it at all. Unlike Reviews and Referral, nothing here
-        # required any configuration either — a completed estimate alone put a
-        # real customer into a multi-touch texting sequence, for every business
-        # on the platform. Gating enrollment is sufficient to gate the sends:
-        # tick() only ever works campaigns that were founder-created or
-        # enrolled here, so there is no third way for one to exist.
-        client = session.get(Business, job.business_id)
-        if client is None or not is_active(session, client, "quote_chaser"):
-            continue
-        already_enrolled = session.exec(
-            select(RecoveryJob).where(RecoveryJob.source_job_id == job.id)
-        ).first()
-        if already_enrolled is not None:
-            continue
+        # Per-job isolation (docs/PRODUCTION_READINESS.md P1-2): this loop
+        # scans jobs across every business, so one bad row must not abort
+        # enrollment for the rest — nor, since recovery_tick.run calls the tick
+        # phases in sequence, skip every later phase.
+        try:
+            # The deployment invariant, at the point where automatic enrollment
+            # begins (see runner.dispatch_tick). This is the ONLY place a
+            # campaign gets created without a human asking for one:
+            # create_campaign is a founder action and is consent by definition,
+            # but auto-enrollment has no action behind it at all. Gating
+            # enrollment is sufficient to gate the sends: tick() only ever works
+            # campaigns that were founder-created or enrolled here.
+            client = session.get(Business, job.business_id)
+            if client is None or not is_active(session, client, "quote_chaser"):
+                continue
+            already_enrolled = session.exec(
+                select(RecoveryJob).where(RecoveryJob.source_job_id == job.id)
+            ).first()
+            if already_enrolled is not None:
+                continue
 
-        campaign = RecoveryCampaign(
-            business_id=job.business_id,
-            face="quote",
-            name=f"Auto-detected: {job.service_type}",
-            customer_list_json=json.dumps(
-                [
-                    {
-                        "phone": job.callback_number,
-                        "name": job.customer_name,
-                        "service_type": job.service_type,
-                    }
-                ]
-            ),
-        )
-        session.add(campaign)
-        session.commit()
-        session.refresh(campaign)
+            campaign = RecoveryCampaign(
+                business_id=job.business_id,
+                face="quote",
+                name=f"Auto-detected: {job.service_type}",
+                customer_list_json=json.dumps(
+                    [
+                        {
+                            "phone": job.callback_number,
+                            "name": job.customer_name,
+                            "service_type": job.service_type,
+                        }
+                    ]
+                ),
+            )
+            session.add(campaign)
+            session.commit()
+            session.refresh(campaign)
 
-        recovery_job = RecoveryJob(
-            campaign_id=campaign.id,
-            business_id=job.business_id,
-            source_job_id=job.id,
-            customer_phone=job.callback_number,
-            customer_name=job.customer_name,
-            service_type=clean_service_type(job.service_type),
-        )
-        session.add(recovery_job)
-        session.commit()
-        session.refresh(recovery_job)
-        enrolled.append(recovery_job)
+            recovery_job = RecoveryJob(
+                campaign_id=campaign.id,
+                business_id=job.business_id,
+                source_job_id=job.id,
+                customer_phone=job.callback_number,
+                customer_name=job.customer_name,
+                service_type=clean_service_type(job.service_type),
+            )
+            session.add(recovery_job)
+            session.commit()
+            session.refresh(recovery_job)
+            enrolled.append(recovery_job)
+        except Exception:
+            logger.exception(
+                "Quote Chaser enrollment failed for one job — skipping it, continuing",
+                extra={"business_id": job.business_id, "job_id": job.id},
+            )
+            session.rollback()
+            continue
 
     return enrolled
 
@@ -264,6 +273,13 @@ def tick(session: Session) -> List[RecoveryJob]:
                         service_type=job.service_type,
                         recovery_job_id=job.id,
                     )
+            continue
+
+        # SMS delivery gate (P1-5): checked BEFORE the claim, so a held day is
+        # picked up unchanged on a later tick once the A2P campaign is
+        # approved — claiming first would mark it sent and skip it forever.
+        client = session.get(Business, job.business_id)
+        if client is not None and not sms_deliverable(client):
             continue
 
         # CLAIM the day before sending: a conditional UPDATE that only wins if

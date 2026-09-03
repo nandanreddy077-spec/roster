@@ -182,6 +182,10 @@ def _migrate_add_columns():
         "ALTER TABLE job ADD COLUMN owner_proposed_at DATETIME",
         "ALTER TABLE job ADD COLUMN booking_notes VARCHAR",
         "ALTER TABLE customer ADD COLUMN opted_out_at DATETIME",
+        "ALTER TABLE business ADD COLUMN provisioning_started_at DATETIME",
+        "ALTER TABLE business ADD COLUMN payment_method_verified_at DATETIME",
+        "ALTER TABLE business ADD COLUMN provisioning_unlocked_at DATETIME",
+        "ALTER TABLE business ADD COLUMN sms_delivery_status VARCHAR DEFAULT 'not_configured'",
     )
     with engine.connect() as conn:
         for ddl in statements:

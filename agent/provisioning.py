@@ -17,10 +17,14 @@ Two halves:
 
 import logging
 import os
+from datetime import datetime, timedelta
 from typing import Optional
 
 import httpx
 from db_models import Business
+from sqlalchemy import or_
+from sqlalchemy import update as sa_update
+from sqlmodel import Session, col
 from twilio.rest import Client as TwilioRestClient
 
 logger = logging.getLogger(__name__)
@@ -29,6 +33,13 @@ XAI_TRUNK_FRIENDLY_NAME = "Roster - xAI Voice"
 DEFAULT_PUBLIC_BASE_URL = "https://rosterhires.com"
 XAI_PHONE_NUMBERS_URL = "https://api.x.ai/v2/phone-numbers"
 XAI_INCOMING_CALL_PATH = "/webhook/xai-incoming-call"
+
+# How long a provisioning claim is honored before it's treated as abandoned.
+# buy_twilio_number + the xAI round-trips finish in seconds; anything still
+# "in progress" after this is a process that died mid-purchase. Long enough
+# that a slow-but-live request is never stolen from, short enough that a real
+# crash doesn't wedge a customer's provisioning until someone notices.
+_PROVISIONING_CLAIM_TTL = timedelta(minutes=10)
 
 
 def public_base_url() -> str:
@@ -44,6 +55,80 @@ def public_base_url() -> str:
 
 class ProvisioningError(Exception):
     pass
+
+
+def provisioning_allowed(business) -> bool:
+    """Whether Roster may spend money buying this business a Twilio number.
+
+    True once EITHER a payment method is verified (Stripe, later) OR a founder
+    has explicitly unlocked it from the console (the free hand-onboarded first
+    cohort). Self-serve /signup was closed on 2026-08-06 because the wizard
+    bought a number for anyone; this is the backend gate that lets it reopen
+    (docs/PRODUCTION_READINESS.md P1-1). Checked by every path that BUYS a
+    number: provision_number today, the self-serve activation flow next.
+    (retry_xai_registration is not gated — it buys nothing, only finishes
+    wiring a number already paid for.)
+
+    Duck-typed on the two attributes so it unit-tests with a bare object and
+    never needs the row loaded from a particular session.
+    """
+    return (
+        getattr(business, "payment_method_verified_at", None) is not None
+        or getattr(business, "provisioning_unlocked_at", None) is not None
+    )
+
+
+def claim_provisioning(session: Session, business_id: int) -> bool:
+    """Atomically claim the right to buy a Twilio number for this business.
+
+    Returns True exactly once per business-without-a-number. A concurrent or
+    repeated call returns False. This is the fix for the concurrent double-buy
+    (docs/PRODUCTION_READINESS.md P0-1): the old `if client.twilio_number_sid`
+    guard is a read-then-act check that two in-flight requests both pass.
+
+    The claim is a single conditional UPDATE — the same claim-before-act
+    pattern recovery_service.tick, booking_manager._claim and
+    trial_cap.record_usage already use — so exactly one of two racing callers
+    gets rowcount 1.
+
+    A claim older than _PROVISIONING_CLAIM_TTL with still no twilio_number_sid
+    is re-claimable: the process that made it died mid-purchase, and wedging a
+    customer's provisioning forever is worse than the small window where a
+    genuinely-slow request could be double-run (buy_twilio_number itself is
+    idempotent only by luck, but the TTL is far longer than it ever takes).
+    """
+    cutoff = datetime.utcnow() - _PROVISIONING_CLAIM_TTL
+    claimed = session.execute(
+        sa_update(Business)
+        .where(
+            col(Business.id) == business_id,
+            col(Business.twilio_number_sid).is_(None),
+            or_(
+                col(Business.provisioning_started_at).is_(None),
+                col(Business.provisioning_started_at) < cutoff,
+            ),
+        )
+        .values(provisioning_started_at=datetime.utcnow())
+    )
+    session.commit()
+    return claimed.rowcount == 1  # type: ignore[attr-defined]
+
+
+def release_provisioning_claim(session: Session, business_id: int) -> None:
+    """Undo a claim after a FAILED purchase, so a retry can re-claim at once
+    instead of waiting out the TTL. Scoped to `twilio_number_sid IS NULL`: if
+    the purchase actually succeeded (and only a later step failed), the SID is
+    already on file and both blocks re-claim and marks the number as real —
+    releasing the claim there would be wrong."""
+    session.execute(
+        sa_update(Business)
+        .where(
+            col(Business.id) == business_id,
+            col(Business.twilio_number_sid).is_(None),
+        )
+        .values(provisioning_started_at=None)
+    )
+    session.commit()
 
 
 def _twilio_client() -> TwilioRestClient:

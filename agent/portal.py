@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Optional
 
 import metrics
+import ratelimit
 from auth import read_access_token, verify_password
 from authlib.integrations.starlette_client import OAuthError
 from db import engine
@@ -207,6 +208,23 @@ def login_form(request: Request):
 @router.post("/login")
 def login_submit(request: Request, email: str = Form(...), password: str = Form(...)):
     email = email.strip().lower()
+    # Brute-force throttle (P1-6): per-IP and per-account, whichever trips
+    # first. 10 tries / 5 min is far above a human fat-fingering a password and
+    # far below a useful online guessing rate (bcrypt is slow on top).
+    ip = ratelimit.client_ip(request)
+    if not ratelimit.allow(f"login:ip:{ip}", 10, 300) or not ratelimit.allow(
+        f"login:acct:{email}", 10, 300
+    ):
+        return templates.TemplateResponse(
+            request,
+            "login.html",
+            {
+                "error": "Too many attempts. Wait a few minutes and try again.",
+                "email": email,
+                "google_enabled": google_enabled(),
+            },
+            status_code=429,
+        )
     with Session(engine) as session:
         client = session.exec(select(Business).where(Business.email == email)).first()
         if (

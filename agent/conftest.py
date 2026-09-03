@@ -24,6 +24,17 @@ def _session_secret(monkeypatch):
     monkeypatch.setenv("SESSION_SECRET_KEY", "test-session-secret-key")
 
 
+@pytest.fixture(autouse=True)
+def _reset_ratelimit():
+    """The rate limiter (ratelimit.py) is a process-global counter — clear it
+    between tests so one test's login attempts can't trip another's."""
+    import ratelimit
+
+    ratelimit.reset()
+    yield
+    ratelimit.reset()
+
+
 @pytest.fixture
 def test_engine():
     """The database every test runs against.

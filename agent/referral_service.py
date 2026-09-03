@@ -9,7 +9,7 @@ from datetime import datetime, timedelta
 from typing import List, Optional
 
 import optout
-from channels import get_channel
+from channels import get_channel, sms_deliverable
 from db_models import Business, Job, ReferralLead
 from employee_outcome import CUSTOMER_FALLBACK_MESSAGE, report_employee_blocked, report_if_failed
 from engine import AgentEngine
@@ -57,6 +57,8 @@ def send_due_referral_asks(session: Session) -> List[Job]:
         # contradicting each other. Graduating the registry entry is what
         # turns it back on, deliberately.
         if not is_active(session, client, "referral"):
+            continue
+        if not sms_deliverable(client):  # P1-5 — held until the campaign is approved
             continue
         # ORDER MATTERS (Milestone B): hired first, then configuration. Dead
         # code while Referral's registry status is `planned` (is_active can

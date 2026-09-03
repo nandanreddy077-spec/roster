@@ -21,11 +21,14 @@ Design choices, honestly:
   one `RoleDefinition` here — no other change.
 """
 
+import logging
 from dataclasses import dataclass
 from typing import Callable, List
 
 from db_models import Business, Job
 from sqlmodel import Session
+
+logger = logging.getLogger(__name__)
 
 Capability = Callable[[Session, Business, Job], None]
 
@@ -143,10 +146,26 @@ def dispatch_tick(session: Session, role_key: str, capability: TickCapability) -
     Aggregates and returns whatever each capability call returns (typically
     the rows it created), matching the existing return shape of
     qualify_new_jobs/recommend_dispatch/etc. so callers don't need to
-    change."""
+    change.
+
+    FAILURE ISOLATION (docs/PRODUCTION_READINESS.md P1-2): each business runs
+    in its own try. One business raising — a bad row, a transient DB error —
+    must not skip every business after it in the loop (and, since
+    recovery_tick.run calls these phases in sequence, must not skip every
+    LATER tick phase either). A failure is logged and rolled back; the next
+    business proceeds. A tick that never makes progress is still visible via
+    the scheduler heartbeat and Sentry."""
     results: list = []
     for business in deployed_businesses(session, role_key):
-        produced = capability(session, business)
+        try:
+            produced = capability(session, business)
+        except Exception:
+            logger.exception(
+                "tick capability failed for one business — skipping it, continuing",
+                extra={"role_key": role_key, "business_id": business.id},
+            )
+            session.rollback()
+            continue
         if produced:
             results.extend(produced)
     return results

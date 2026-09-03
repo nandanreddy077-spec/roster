@@ -40,6 +40,7 @@ logger.info("sentry configured" if _sentry_enabled else "sentry not configured (
 
 import booking_manager
 import optout
+import ratelimit
 from auth import ACCESS_LINK_MAX_AGE_SECONDS, make_access_token, resolve_session_secret
 from booking_manager import (
     find_active_owner_proposal,
@@ -48,11 +49,14 @@ from booking_manager import (
 )
 from bookings import parse_money_cents
 from call_trace import CallTrace
-from channels import get_channel, normalize_phone
+from channels import get_channel, normalize_phone, sms_deliverable
 from db import DATA_DIR, engine, init_db
 from db_models import (
     BILLING_PAID,
     BILLING_TRIAL,
+    SMS_DELIVERY_STATES,
+    SMS_NOT_CONFIGURED,
+    SMS_PENDING_CAMPAIGN,
     AccessRequest,
     Business,
     Customer,
@@ -89,8 +93,11 @@ from portal import router as portal_router
 from provisioning import (
     ProvisioningError,
     buy_twilio_number,
+    claim_provisioning,
     provision_voice,
+    provisioning_allowed,
     public_base_url,
+    release_provisioning_claim,
     verify_voice_wiring,
 )
 from recovery_engine import FACE_DISPLAY_NAMES
@@ -730,11 +737,16 @@ def list_clients(request: Request):
 # phone-number CTAs for now.
 @app.post("/request-access")
 def request_access(
+    request: Request,
     name: str = Form(...),
     phone: str = Form(...),
     trade: str = Form(""),
     business_name: str = Form(""),
 ):
+    # Public, unauthenticated, writes a row (P1-6). Throttle per IP so a script
+    # can't fill the table — 5/hour is generous for a real person.
+    if not ratelimit.allow(f"request-access:{ratelimit.client_ip(request)}", 5, 3600):
+        return RedirectResponse("/thanks", status_code=303)  # look identical to success
     with Session(engine) as session:
         session.add(
             AccessRequest(
@@ -899,17 +911,17 @@ def provision_number(client_id: int, area_code: str = Form("")):
     (e.g. missing XAI_API_KEY or an xAI-side error), the Twilio half is kept —
     SMS agents work immediately — and the error is reported so voice can be
     retried later, rather than losing the purchased number."""
+    from urllib.parse import quote
+
     error = None
     with Session(engine) as session:
         client = session.get(Business, client_id)
-        # This route BUYS a number every time it runs. POST-redirect-GET stops
-        # a refresh from re-submitting, but not a double-click while the first
-        # request is still in flight — that bought two numbers, and the spare
-        # was never released. Refuse when one is already on file; the xAI half
-        # is retried via retry-xai-registration, which buys nothing.
-        if client is not None and client.twilio_number_sid:
-            from urllib.parse import quote
-
+        if client is None:
+            raise HTTPException(status_code=404, detail="No such client")
+        # Already has a number — the friendly answer for a sequential repeat
+        # (a refresh past POST-redirect-GET, or a click after the first one
+        # finished). The xAI half is retried via retry-xai-registration.
+        if client.twilio_number_sid:
             already = (
                 f"{client.business_name or 'This business'} already has "
                 f"{client.inbound_number or 'a number'} — not buying another. "
@@ -918,10 +930,47 @@ def provision_number(client_id: int, area_code: str = Form("")):
             return RedirectResponse(
                 f"/clients/{client_id}?provision_error={quote(already)}", status_code=303
             )
+        # THE payment gate (P1-1). Roster spends real money here, so no path
+        # may reach buy_twilio_number for a business that has neither a verified
+        # payment method nor a founder unlock. Founder-only route today, but the
+        # self-serve wizard will call the same buy path — the gate lives here,
+        # in the backend, not in a template.
+        if not provisioning_allowed(client):
+            msg = (
+                f"{client.business_name or 'This business'} has no verified payment "
+                "method. Click 'Unlock provisioning' first (free first-cohort), or "
+                "wait until a card is on file."
+            )
+            return RedirectResponse(
+                f"/clients/{client_id}?provision_error={quote(msg)}", status_code=303
+            )
+        # THE concurrent-double-buy guard (P0-1). Two requests in flight at
+        # once (a double-click; FastAPI runs sync handlers in a threadpool even
+        # at --workers 1) both pass the read-check above. This atomic claim
+        # lets exactly one of them proceed to buy_twilio_number.
+        if not claim_provisioning(session, client_id):
+            return RedirectResponse(
+                f"/clients/{client_id}?provision_error="
+                + quote(
+                    "A number purchase for this business is already in progress. "
+                    "Refresh in a minute — if it's still stuck, see the runbook's "
+                    "provisioning recovery steps."
+                ),
+                status_code=303,
+            )
         try:
             purchase = buy_twilio_number(area_code.strip() or None)
+            # Re-fetch: the claim UPDATE committed and expired every instance
+            # in this session.
+            client = session.get(Business, client_id)
             client.inbound_number = purchase["phone_number"]
             client.twilio_number_sid = purchase["sid"]
+            # Number bought, but SMS won't deliver until this business's own
+            # A2P 10DLC campaign is approved (P1-5). Voice works now. Only
+            # advance from not_configured — never downgrade an already-active
+            # number that's being re-wired.
+            if client.sms_delivery_status == SMS_NOT_CONFIGURED:
+                client.sms_delivery_status = SMS_PENDING_CAMPAIGN
             session.add(client)
             session.commit()
 
@@ -934,7 +983,18 @@ def provision_number(client_id: int, area_code: str = Form("")):
                     f"registration with xAI didn't complete: {voice_error}"
                 )
         except ProvisioningError as e:
+            # The purchase failed — no number on file. Release the claim so a
+            # retry can re-claim immediately rather than waiting out the TTL.
+            release_provisioning_claim(session, client_id)
             error = str(e)
+        except Exception:
+            # Anything unexpected between the claim and the SID commit: release
+            # the claim (scoped to twilio_number_sid IS NULL, so a purchase that
+            # DID land is left claimed and reconcilable) and re-raise so the
+            # error is not swallowed. A crash before this line is covered by the
+            # claim TTL instead.
+            release_provisioning_claim(session, client_id)
+            raise
 
     redirect_url = f"/clients/{client_id}"
     if error:
@@ -1222,6 +1282,53 @@ def set_pipeline_stage(client_id: int, stage: str = Form(...)):
         from urllib.parse import quote
 
         redirect_url += f"?stage_error={quote(error)}"
+    return RedirectResponse(redirect_url, status_code=303)
+
+
+@app.post("/clients/{client_id}/unlock-provisioning")
+def unlock_provisioning(client_id: int):
+    """Founder override: allow a Twilio number to be bought for a business with
+    no card on file — the free hand-onboarded first cohort
+    (docs/PRODUCTION_READINESS.md P1-1, self-serve spec §3).
+
+    Idempotent: re-clicking keeps the ORIGINAL timestamp, because "when did a
+    human decide to spend money on this shop" is the fact the audit trail needs.
+    """
+    with Session(engine) as session:
+        client = session.get(Business, client_id)
+        if client is None:
+            raise HTTPException(status_code=404, detail="No such client")
+        if client.provisioning_unlocked_at is None:
+            client.provisioning_unlocked_at = datetime.utcnow()
+            session.add(client)
+            session.commit()
+    return RedirectResponse(f"/clients/{client_id}", status_code=303)
+
+
+@app.post("/clients/{client_id}/sms-delivery-status")
+def set_sms_delivery_status(client_id: int, status: str = Form(...)):
+    """Move a business's SMS delivery state (P1-5). The founder sets this to
+    `active` once that business's A2P 10DLC campaign is approved by the
+    carriers — until then proactive SMS is held, not filtered into the void.
+    Explicit target, not a toggle, so a stale re-post is a no-op success.
+    (A future automated A2P-status callback will set this instead.)"""
+    error = None
+    if status not in SMS_DELIVERY_STATES:
+        error = f"Unknown SMS delivery status: {status}"
+    else:
+        with Session(engine) as session:
+            client = session.get(Business, client_id)
+            if client is None:
+                raise HTTPException(status_code=404, detail="No such client")
+            if client.sms_delivery_status != status:
+                client.sms_delivery_status = status
+                session.add(client)
+                session.commit()
+    redirect_url = f"/clients/{client_id}"
+    if error:
+        from urllib.parse import quote
+
+        redirect_url += f"?sms_status_error={quote(error)}"
     return RedirectResponse(redirect_url, status_code=303)
 
 
@@ -1517,6 +1624,7 @@ def client_detail(request: Request, client_id: int):
             "stage_error": request.query_params.get("stage_error"),
             "billing_error": request.query_params.get("billing_error"),
             "booking_error": request.query_params.get("booking_error"),
+            "sms_status_error": request.query_params.get("sms_status_error"),
         },
     )
 
@@ -1790,6 +1898,17 @@ async def missed_call(request: Request):
             session.commit()
         except IntegrityError:
             session.rollback()
+            return Response(status_code=204)
+        # SMS delivery gate (P1-5): a missed-call text-back is a PROACTIVE send.
+        # If the A2P campaign isn't approved, carriers filter it silently — the
+        # caller gets nothing and the owner thinks a text went out. Skip it
+        # honestly (the caller had a voice line to reach); the founder console
+        # shows this business is voice-only until the campaign clears.
+        if not sms_deliverable(client):
+            logger.info(
+                "missed-call text-back held — SMS delivery not active",
+                extra={"business_id": client.id, "sms_delivery_status": client.sms_delivery_status},
+            )
             return Response(status_code=204)
         opener = (
             f"Hi! Sorry we missed your call to {client.business_name}. "

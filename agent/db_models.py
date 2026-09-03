@@ -71,6 +71,29 @@ BOOKING_RESCHEDULE_REQUESTED = "reschedule_requested"
 BILLING_TRIAL = "trial"
 BILLING_PAID = "paid"
 
+# Whether a proactive text from this business's number will actually reach a
+# US mobile. A2P 10DLC is a US-carrier regulation (The Campaign Registry): a
+# message from a 10-digit number needs an APPROVED per-business campaign or
+# carriers filter it SILENTLY — the send succeeds, Twilio reports success, and
+# nobody receives it. This tracks that, separately from "a number is
+# configured", so the app never pretends SMS works when it doesn't
+# (docs/PRODUCTION_READINESS.md P1-5).
+#
+#   not_configured   — no number, or no messaging service.
+#   pending_campaign — number bought, A2P campaign not yet approved (~3-5
+#                      business days per business once registered). Voice
+#                      works; proactive SMS is HELD rather than filtered into
+#                      the void.
+#   active           — campaign approved; SMS delivers.
+#
+# Voice never checks this. Owner alerts are attempted regardless (one
+# recipient, low volume, time-sensitive) and their real outcome is recorded on
+# OwnerNotification.delivered.
+SMS_NOT_CONFIGURED = "not_configured"
+SMS_PENDING_CAMPAIGN = "pending_campaign"
+SMS_ACTIVE = "active"
+SMS_DELIVERY_STATES = (SMS_NOT_CONFIGURED, SMS_PENDING_CAMPAIGN, SMS_ACTIVE)
+
 
 class Business(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
@@ -106,6 +129,27 @@ class Business(SQLModel, table=True):
     twilio_number_sid: Optional[str] = (
         None  # Twilio's SID for the purchased number, needed to later attach it to a SIP trunk
     )
+    # When a purchase of a Twilio number for this business was CLAIMED — set by
+    # an atomic conditional UPDATE before buy_twilio_number() runs, so two
+    # concurrent provision requests (a double-click; FastAPI runs sync handlers
+    # in a threadpool even at --workers 1) can't both buy. Cleared on a failed
+    # purchase so a retry can re-claim. A claim older than
+    # provisioning._PROVISIONING_CLAIM_TTL with still no twilio_number_sid is
+    # treated as abandoned (the process died mid-purchase) — re-claimable, and
+    # the signal to reconcile against Twilio's number list (see
+    # docs/PRODUCTION_READINESS.md §7).
+    provisioning_started_at: Optional[datetime] = None
+    # Whether Roster is allowed to SPEND MONEY buying this business a Twilio
+    # number. provisioning.provisioning_allowed() is True once EITHER is set:
+    #   payment_method_verified_at — a card is on file (Stripe, later).
+    #   provisioning_unlocked_at   — a founder override, set from the console
+    #                                for the free hand-onboarded first cohort.
+    # Self-serve /signup was closed on 2026-08-06 precisely because the wizard
+    # bought a number for anyone; this is the backend gate that lets it reopen
+    # (docs/PRODUCTION_READINESS.md P1-1, self-serve spec §3). Frontend gating
+    # is not sufficient — every purchase path checks this.
+    payment_method_verified_at: Optional[datetime] = None
+    provisioning_unlocked_at: Optional[datetime] = None
     review_link: Optional[str] = (
         None  # owner's Google/Yelp review URL; unset until they provide one
     )
@@ -147,6 +191,10 @@ class Business(SQLModel, table=True):
     # newly provisioned business is still protected from runaway spend; the
     # founder flips it from the console when the customer starts paying.
     billing_state: str = BILLING_TRIAL
+    # See SMS_* above. Defaults to not_configured; provision_number moves it to
+    # pending_campaign; a founder (later, an automated A2P-status callback)
+    # moves it to active once the carrier approves the campaign.
+    sms_delivery_status: str = SMS_NOT_CONFIGURED
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
     @property

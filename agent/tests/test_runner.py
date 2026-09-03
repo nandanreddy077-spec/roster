@@ -183,3 +183,30 @@ def test_dispatch_tick_aggregates_results_across_multiple_deployed_businesses(se
     results = dispatch_tick(session, "dispatcher", lambda s, biz: [f"job-for-{biz.id}"])
 
     assert set(results) == {f"job-for-{a.id}", f"job-for-{b.id}"}
+
+
+def test_dispatch_tick_isolates_one_business_failure_from_the_rest(session, caplog):
+    """P1-2: a capability raising for one business must not skip every business
+    after it (nor, since recovery_tick.run chains the phases, every later
+    phase). The failure is logged and rolled back; the loop continues."""
+    import logging
+
+    a = _business(session, "runneriso-a@test.io")
+    b = _business(session, "runneriso-b@test.io")
+    deploy_role(session, a.id, "dispatcher")
+    deploy_role(session, b.id, "dispatcher")
+
+    seen = []
+
+    def capability(s, biz):
+        seen.append(biz.id)
+        if biz.id == a.id:
+            raise RuntimeError("bad row for business A")
+        return [f"job-for-{biz.id}"]
+
+    with caplog.at_level(logging.ERROR, logger="runner"):
+        results = dispatch_tick(session, "dispatcher", capability)
+
+    assert set(seen) == {a.id, b.id}  # both attempted
+    assert results == [f"job-for-{b.id}"]  # B still produced work
+    assert any("skipping it, continuing" in r.message for r in caplog.records)

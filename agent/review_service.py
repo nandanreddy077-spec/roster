@@ -9,7 +9,7 @@ from datetime import datetime, timedelta
 from typing import List, Optional
 
 import optout
-from channels import get_channel
+from channels import get_channel, sms_deliverable
 from db_models import ORIGIN_ESCALATION, Business, Job, ReviewReply
 from employee_outcome import CUSTOMER_FALLBACK_MESSAGE, report_employee_blocked, report_if_failed
 from engine import AgentEngine
@@ -90,6 +90,10 @@ def send_due_review_requests(session: Session) -> List[Job]:
         # to set.
         if not is_active(session, client, "reviews"):
             continue
+        # SMS delivery gate (P1-5): held, not filtered — review_requested_at
+        # stays unset so this job is picked up once the campaign is approved.
+        if not sms_deliverable(client):
+            continue
         if not client.review_link:
             report_employee_blocked(
                 session,
@@ -156,6 +160,8 @@ def send_due_review_followups(session: Session) -> List[Job]:
         if client is None or not client.review_link or not job.callback_number:
             continue
         if not is_active(session, client, "reviews"):
+            continue
+        if not sms_deliverable(client):  # P1-5 — held until the campaign is approved
             continue
         settled_reply = session.exec(
             select(ReviewReply).where(
