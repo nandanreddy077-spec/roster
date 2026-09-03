@@ -121,7 +121,9 @@ def test_a_failed_purchase_releases_the_claim_for_retry(monkeypatch, test_engine
     client = TestClient(app_module.app)
 
     r1 = client.post(
-        f"/clients/{bid}/provision-number", data={"area_code": "512"}, headers=DASH_AUTH,
+        f"/clients/{bid}/provision-number",
+        data={"area_code": "512"},
+        headers=DASH_AUTH,
         follow_redirects=False,
     )
     assert "provision_error" in r1.headers["location"]
@@ -130,7 +132,9 @@ def test_a_failed_purchase_releases_the_claim_for_retry(monkeypatch, test_engine
 
     # Retry succeeds immediately — not blocked by a stale claim.
     client.post(
-        f"/clients/{bid}/provision-number", data={"area_code": "512"}, headers=DASH_AUTH,
+        f"/clients/{bid}/provision-number",
+        data={"area_code": "512"},
+        headers=DASH_AUTH,
         follow_redirects=False,
     )
     with Session(test_engine) as s:
@@ -142,7 +146,9 @@ def test_provision_number_on_a_missing_client_is_404(monkeypatch, test_engine):
     _wire(monkeypatch, test_engine)
     client = TestClient(app_module.app)
     r = client.post(
-        "/clients/424242/provision-number", data={"area_code": "512"}, headers=DASH_AUTH,
+        "/clients/424242/provision-number",
+        data={"area_code": "512"},
+        headers=DASH_AUTH,
         follow_redirects=False,
     )
     assert r.status_code == 404

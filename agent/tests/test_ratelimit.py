@@ -46,24 +46,33 @@ def _wire(monkeypatch, test_engine):
 def test_login_throttles_after_repeated_failures(monkeypatch, test_engine):
     _wire(monkeypatch, test_engine)
     with Session(test_engine) as s:
-        s.add(Business(business_name="Co", trade="HVAC", email="o@s.com",
-                       password_hash=hash_password("correct-horse")))
+        s.add(
+            Business(
+                business_name="Co",
+                trade="HVAC",
+                email="o@s.com",
+                password_hash=hash_password("correct-horse"),
+            )
+        )
         s.commit()
     client = TestClient(app_module.app)
 
     for _ in range(10):
-        r = client.post("/login", data={"email": "o@s.com", "password": "wrong"},
-                        follow_redirects=False)
+        r = client.post(
+            "/login", data={"email": "o@s.com", "password": "wrong"}, follow_redirects=False
+        )
         assert r.status_code == 400  # invalid creds, not yet throttled
 
-    r = client.post("/login", data={"email": "o@s.com", "password": "wrong"},
-                    follow_redirects=False)
+    r = client.post(
+        "/login", data={"email": "o@s.com", "password": "wrong"}, follow_redirects=False
+    )
     assert r.status_code == 429
 
     # Even the CORRECT password is refused while throttled — the point is to
     # stop the guessing, and a real owner waits a few minutes.
-    r = client.post("/login", data={"email": "o@s.com", "password": "correct-horse"},
-                    follow_redirects=False)
+    r = client.post(
+        "/login", data={"email": "o@s.com", "password": "correct-horse"}, follow_redirects=False
+    )
     assert r.status_code == 429
 
 
@@ -72,12 +81,14 @@ def test_request_access_spam_is_dropped_but_looks_like_success(monkeypatch, test
     client = TestClient(app_module.app)
 
     for _ in range(5):
-        r = client.post("/request-access", data={"name": "A", "phone": "555"},
-                        follow_redirects=False)
+        r = client.post(
+            "/request-access", data={"name": "A", "phone": "555"}, follow_redirects=False
+        )
         assert r.headers["location"] == "/thanks"
 
-    r = client.post("/request-access", data={"name": "spammer", "phone": "555"},
-                    follow_redirects=False)
+    r = client.post(
+        "/request-access", data={"name": "spammer", "phone": "555"}, follow_redirects=False
+    )
     assert r.headers["location"] == "/thanks"  # identical response
 
     with Session(test_engine) as s:

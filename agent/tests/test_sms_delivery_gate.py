@@ -91,8 +91,12 @@ def test_founder_marks_sms_active_and_rejects_an_unknown_status(monkeypatch, tes
 
 
 def _recovery_setup(session, status):
-    biz = Business(business_name="Kestrel", trade="HVAC", inbound_number="+15125550100",
-                   sms_delivery_status=status)
+    biz = Business(
+        business_name="Kestrel",
+        trade="HVAC",
+        inbound_number="+15125550100",
+        sms_delivery_status=status,
+    )
     session.add(biz)
     session.commit()
     session.refresh(biz)
@@ -100,15 +104,21 @@ def _recovery_setup(session, status):
 
     deploy_role(session, biz.id, "quote_chaser")
     campaign = RecoveryCampaign(
-        business_id=biz.id, face="quote", name="c",
-        customer_list_json="[]", started_at=datetime.utcnow() - timedelta(days=2),
+        business_id=biz.id,
+        face="quote",
+        name="c",
+        customer_list_json="[]",
+        started_at=datetime.utcnow() - timedelta(days=2),
     )
     session.add(campaign)
     session.commit()
     session.refresh(campaign)
     rj = RecoveryJob(
-        campaign_id=campaign.id, business_id=biz.id, customer_phone="+15125559999",
-        service_type="AC repair", current_status="pending",
+        campaign_id=campaign.id,
+        business_id=biz.id,
+        customer_phone="+15125559999",
+        service_type="AC repair",
+        current_status="pending",
     )
     session.add(rj)
     session.commit()
@@ -150,14 +160,23 @@ def test_missed_call_text_back_is_held_while_pending(monkeypatch, test_engine):
     monkeypatch.setattr(app_module, "_twilio_signature_ok", lambda request, form: True)
 
     with Session(test_engine) as s:
-        biz = Business(business_name="Kestrel", trade="HVAC", inbound_number="+15125550100",
-                       sms_delivery_status=SMS_PENDING_CAMPAIGN)
+        biz = Business(
+            business_name="Kestrel",
+            trade="HVAC",
+            inbound_number="+15125550100",
+            sms_delivery_status=SMS_PENDING_CAMPAIGN,
+        )
         s.add(biz)
         s.commit()
 
     r = TestClient(app_module.app).post(
         "/webhook/voice-status",
-        data={"From": "+15125559999", "To": "+15125550100", "CallSid": "CA1", "CallStatus": "no-answer"},
+        data={
+            "From": "+15125559999",
+            "To": "+15125550100",
+            "CallSid": "CA1",
+            "CallStatus": "no-answer",
+        },
     )
     assert r.status_code == 204
     assert sent == []
