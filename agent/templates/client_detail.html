@@ -347,6 +347,27 @@
         {% if provision_error %}
         <p class="job-notes">{{ provision_error }}</p>
         {% endif %}
+        {# SMS delivery: a number being wired up does NOT mean texts reach US
+           mobiles — that needs this business's own A2P 10DLC campaign approved
+           (~3-5 business days). Held sends are held, not filtered into the void. #}
+        {% if client.inbound_number %}
+        <p class="job-notes">
+          SMS delivery:
+          <strong>
+            {% if client.sms_delivery_status == "active" %}✅ active — texts deliver
+            {% elif client.sms_delivery_status == "pending_campaign" %}⏳ pending A2P campaign approval — voice only, proactive SMS held
+            {% else %}not configured{% endif %}
+          </strong>
+        </p>
+        <form method="post" action="/clients/{{ client.id }}/sms-delivery-status" class="review-link-form">
+          {% if client.sms_delivery_status != "active" %}
+          <button name="status" value="active" class="btn btn-small" type="submit">Mark SMS active (campaign approved)</button>
+          {% else %}
+          <button name="status" value="pending_campaign" class="btn btn-small" type="submit">Revert to pending</button>
+          {% endif %}
+        </form>
+        {% if sms_status_error %}<p class="job-notes">{{ sms_status_error }}</p>{% endif %}
+        {% endif %}
         {# Billing state decides whether the spend cap can silence this client's
            employees at all, so it belongs next to the cap reading, not on a
            separate settings page. #}

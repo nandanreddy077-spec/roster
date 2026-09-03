@@ -23,7 +23,7 @@ from datetime import datetime, timedelta
 from typing import List, Optional
 
 import optout
-from channels import STOP_KEYWORDS, get_channel
+from channels import STOP_KEYWORDS, get_channel, sms_deliverable
 from db_models import Business, Customer, Job, JobQualification, MembershipOffer
 from employee_outcome import CUSTOMER_FALLBACK_MESSAGE, report_employee_blocked, report_if_failed
 from engine import AgentEngine
@@ -144,6 +144,11 @@ def send_due_membership_offers(session: Session) -> List[MembershipOffer]:
         # hired is not blocked, so a business that never asked for this
         # employee is never nagged about a plan it has no reason to write.
         if not is_active(session, client, ROLE_KEY):
+            continue
+        # SMS delivery gate (P1-5): BEFORE the claim-insert below — the
+        # MembershipOffer row IS the claim, and creating it for a held send
+        # would spend this customer's one-offer-ever slot on nothing.
+        if not sms_deliverable(client):
             continue
         if not client.membership_plan:
             report_employee_blocked(
@@ -272,6 +277,10 @@ def send_due_membership_followups(session: Session) -> List[MembershipOffer]:
         if client is None or not client.membership_plan:
             continue
         if not is_active(session, client, ROLE_KEY):
+            continue
+        # SMS delivery gate (P1-5): before the claim, so a held nudge is sent
+        # once the campaign is approved rather than marked done and skipped.
+        if not sms_deliverable(client):
             continue
 
         # Claim by conditional UPDATE rather than by insert — the row already

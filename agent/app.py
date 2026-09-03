@@ -48,11 +48,14 @@ from booking_manager import (
 )
 from bookings import parse_money_cents
 from call_trace import CallTrace
-from channels import get_channel, normalize_phone
+from channels import get_channel, normalize_phone, sms_deliverable
 from db import DATA_DIR, engine, init_db
 from db_models import (
     BILLING_PAID,
     BILLING_TRIAL,
+    SMS_DELIVERY_STATES,
+    SMS_NOT_CONFIGURED,
+    SMS_PENDING_CAMPAIGN,
     AccessRequest,
     Business,
     Customer,
@@ -956,6 +959,12 @@ def provision_number(client_id: int, area_code: str = Form("")):
             client = session.get(Business, client_id)
             client.inbound_number = purchase["phone_number"]
             client.twilio_number_sid = purchase["sid"]
+            # Number bought, but SMS won't deliver until this business's own
+            # A2P 10DLC campaign is approved (P1-5). Voice works now. Only
+            # advance from not_configured — never downgrade an already-active
+            # number that's being re-wired.
+            if client.sms_delivery_status == SMS_NOT_CONFIGURED:
+                client.sms_delivery_status = SMS_PENDING_CAMPAIGN
             session.add(client)
             session.commit()
 
@@ -1290,6 +1299,33 @@ def unlock_provisioning(client_id: int):
     return RedirectResponse(f"/clients/{client_id}", status_code=303)
 
 
+@app.post("/clients/{client_id}/sms-delivery-status")
+def set_sms_delivery_status(client_id: int, status: str = Form(...)):
+    """Move a business's SMS delivery state (P1-5). The founder sets this to
+    `active` once that business's A2P 10DLC campaign is approved by the
+    carriers — until then proactive SMS is held, not filtered into the void.
+    Explicit target, not a toggle, so a stale re-post is a no-op success.
+    (A future automated A2P-status callback will set this instead.)"""
+    error = None
+    if status not in SMS_DELIVERY_STATES:
+        error = f"Unknown SMS delivery status: {status}"
+    else:
+        with Session(engine) as session:
+            client = session.get(Business, client_id)
+            if client is None:
+                raise HTTPException(status_code=404, detail="No such client")
+            if client.sms_delivery_status != status:
+                client.sms_delivery_status = status
+                session.add(client)
+                session.commit()
+    redirect_url = f"/clients/{client_id}"
+    if error:
+        from urllib.parse import quote
+
+        redirect_url += f"?sms_status_error={quote(error)}"
+    return RedirectResponse(redirect_url, status_code=303)
+
+
 @app.post("/clients/{client_id}/billing-state")
 def set_billing_state(client_id: int, billing_state: str = Form(...)):
     """Move a business between trial (spend-capped) and paid (uncapped).
@@ -1582,6 +1618,7 @@ def client_detail(request: Request, client_id: int):
             "stage_error": request.query_params.get("stage_error"),
             "billing_error": request.query_params.get("billing_error"),
             "booking_error": request.query_params.get("booking_error"),
+            "sms_status_error": request.query_params.get("sms_status_error"),
         },
     )
 
@@ -1855,6 +1892,17 @@ async def missed_call(request: Request):
             session.commit()
         except IntegrityError:
             session.rollback()
+            return Response(status_code=204)
+        # SMS delivery gate (P1-5): a missed-call text-back is a PROACTIVE send.
+        # If the A2P campaign isn't approved, carriers filter it silently — the
+        # caller gets nothing and the owner thinks a text went out. Skip it
+        # honestly (the caller had a voice line to reach); the founder console
+        # shows this business is voice-only until the campaign clears.
+        if not sms_deliverable(client):
+            logger.info(
+                "missed-call text-back held — SMS delivery not active",
+                extra={"business_id": client.id, "sms_delivery_status": client.sms_delivery_status},
+            )
             return Response(status_code=204)
         opener = (
             f"Hi! Sorry we missed your call to {client.business_name}. "

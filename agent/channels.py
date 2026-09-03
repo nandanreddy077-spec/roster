@@ -44,6 +44,30 @@ def send_hours_ok(now: Optional[datetime] = None) -> bool:
 STOP_KEYWORDS = {"stop", "stopall", "unsubscribe", "cancel", "end", "quit"}
 
 
+def sms_deliverable(business) -> bool:
+    """Whether a PROACTIVE text from this business's number should be sent now.
+
+    False in exactly one state: `pending_campaign` — a number is bought but its
+    A2P 10DLC campaign isn't approved yet, so carriers filter the traffic
+    SILENTLY (the send succeeds, Twilio reports success, nobody receives it).
+    Holding the send means it goes out for real once the campaign clears
+    instead of vanishing (docs/PRODUCTION_READINESS.md P1-5).
+
+    Any other state falls through to the normal send path: `active` means the
+    campaign is approved; `not_configured` means we don't know enough to
+    second-guess — the send either works (dev console) or fails loudly at
+    Twilio if there is genuinely no number.
+
+    Every proactive send path checks this, next to its opt-out check. Voice
+    never does. Owner alerts don't either — one recipient, low volume,
+    time-sensitive, and their real outcome is on OwnerNotification.delivered.
+
+    Duck-typed on the attribute so it needs no db_models import and unit-tests
+    with a bare object.
+    """
+    return getattr(business, "sms_delivery_status", None) != "pending_campaign"
+
+
 def normalize_phone(raw: str) -> str:
     """Coerce a human-typed number to E.164 so Twilio can't guess wrong.
 

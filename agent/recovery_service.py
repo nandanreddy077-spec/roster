@@ -13,7 +13,7 @@ import optout
 from booking_language import render_slot_language
 from bookings import book_job
 from calendar_provider import get_calendar_provider
-from channels import STOP_KEYWORDS, get_channel
+from channels import STOP_KEYWORDS, get_channel, sms_deliverable
 from db_models import (
     BOOKING_PROPOSED,
     ORIGIN_QUOTE_RECOVERY,
@@ -273,6 +273,13 @@ def tick(session: Session) -> List[RecoveryJob]:
                         service_type=job.service_type,
                         recovery_job_id=job.id,
                     )
+            continue
+
+        # SMS delivery gate (P1-5): checked BEFORE the claim, so a held day is
+        # picked up unchanged on a later tick once the A2P campaign is
+        # approved — claiming first would mark it sent and skip it forever.
+        client = session.get(Business, job.business_id)
+        if client is not None and not sms_deliverable(client):
             continue
 
         # CLAIM the day before sending: a conditional UPDATE that only wins if
